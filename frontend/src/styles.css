@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+:root {
+  --color-night: #06121f;
+  --color-panel: #0d1d31;
+  --color-panel-strong: #102640;
+  --color-foam: #f6f6ee;
+  --color-mist: #a9bdd0;
+  --color-aqua: #71dfd1;
+  --color-sun: #f0bf66;
+  --color-ember: #ff8e6f;
+  --spacing-shell: 28px;
+  --radius-panel: 32px;
+  --shadow-panel: 0 30px 120px rgba(2, 8, 23, 0.35);
+  --type-display: 3rem;
+  --type-body: 1rem;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background:
+      radial-gradient(circle at top left, rgba(113, 223, 209, 0.16), transparent 32%),
+      radial-gradient(circle at bottom right, rgba(240, 191, 102, 0.14), transparent 28%),
+      var(--color-night);
+    color: var(--color-mist);
+    font-family: "Manrope", "Segoe UI", sans-serif;
+  }
+
+  .font-display {
+    font-family: "Fraunces", Georgia, serif;
+  }
+
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.32em] text-white/38;
+  }
+}
+
+@layer components {
+  .halo-grid {
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-position: center;
+    background-size: 54px 54px;
+  }
+
+  .panel-shell {
+    @apply rounded-[32px] border border-white/10 bg-[var(--color-panel)]/95 p-6 shadow-[var(--shadow-panel)] backdrop-blur;
+  }
+
+  .panel-shell--hero {
+    @apply relative px-6 py-8 sm:px-8 sm:py-9;
+    background:
+      radial-gradient(circle at top right, rgba(113, 223, 209, 0.16), transparent 34%),
+      linear-gradient(160deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)),
+      var(--color-panel);
+  }
+
+  .primary-action {
+    @apply rounded-full border border-transparent bg-[var(--color-aqua)] px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-[#97f4e8];
+  }
+
+  .ghost-action {
+    @apply rounded-full border border-white/12 bg-white/5 px-5 py-3 text-sm font-semibold text-[var(--color-foam)] transition hover:border-[var(--color-aqua)]/35 hover:bg-white/8;
+  }
+
+  .signal-chip {
+    @apply inline-flex w-fit items-center rounded-full border border-white/12 bg-white/6 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60;
+  }
+
+  .signal-chip--warm {
+    @apply border-[var(--color-sun)]/30 bg-[var(--color-sun)]/10 text-[var(--color-sun)];
+  }
+
+  .signal-chip--cool {
+    @apply border-[var(--color-aqua)]/30 bg-[var(--color-aqua)]/10 text-[var(--color-aqua)];
+  }
+
+  .tag-chip {
+    @apply rounded-full border border-white/12 bg-white/6 px-3 py-1 text-xs font-medium text-[var(--color-foam)];
+  }
+
+  .tag-chip--bright {
+    @apply border-[var(--color-aqua)]/25 bg-[var(--color-aqua)]/10 text-[var(--color-aqua)];
+  }
+
+  .dropzone-shell {
+    @apply grid gap-4 rounded-[30px] border border-white/10 bg-black/12 p-5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)];
+    min-height: 300px;
+  }
+}
