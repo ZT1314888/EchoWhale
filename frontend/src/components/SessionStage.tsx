@@ -14,7 +14,7 @@ export function SessionStage({ session }: { session: SessionModel }) {
           <h2 className="font-display text-3xl text-[var(--color-foam)]">Practice cockpit</h2>
         </div>
         <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.24em] text-white/45">
-          Scene -> coach -> feedback
+          Scene -&gt; coach -&gt; feedback
         </div>
       </div>
 
@@ -37,3 +37,4 @@ export function SessionStage({ session }: { session: SessionModel }) {
     </section>
   );
 }
+

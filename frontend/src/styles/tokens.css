@@ -1,0 +1,19 @@
+:root {
+  --color-primary: #0a84ff;
+  --color-accent: #32ade6;
+  --color-background-soft: #f8fafc;
+  --color-panel: #ffffff;
+  --color-panel-strong: #f2f6f9;
+  --color-foam: #14324a;
+  --color-mist: #667a8a;
+  --color-line: #d8e4ee;
+  --color-success: #30d158;
+  --color-error: #ff453a;
+  --radius-card: 16px;
+  --radius-panel: 16px;
+  --radius-pill: 999px;
+  --shadow-soft: 0 16px 44px rgba(22, 56, 71, 0.08);
+  --spacing-page: 28px;
+  --spacing-section: 24px;
+  --spacing-card: 20px;
+}
