@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { BrandHeader } from "../components/BrandHeader";
-import { getPracticeReview } from "../services/mockApi";
+import { getPracticeReview as getMockPracticeReview } from "../services/mockApi";
+import { getPracticeReview as getRealPracticeReview } from "../services/reviewApi";
 import type { ReviewSummary } from "../types/app";
 
 export function PostPracticeReviewPage() {
@@ -13,8 +14,10 @@ export function PostPracticeReviewPage() {
 
   useEffect(() => {
     let alive = true;
+    const loader =
+      sessionId.startsWith("sess_") ? getRealPracticeReview : getMockPracticeReview;
 
-    getPracticeReview(sessionId)
+    loader(sessionId)
       .then((value) => {
         if (alive) {
           setReview(value);

@@ -4,7 +4,7 @@
 
 ## 当前总态
 
-- `system`: `idle`
+- `system`: `integrating`
 - 真实仓库状态：`api/` 后端 scaffold 已经成型，`frontend/` 和 `tests/` 仍以骨架为主
 - 当前策略：先用 feature 文档拆 backend-heavy 主链路，再逐步推进模块测试和系统集成
 
@@ -34,14 +34,14 @@
 
 | Area | Docs Path | Current Status | Exit Gate | Merge Target | Notes |
 | --- | --- | --- | --- | --- | --- |
-| `platform_foundation` | `docs/modules/platform_foundation/status.md` | `building` | `module_test_passed` | `integration/system` | 公共底座和入口已存在，但仍需模块级约束与验证 |
-| `media_upload` | `docs/modules/media_upload/status.md` | `building` | `module_test_passed` | `integration/system` | 媒体模型、存储 URL 骨架已在，上传链路未闭环 |
+| `platform_foundation` | `docs/modules/platform_foundation/status.md` | `building` | `module_test_passed` | `integration/system` | `ApiResponse` 与全局异常处理已落地，`/api/v1/*` 统一响应壳已形成，`/health` 保持裸探针 |
+| `media_upload` | `docs/modules/media_upload/status.md` | `building` | `module_test_passed` | `integration/system` | 上传/查询/access-url 接口、PG 持久化、统一响应壳与前端 loading 真上传桥接已落地；当前功能剩余真实私有 R2 联调、签名 URL 访问确认与密钥轮换 |
 | `scene_engine` | `docs/modules/scene_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/scene_engine/` 已存在 |
 | `coach_engine` | `docs/modules/coach_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/coach_engine/` 已存在 |
 | `feedback_engine` | `docs/modules/feedback_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/feedback_engine/` 已存在 |
-| `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/session_engine/` 已存在 |
-| `history_review` | `docs/modules/history_review/status.md` | `planned` | `module_test_passed` | `integration/system` | 数据模型与会话存储已在，查询链路未形成 |
-| `frontend_app` | `docs/modules/frontend_app/status.md` | `planned` | `module_test_passed` | `integration/system` | `frontend/` 仍是目录骨架 |
+| `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | start/get/reply/review API、session/message/review 数据库存储与前端真实练习链路已落地；当前剩余 auth、voice 与系统级联调 |
+| `history_review` | `docs/modules/history_review/status.md` | `building` | `module_test_passed` | `integration/system` | history 列表/详情与练后 review 读取已落地；当前剩余真实用户范围、分页和 richer review 策略 |
+| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层已落地，首页选图会走真实 upload + session + review/history；auth 仍以 mock 为主 |
 | `infra_delivery` | `docs/modules/infra_delivery/status.md` | `planned` | `module_test_passed` | `integration/system` | `infra/` 仍以预留结构为主 |
 
 ## 模块清单
@@ -54,20 +54,20 @@
 | `coach_engine` | `api/modules/coach_engine/` | `building` | `module/coach_engine` | 多轮追问、角色一致性、回复生成 |
 | `feedback_engine` | `api/modules/feedback_engine/` | `building` | `module/feedback_engine` | 语法纠错、自然表达、词汇建议 |
 | `session_orchestration` | `api/modules/session_engine/`, `api/services/`, `api/routes/` | `building` | `module/session_orchestration` | 会话编排、状态推进、模块串联 |
-| `history_review` | `api/models/session_model.py`, `api/db/session_db.py` | `planned` | `module/history_review` | 历史查看、回放和复盘 |
-| `frontend_app` | `frontend/` | `planned` | `module/frontend_app` | 上传页、练习页、历史页 |
+| `history_review` | `api/models/session_model.py`, `api/db/session_db.py`, `api/routes/v1/history.py` | `building` | `module/history_review` | 历史查看、回放和复盘 |
+| `frontend_app` | `frontend/` | `building` | `module/frontend_app` | 上传页、练习页、历史页与 loading 真上传桥接 |
 | `infra_delivery` | `infra/` | `planned` | `module/infra_delivery` | 部署、环境、交付流程 |
 
 ## 关键 Feature
 
 | Feature | Scope | Status | Exit Gate | Merge Target |
 | --- | --- | --- | --- | --- |
-| 图片上传 | `media_upload` | `planned` | `feature_test_passed` | `module/media_upload` |
+| 图片上传 | `media_upload` | `in_progress` | `feature_test_passed` | `module/media_upload` |
 | 场景理解 | `scene_engine` | `planned` | `feature_test_passed` | `module/scene_engine` |
 | 对话教练 | `coach_engine` | `planned` | `feature_test_passed` | `module/coach_engine` |
 | 学习反馈 | `feedback_engine` | `planned` | `feature_test_passed` | `module/feedback_engine` |
-| 会话编排 | `session_orchestration` | `planned` | `feature_test_passed` | `module/session_orchestration` |
-| 历史查看 | `history_review` | `planned` | `feature_test_passed` | `module/history_review` |
+| 会话编排 | `session_orchestration` | `in_progress` | `feature_test_passed` | `module/session_orchestration` |
+| 历史查看 | `history_review` | `in_progress` | `feature_test_passed` | `module/history_review` |
 
 ## 测试门
 
@@ -75,7 +75,7 @@
 | --- | --- | --- | --- |
 | smoke | 应用能启动，`/health` 可用 | `planned` | 入口稳定，基础路由正常 |
 | module | 每个 engine 的输入输出契约稳定 | `planned` | 模块级单测通过 |
-| integration | 上传 -> 会话 -> 多轮对话 -> 反馈 -> 历史 | `planned` | 主链路可跑通 |
+| integration | 上传 -> 会话 -> 多轮对话 -> 反馈 -> 历史 | `building` | 主链路可跑通 |
 | full_flow | 前后端联通并可演示 | `planned` | `system` 可切到 `releasable` |
 
 ## 合并规则

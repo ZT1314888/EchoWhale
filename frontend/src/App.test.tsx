@@ -3,7 +3,10 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
+import * as historyApi from "./services/historyApi";
+import * as mockApi from "./services/mockApi";
 import * as mediaApi from "./services/mediaApi";
+import * as reviewApi from "./services/reviewApi";
 import * as sessionApi from "./services/sessionApi";
 
 function renderApp(initialEntries: string[] = ["/"]) {
@@ -31,6 +34,23 @@ const realSession = {
       content: "Hi there, what can I get started for you today?",
     },
   ],
+};
+
+const realReview = {
+  sessionId: "sess_real",
+  title: "本轮回响",
+  highlight: "你已经说清楚主要需求。",
+  nextTry: "下一轮再补一条细节。",
+  feedback: {
+    grammar: { title: "Grammar", body: "Your meaning is clear." },
+    moreNatural: { title: "More Natural", body: "Could I get an iced latte, please?" },
+    usefulWords: {
+      title: "Useful Words",
+      words: ["latte", "size", "iced"],
+      body: "把这些词带进下一轮回答，会更自然。",
+    },
+    nextStep: { title: "Next Step", body: "下一轮试着在一句主回应后再补一句细节。" },
+  },
 };
 
 afterEach(() => {
@@ -183,11 +203,67 @@ describe("App", () => {
   });
 
   it("renders the history route with a list and review detail panel", async () => {
+    vi.spyOn(historyApi, "listHistorySessions").mockResolvedValue([
+      {
+        id: "sess_real",
+        practicedAt: "2026-04-04 15:20",
+        status: "已完成 1 轮",
+        sceneTitle: "咖啡店柜台点单",
+        roleLabel: "店员对话",
+        preview: "你已经说清楚主要需求。",
+        tags: ["coffee", "menu"],
+        reviewTitle: "本轮回响",
+        reviewSummary: "下一轮再补一条细节。",
+      },
+    ]);
+    vi.spyOn(historyApi, "getHistorySession").mockResolvedValue({
+      entry: {
+        id: "sess_real",
+        practicedAt: "2026-04-04 15:20",
+        status: "已完成 1 轮",
+        sceneTitle: "咖啡店柜台点单",
+        roleLabel: "店员对话",
+        preview: "你已经说清楚主要需求。",
+        tags: ["coffee", "menu"],
+        reviewTitle: "本轮回响",
+        reviewSummary: "下一轮再补一条细节。",
+      },
+      session: realSession,
+      review: realReview,
+    });
+
     renderApp(["/history"]);
 
     expect(screen.getByRole("heading", { level: 1, name: /练习历史/i })).toBeInTheDocument();
     expect(await screen.findByRole("list", { name: /历史会话列表/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /复盘详情/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(historyApi.listHistorySessions).toHaveBeenCalledTimes(1);
+      expect(historyApi.getHistorySession).toHaveBeenCalledWith("sess_real");
+    });
+  });
+
+  it("loads a real review route for real session ids", async () => {
+    vi.spyOn(reviewApi, "getPracticeReview").mockResolvedValue(realReview);
+
+    renderApp(["/session/sess_real/review"]);
+
+    expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(reviewApi.getPracticeReview).toHaveBeenCalledWith("sess_real");
+    });
+    expect(screen.getByText(/你已经说清楚主要需求/i)).toBeInTheDocument();
+  });
+
+  it("keeps the mock review flow for sample session ids", async () => {
+    const reviewSpy = vi.spyOn(mockApi, "getPracticeReview");
+
+    renderApp(["/session/session-coffee/review"]);
+
+    expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(reviewSpy).toHaveBeenCalledWith("session-coffee");
+    });
   });
 
   it("navigates between login and register routes", () => {

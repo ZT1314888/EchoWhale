@@ -1,10 +1,79 @@
-from pathlib import Path
-from uuid import uuid4
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
+from api.common.exceptions import StorageError
 from api.core.config import settings
 
 
 class R2StorageService:
-    def generate_public_url(self, filename: str) -> str:
-        safe_name = Path(filename).name
-        return f"{settings.r2_public_base_url.rstrip('/')}/{uuid4().hex}-{safe_name}"
+    def __init__(self) -> None:
+        self._client: Any | None = None
+
+    def upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
+        try:
+            client = self._get_client()
+            client.put_object(
+                Bucket=settings.r2_bucket,
+                Key=key,
+                Body=content,
+                ContentType=content_type,
+            )
+        except StorageError:
+            raise
+        except Exception as exc:  # pragma: no cover - network call
+            raise StorageError("Failed to upload media to object storage") from exc
+
+    def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
+        try:
+            client = self._get_client()
+            url = client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.r2_bucket,
+                    "Key": key,
+                },
+                ExpiresIn=expires_in,
+            )
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+            return (url, expires_at)
+        except StorageError:
+            raise
+        except Exception as exc:  # pragma: no cover - network call
+            raise StorageError("Failed to create signed media access URL") from exc
+
+    def delete_object(self, key: str) -> None:
+        try:
+            client = self._get_client()
+            client.delete_object(
+                Bucket=settings.r2_bucket,
+                Key=key,
+            )
+        except StorageError:
+            raise
+        except Exception as exc:  # pragma: no cover - network call
+            raise StorageError("Failed to delete media from object storage") from exc
+
+    def _get_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+
+        if not settings.r2_endpoint:
+            raise StorageError("R2 endpoint is not configured")
+        if not settings.r2_access_key_id or not settings.r2_secret_access_key:
+            raise StorageError("R2 credentials are not configured")
+
+        try:
+            import boto3
+        except ModuleNotFoundError as exc:  # pragma: no cover - depends on env
+            raise StorageError(
+                "boto3 is required for R2 uploads. Install project dependencies first."
+            ) from exc
+
+        self._client = boto3.client(
+            "s3",
+            endpoint_url=settings.r2_endpoint,
+            aws_access_key_id=settings.r2_access_key_id,
+            aws_secret_access_key=settings.r2_secret_access_key,
+            region_name="auto",
+        )
+        return self._client

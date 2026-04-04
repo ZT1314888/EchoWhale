@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { BrandHeader } from "../components/BrandHeader";
 import { HistoryDetailPanel } from "../components/HistoryDetailPanel";
 import { HistoryList } from "../components/HistoryList";
-import { getHistorySession, listHistorySessions } from "../services/mockApi";
+import { getHistorySession, listHistorySessions } from "../services/historyApi";
 import type { HistoryDetail, HistoryEntry } from "../types/app";
 
 export function HistoryPage() {

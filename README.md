@@ -26,7 +26,8 @@ npm install
 npm run dev
 ```
 
-The frontend expects the backend at `http://localhost:8000`.
+In development, Vite proxies `/api/*` requests to `http://localhost:8000` by default.
+If your backend runs elsewhere, set `VITE_API_PROXY_TARGET` before `npm run dev`.
 
 ## Current scope
 

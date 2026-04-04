@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from pydantic import BaseModel, Field
 
 from api.common.enums import SessionStatus
@@ -14,3 +16,5 @@ class Session(BaseModel):
     status: SessionStatus = SessionStatus.active
     labels: list[str] = Field(default_factory=list)
     messages: list[Message] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
