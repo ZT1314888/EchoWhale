@@ -6,6 +6,10 @@ type ApiResponse<T> = {
   data?: T;
 };
 
+type ValidationErrorDetail = {
+  msg?: string;
+};
+
 type BackendAuthUser = {
   user_id: string;
   email: string;
@@ -27,6 +31,75 @@ function toError(message: string, code = "AUTH_API_FAILED"): AppError {
   return { code, message };
 }
 
+function findValidationMessage(data: unknown): string | null {
+  if (!Array.isArray(data)) {
+    return null;
+  }
+
+  const detail = data.find((item): item is ValidationErrorDetail => {
+    return typeof item === "object" && item !== null && "msg" in item;
+  });
+  return detail?.msg ?? null;
+}
+
+function translateValidationMessage(message: string): string | null {
+  if (message.includes("Invalid email format")) {
+    return "邮箱格式错误";
+  }
+
+  if (
+    message.includes("Password must be at least 8 characters") ||
+    message.includes("Password must include letters and numbers")
+  ) {
+    return "密码至少 8 位且需包含字母和数字";
+  }
+
+  if (message.includes("Nickname is required")) {
+    return "昵称不能为空";
+  }
+
+  return null;
+}
+
+function translateAuthMessage(
+  message: string,
+  data?: unknown,
+  action?: "login" | "register",
+): string {
+  const exactTranslations: Record<string, string> = {
+    "Invalid email or password": "邮箱/密码错误",
+    "Please verify your email before logging in": "请先完成邮箱验证后再登录",
+    "Email already registered": "该邮箱已被注册",
+    "Too many login attempts. Please try again later.": "登录尝试次数过多，请稍后再试",
+    "Too many registration attempts. Please try again later.": "注册尝试次数过多，请稍后再试",
+  };
+
+  const translatedMessage = exactTranslations[message];
+  if (translatedMessage) {
+    return translatedMessage;
+  }
+
+  if (message === "Validation error") {
+    const detailMessage = findValidationMessage(data);
+    if (detailMessage) {
+      const translatedDetail = translateValidationMessage(detailMessage);
+      if (translatedDetail) {
+        return translatedDetail;
+      }
+    }
+
+    if (action === "login") {
+      return "登录信息格式有误，请检查后重试。";
+    }
+
+    if (action === "register") {
+      return "注册信息格式有误，请检查后重试。";
+    }
+  }
+
+  return message;
+}
+
 function toAuthUser(user: BackendAuthUser): AuthUser {
   return {
     userId: user.user_id,
@@ -46,6 +119,7 @@ async function parseResponse<T>(
   input: string,
   init: RequestInit,
   fallbackMessage: string,
+  action?: "login" | "register",
 ): Promise<T> {
   let response: Response;
   try {
@@ -59,7 +133,7 @@ async function parseResponse<T>(
 
   const payload = (await response.json()) as ApiResponse<T>;
   if (!response.ok || !payload.data) {
-    throw toError(payload.message ?? fallbackMessage);
+    throw toError(translateAuthMessage(payload.message ?? fallbackMessage, payload.data, action));
   }
   return payload.data as T;
 }
@@ -68,8 +142,9 @@ async function parseAuthResponse(
   input: string,
   init: RequestInit,
   fallbackMessage: string,
+  action?: "login" | "register",
 ): Promise<AuthSession> {
-  const payload = await parseResponse<BackendAuthSession>(input, init, fallbackMessage);
+  const payload = await parseResponse<BackendAuthSession>(input, init, fallbackMessage, action);
   return toAuthSession(payload);
 }
 
@@ -82,6 +157,7 @@ export async function login(credentials: AuthCredentials): Promise<AuthSession> 
       body: JSON.stringify(credentials),
     },
     "登录失败，请稍后重试。",
+    "login",
   );
 }
 
@@ -94,6 +170,7 @@ export async function register(payload: RegisterPayload): Promise<void> {
       body: JSON.stringify(payload),
     },
     "注册失败，请稍后重试。",
+    "register",
   );
 }
 
