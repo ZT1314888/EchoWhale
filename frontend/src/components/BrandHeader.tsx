@@ -1,8 +1,12 @@
 import { Link } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthProvider";
 import { Logo } from "./Logo";
+import { UserMenu } from "./UserMenu";
 
 export function BrandHeader() {
+  const auth = useAuth();
+
   return (
     <header className="app-brand-header">
       <Link className="brand-lockup" to="/">
@@ -16,9 +20,13 @@ export function BrandHeader() {
         <Link className="ghost-button" to="/history">
           历史记录
         </Link>
-        <Link className="ghost-button" to="/login">
-          登录 / 注册
-        </Link>
+        {auth.status === "authenticated" ? (
+          <UserMenu />
+        ) : (
+          <Link className="ghost-button" to="/login">
+            登录 / 注册
+          </Link>
+        )}
       </nav>
     </header>
   );

@@ -1,7 +1,9 @@
 import { type ChangeEvent, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthProvider";
 import { SampleSceneCard } from "../components/SampleSceneCard";
+import { UserMenu } from "../components/UserMenu";
 import { sampleScenes } from "../data/mockApp";
 
 function validateImage(file: File) {
@@ -20,6 +22,7 @@ function validateImage(file: File) {
 
 export function HomeUploadPage() {
   const navigate = useNavigate();
+  const auth = useAuth();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [error, setError] = useState("");
@@ -60,9 +63,13 @@ export function HomeUploadPage() {
           <Link className="home-wordmark" to="/">
             EchoWhale
           </Link>
-          <Link className="home-auth-link" to="/login">
-            登录 / 注册
-          </Link>
+          {auth.status === "authenticated" ? (
+            <UserMenu variant="home" />
+          ) : (
+            <Link className="home-auth-link" to="/login">
+              登录 / 注册
+            </Link>
+          )}
         </header>
 
         <main className="home-stage">

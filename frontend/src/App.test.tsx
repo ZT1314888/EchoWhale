@@ -3,18 +3,33 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, vi } from "vitest";
 
 import { App } from "./App";
+import * as authApi from "./services/authApi";
 import * as historyApi from "./services/historyApi";
 import * as mockApi from "./services/mockApi";
 import * as mediaApi from "./services/mediaApi";
 import * as reviewApi from "./services/reviewApi";
 import * as sessionApi from "./services/sessionApi";
 
-function renderApp(initialEntries: string[] = ["/"]) {
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <App />
-    </MemoryRouter>,
-  );
+async function renderApp(initialEntries: string[] = ["/"]) {
+  if (!vi.isMockFunction(authApi.refresh)) {
+    vi.spyOn(authApi, "refresh").mockRejectedValue({
+      code: "AUTH_REQUIRED",
+      message: "Authentication required",
+    });
+  }
+
+  let rendered: ReturnType<typeof render> | undefined;
+
+  await act(async () => {
+    rendered = render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <App />
+      </MemoryRouter>,
+    );
+    await Promise.resolve();
+  });
+
+  return rendered!;
 }
 
 const realSession = {
@@ -59,8 +74,8 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the production home route without the prototype switcher", () => {
-    renderApp();
+  it("renders the production home route without the prototype switcher", async () => {
+    await renderApp();
 
     expect(screen.getByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /选择图片/i })).toBeInTheDocument();
@@ -73,7 +88,7 @@ describe("App", () => {
 
   it("navigates from upload to loading to the session route", async () => {
     vi.useFakeTimers();
-    renderApp();
+    await renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: /使用示例场景/i }));
     expect(screen.getByRole("heading", { name: /正在分析你的上传内容/i })).toBeInTheDocument();
@@ -108,7 +123,7 @@ describe("App", () => {
     vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({ sessionId: "sess_real" });
     vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
 
-    renderApp();
+    await renderApp();
 
     const input = screen.getByLabelText(/点击上传，或把图片拖到这里/i, {
       selector: "input",
@@ -163,7 +178,7 @@ describe("App", () => {
       },
     });
 
-    renderApp(["/session/sess_real"]);
+    await renderApp(["/session/sess_real"]);
 
     expect(await screen.findByText(/咖啡店柜台点单/i)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/文本补充/i), {
@@ -186,7 +201,7 @@ describe("App", () => {
       message: "Unsupported media type: text/plain",
     });
 
-    renderApp();
+    await renderApp();
 
     const input = screen.getByLabelText(/点击上传，或把图片拖到这里/i, {
       selector: "input",
@@ -203,6 +218,14 @@ describe("App", () => {
   });
 
   it("renders the history route with a list and review detail panel", async () => {
+    vi.spyOn(authApi, "refresh").mockResolvedValue({
+      accessToken: "access-token-1",
+      user: {
+        userId: "user_123",
+        email: "learner@example.com",
+        nickname: "Echo Learner",
+      },
+    });
     vi.spyOn(historyApi, "listHistorySessions").mockResolvedValue([
       {
         id: "sess_real",
@@ -232,21 +255,83 @@ describe("App", () => {
       review: realReview,
     });
 
-    renderApp(["/history"]);
+    await renderApp(["/history"]);
 
-    expect(screen.getByRole("heading", { level: 1, name: /练习历史/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: /练习历史/i })).toBeInTheDocument();
     expect(await screen.findByRole("list", { name: /历史会话列表/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: /复盘详情/i })).toBeInTheDocument();
     await waitFor(() => {
+      expect(authApi.refresh).toHaveBeenCalledTimes(1);
       expect(historyApi.listHistorySessions).toHaveBeenCalledTimes(1);
       expect(historyApi.getHistorySession).toHaveBeenCalledWith("sess_real");
     });
   });
 
+  it("redirects anonymous history visits to the login page", async () => {
+    vi.spyOn(authApi, "refresh").mockRejectedValue({
+      code: "AUTH_REQUIRED",
+      message: "Authentication required",
+    });
+    const historyListSpy = vi.spyOn(historyApi, "listHistorySessions");
+
+    await renderApp(["/history"]);
+
+    expect(await screen.findByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(historyListSpy).not.toHaveBeenCalled();
+  });
+
+  it("redirects successful registration to login with the email prefilled", async () => {
+    vi.spyOn(authApi, "register").mockResolvedValue(undefined);
+
+    await renderApp(["/register?next=%2Fhistory"]);
+
+    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+      target: { value: "learner@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
+
+    expect(await screen.findByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/邮箱/i)).toHaveValue("learner@example.com");
+    expect(screen.queryByRole("heading", { name: /创建你的开口通道/i })).not.toBeInTheDocument();
+  });
+
+  it("shows an authenticated nickname menu and restores anonymous actions after logout", async () => {
+    vi.spyOn(authApi, "refresh").mockResolvedValue({
+      accessToken: "access-token-1",
+      user: {
+        userId: "user_123",
+        email: "learner@example.com",
+        nickname: "Echo Learner",
+      },
+    });
+    vi.spyOn(authApi, "logout").mockResolvedValue(undefined);
+
+    await renderApp(["/"]);
+
+    const nicknameTrigger = await screen.findByRole("button", { name: /echo learner/i });
+    const menuContainer = nicknameTrigger.closest(".user-menu");
+
+    expect(menuContainer).not.toBeNull();
+    expect(screen.queryByRole("link", { name: /登录 \/ 注册/i })).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(menuContainer!);
+    const logoutButton = await screen.findByRole("menuitem", { name: /退出登录/i });
+
+    fireEvent.mouseLeave(menuContainer!);
+    expect(screen.getByRole("menuitem", { name: /退出登录/i })).toBeInTheDocument();
+    fireEvent.click(logoutButton);
+
+    await waitFor(() => {
+      expect(authApi.logout).toHaveBeenCalledTimes(1);
+    });
+    expect(await screen.findByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /echo learner/i })).not.toBeInTheDocument();
+  });
+
   it("loads a real review route for real session ids", async () => {
     vi.spyOn(reviewApi, "getPracticeReview").mockResolvedValue(realReview);
 
-    renderApp(["/session/sess_real/review"]);
+    await renderApp(["/session/sess_real/review"]);
 
     expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
     await waitFor(() => {
@@ -258,7 +343,7 @@ describe("App", () => {
   it("keeps the mock review flow for sample session ids", async () => {
     const reviewSpy = vi.spyOn(mockApi, "getPracticeReview");
 
-    renderApp(["/session/session-coffee/review"]);
+    await renderApp(["/session/session-coffee/review"]);
 
     expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
     await waitFor(() => {
@@ -266,8 +351,8 @@ describe("App", () => {
     });
   });
 
-  it("navigates between login and register routes", () => {
-    renderApp(["/login"]);
+  it("navigates between login and register routes", async () => {
+    await renderApp(["/login"]);
 
     expect(screen.getByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /使用 Google 继续/i })).toBeInTheDocument();

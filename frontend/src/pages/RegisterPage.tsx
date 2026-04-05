@@ -1,16 +1,31 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthProvider";
 import { BrandHeader } from "../components/BrandHeader";
-import { register } from "../services/mockApi";
 
 export function RegisterPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const auth = useAuth();
   const [nickname, setNickname] = useState("Echo Learner");
   const [email, setEmail] = useState("name@example.com");
   const [password, setPassword] = useState("secret123");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const nextPath = new URLSearchParams(location.search).get("next") || "/history";
+
+  if (auth.status === "refreshing") {
+    return (
+      <main className="empty-stage">
+        <h1>正在恢复登录状态…</h1>
+      </main>
+    );
+  }
+
+  if (auth.status === "authenticated") {
+    return <Navigate to={nextPath} replace />;
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -18,8 +33,17 @@ export function RegisterPage() {
     setSubmitting(true);
 
     try {
-      await register({ nickname, email, password });
-      navigate("/history");
+      await auth.register({ nickname, email, password });
+      navigate(
+        {
+          pathname: "/login",
+          search: location.search,
+        },
+        {
+          replace: true,
+          state: { prefillEmail: email },
+        },
+      );
     } catch (reason) {
       const typed = reason as { message?: string };
       setError(typed.message ?? "注册失败，请稍后重试。");

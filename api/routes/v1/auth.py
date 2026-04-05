@@ -53,6 +53,20 @@ class AuthSessionResponse(BaseModel):
         )
 
 
+class RegisterResponse(BaseModel):
+    user_id: str
+    email: str
+    nickname: str
+
+    @classmethod
+    def from_user(cls, user: User) -> "RegisterResponse":
+        return cls(
+            user_id=user.id,
+            email=user.email,
+            nickname=user.nickname,
+        )
+
+
 def _with_refresh_cookie(response, refresh_token: str):
     response.set_cookie(
         key=settings.auth_refresh_cookie_name,
@@ -66,18 +80,17 @@ def _with_refresh_cookie(response, refresh_token: str):
     return response
 
 
-@router.post("/register", response_model=ApiResponse[AuthSessionResponse])
+@router.post("/register", response_model=ApiResponse[RegisterResponse])
 def register(
     payload: RegisterRequest,
     auth_service: AuthService = Depends(get_auth_service),
 ) -> Any:
-    session = auth_service.register(
+    user = auth_service.register(
         nickname=payload.nickname,
         email=payload.email,
         password=payload.password,
     )
-    response = ApiResponse.success(data=AuthSessionResponse.from_session(session))
-    return _with_refresh_cookie(response, session.refresh_token)
+    return ApiResponse.success(data=RegisterResponse.from_user(user))
 
 
 @router.post("/login", response_model=ApiResponse[AuthSessionResponse])

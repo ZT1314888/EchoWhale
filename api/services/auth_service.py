@@ -22,7 +22,7 @@ class AuthService:
     def __init__(self, repository: AuthRepository | None = None) -> None:
         self.repository = repository or build_auth_repository()
 
-    def register(self, *, nickname: str, email: str, password: str) -> AuthSession:
+    def register(self, *, nickname: str, email: str, password: str) -> User:
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
         if self.repository.get_user_by_email(normalized_email) is not None:
@@ -34,7 +34,7 @@ class AuthService:
             nickname=nickname.strip(),
         )
         self.repository.create_user(user=user, password_hash=hash_password(password))
-        return self._issue_session(user)
+        return user
 
     def login(self, *, email: str, password: str) -> AuthSession:
         normalized_email = self._normalize_email(email)

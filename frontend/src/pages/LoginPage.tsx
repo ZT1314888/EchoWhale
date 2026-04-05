@@ -1,15 +1,31 @@
 import { FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
+import { useAuth } from "../auth/AuthProvider";
 import { BrandHeader } from "../components/BrandHeader";
-import { login } from "../services/mockApi";
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("your.email@example.com");
+  const location = useLocation();
+  const auth = useAuth();
+  const routeState = location.state as { prefillEmail?: string } | null;
+  const [email, setEmail] = useState(routeState?.prefillEmail ?? "your.email@example.com");
   const [password, setPassword] = useState("secret123");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const nextPath = new URLSearchParams(location.search).get("next") || "/history";
+
+  if (auth.status === "refreshing") {
+    return (
+      <main className="empty-stage">
+        <h1>正在恢复登录状态…</h1>
+      </main>
+    );
+  }
+
+  if (auth.status === "authenticated") {
+    return <Navigate to={nextPath} replace />;
+  }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -17,8 +33,8 @@ export function LoginPage() {
     setSubmitting(true);
 
     try {
-      await login({ email, password });
-      navigate("/history");
+      await auth.login({ email, password });
+      navigate(nextPath, { replace: true });
     } catch (reason) {
       const typed = reason as { message?: string };
       setError(typed.message ?? "登录失败，请稍后重试。");
@@ -53,10 +69,10 @@ export function LoginPage() {
             </div>
 
             <button className="social-button" type="button">
-              使用 Google 继续
+              使用 Google 继续（暂未开放）
             </button>
             <button className="social-button social-button--dark" type="button">
-              使用 GitHub 继续
+              使用 GitHub 继续（暂未开放）
             </button>
 
             <form className="auth-form" onSubmit={onSubmit}>

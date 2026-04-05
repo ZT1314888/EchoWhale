@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/frontend_app`
 - `owner`: `codex`
-- `updated_at`: `2026-04-04`
+- `updated_at`: `2026-04-05`
 
 ## 模块目标
 
@@ -21,7 +21,9 @@
 - 已完成边界：首页本地图片选择后，会在 `StartupLoading` 页发起真实 `POST /api/v1/media/upload`，上传成功后再调用真实 `POST /api/v1/sessions` 进入练习页
 - 已完成边界：首页上传链路已适配统一响应壳，媒体上传成功从 `data` 解包、失败从 `message` 读取错误信息
 - 已完成边界：`PostPracticeReview` 与 `History` 已切到真实 review/history API，不再依赖 mock 数据
-- 仍然缺失：真实 auth 接口调用，以及更完整的系统联调细节
+- 已完成边界：登录/注册、refresh 恢复和 `History` 路由守卫已切到真实 auth API，匿名主路径会自动携带 `visitor_id`
+- 已完成边界：注册成功后改为回到登录页，登录后右上角收口为昵称悬浮菜单并提供退出登录
+- 仍然缺失：更完整的系统联调细节，以及真实私有 R2 可访问性确认
 - 当前策略补充：前端展示层继续以中文 `.pen` 为唯一真源，但代码入口已不再保留 demo 切屏器，而是面向生产应用骨架
 
 ## 输入输出契约
@@ -53,16 +55,18 @@
 - `[x]` 将练习页切到真实 session `start/get/reply` API，上传后的练习流不再依赖 mock session
 - `[x]` 将练后反馈页切到真实 review API
 - `[x]` 将历史页切到真实 history 列表与详情 API
+- `[x]` 将登录/注册页切到真实 auth API，并为 `/history` 增加登录守卫
+- `[x]` 将注册流程收口为“先建号再登录”，并让首页/应用头部接入真实登录态菜单
 
 ## 测试门
 
 - `module_test_passed` 的标准：至少有最小可运行前端壳层并能对齐后端契约，关键上传主路径可调用真实接口，且前端构建与测试有明确通过证据
 - 最少要覆盖的用例：上传入口、会话展示、历史入口
-- 还没覆盖的风险：auth 仍依赖 mock service 契约；真实 R2 外链可访问性尚未完成联调
+- 还没覆盖的风险：真实 R2 外链可访问性尚未完成联调；匿名 visitor 与登录用户的端到端系统联调还需补一次
 
 ## 阻塞项
 
-- 真实 auth API 尚未接通前端主流程
+- 真实私有 R2 结果与带认证态的全链路联调尚未收口
 
 ## 变更记录
 
@@ -84,6 +88,9 @@
 - `2026-04-02`：同步适配后端统一响应壳，上传成功从 `data` 解包、错误从 `message` 展示，媒体上传主路径保持可用
 - `2026-04-03`：新增 `practiceApi` / `sessionApi`，上传后调用真实 session start，练习页读取与回复切到真实 session get/reply
 - `2026-04-04`：新增 `reviewApi` / `historyApi`，练后反馈页与历史页切到真实后端读取，sample review 仍保留 mock fallback
+- `2026-04-05`：新增真实 auth API、前端登录态恢复与 `/history` 守卫，匿名主路径改为自动携带 `visitor_id`
+- `2026-04-05`：注册成功后改为跳转登录页，首页与应用头部接入昵称菜单和退出登录
+- `2026-04-05`：修复昵称悬浮菜单因 hover 空隙与即时关闭导致的回缩问题，退出登录项恢复可点击
 
 
 
