@@ -8,9 +8,9 @@ export function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const auth = useAuth();
-  const [nickname, setNickname] = useState("Echo Learner");
-  const [email, setEmail] = useState("name@example.com");
-  const [password, setPassword] = useState("secret123");
+  const [nickname, setNickname] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const nextPath = new URLSearchParams(location.search).get("next") || "/history";
