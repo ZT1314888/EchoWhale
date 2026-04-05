@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from api.common.exceptions import NotFoundError
 from api.models.session_model import Session
 from api.db.media_db import MediaLookup
 from api.db.session_db import SessionRepository
@@ -26,23 +27,32 @@ class SessionEngineService:
         payload = StartSessionInput(user_id=user_id, media_id=media_id)
         return self.agent.start(payload)
 
-    def get_session(self, session_id: str) -> Session:
-        return self.agent.get(session_id)
+    def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+        session = self.agent.get(session_id)
+        return self._ensure_owner(session, owner_id)
 
-    def reply_to_session(self, session_id: str, learner_message: str) -> Session:
+    def reply_to_session(
+        self,
+        session_id: str,
+        learner_message: str,
+        owner_id: str | None = None,
+    ) -> Session:
+        self._ensure_owner(self.agent.get(session_id), owner_id)
         payload = ReplyInput(session_id=session_id, learner_message=learner_message)
         return self.agent.reply(payload)
 
-    def get_session_review(self, session_id: str) -> SessionReview:
+    def get_session_review(self, session_id: str, owner_id: str | None = None) -> SessionReview:
+        self._ensure_owner(self.agent.get(session_id), owner_id)
         return self.agent.get_review(session_id)
 
     def list_history_sessions(self, user_id: str) -> list[Session]:
         return self.agent.list_history_sessions(user_id)
 
     def get_history_session_detail(self, user_id: str, session_id: str) -> tuple[Session, SessionReview]:
-        session = self.agent.get(session_id)
-        if session.user_id != user_id:
-            from api.common.exceptions import NotFoundError
-
-            raise NotFoundError(f"Session {session_id} not found")
+        session = self._ensure_owner(self.agent.get(session_id), user_id)
         return (session, self.agent.get_review(session_id))
+
+    def _ensure_owner(self, session: Session, owner_id: str | None) -> Session:
+        if owner_id is None or session.user_id == owner_id:
+            return session
+        raise NotFoundError(f"Session {session.id} not found")

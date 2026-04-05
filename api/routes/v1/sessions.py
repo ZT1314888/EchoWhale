@@ -6,8 +6,8 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
 from api.common.responses import ApiResponse
-from api.core.config import settings
 from api.db.media_db import build_media_repository
 from api.db.session_db import build_session_repository
 from api.integrations.storage.r2 import R2StorageService
@@ -155,21 +155,27 @@ def get_session_service() -> SessionEngineService:
 def start_session(
     payload: StartSessionRequest,
     session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
     session = session_service.start_session(
-        user_id=settings.default_user_id,
+        user_id=owner.owner_id,
         media_id=payload.media_id,
     )
-    return ApiResponse.success(data=SessionResponse.from_session(session))
+    response = ApiResponse.success(data=SessionResponse.from_session(session))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
 
 
 @router.get("/{session_id}", response_model=ApiResponse[SessionResponse])
 def get_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    session = session_service.get_session(session_id)
-    return ApiResponse.success(data=SessionResponse.from_session(session))
+    session = session_service.get_session(session_id, owner_id=owner.owner_id)
+    response = ApiResponse.success(data=SessionResponse.from_session(session))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
 
 
 @router.post("/{session_id}/reply", response_model=ApiResponse[SessionReplyResponse])
@@ -177,15 +183,25 @@ def reply_to_session(
     session_id: str,
     payload: SessionReplyRequest,
     session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    session = session_service.reply_to_session(session_id, payload.learner_message)
-    return ApiResponse.success(data=SessionReplyResponse.from_session(session))
+    session = session_service.reply_to_session(
+        session_id,
+        payload.learner_message,
+        owner_id=owner.owner_id,
+    )
+    response = ApiResponse.success(data=SessionReplyResponse.from_session(session))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
 
 
 @router.get("/{session_id}/review", response_model=ApiResponse[SessionReviewResponse])
 def get_session_review(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    review = session_service.get_session_review(session_id)
-    return ApiResponse.success(data=SessionReviewResponse.from_review(review))
+    review = session_service.get_session_review(session_id, owner_id=owner.owner_id)
+    response = ApiResponse.success(data=SessionReviewResponse.from_review(review))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response

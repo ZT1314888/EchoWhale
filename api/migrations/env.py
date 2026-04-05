@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from api.core.config import settings
 from api.db.database import Base
+import api.db.auth_db  # noqa: F401
 import api.db.media_db  # noqa: F401
 import api.db.session_db  # noqa: F401
 

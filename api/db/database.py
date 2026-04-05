@@ -49,6 +49,7 @@ def get_session_factory() -> SessionFactory:
 
 
 def create_all_tables(engine: Engine) -> None:
+    import api.db.auth_db  # noqa: F401
     import api.db.media_db  # noqa: F401
     import api.db.session_db  # noqa: F401
 

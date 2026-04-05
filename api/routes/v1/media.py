@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, UploadFile
 from pydantic import BaseModel
 
+from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
 from api.common.responses import ApiResponse
 from api.core.config import settings
 from api.db.media_db import build_media_repository
@@ -83,29 +84,38 @@ def get_media_service() -> MediaService:
 async def upload_media(
     file: UploadFile = File(...),
     media_service: MediaService = Depends(get_media_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
     result = media_service.upload_media(
-        user_id=settings.default_user_id,
+        user_id=owner.owner_id,
         filename=file.filename or "upload",
         content_type=file.content_type or "",
         content=await file.read(),
     )
-    return ApiResponse.success(data=MediaResponse.from_upload_result(result))
+    response = ApiResponse.success(data=MediaResponse.from_upload_result(result))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
 
 
 @router.get("/{media_id}", response_model=ApiResponse[MediaResponse])
 def get_media(
     media_id: str,
     media_service: MediaService = Depends(get_media_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    media = media_service.get_media(media_id)
-    return ApiResponse.success(data=MediaResponse.from_media(media))
+    media = media_service.get_media(media_id, owner_id=owner.owner_id)
+    response = ApiResponse.success(data=MediaResponse.from_media(media))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
 
 
 @router.get("/{media_id}/access-url", response_model=ApiResponse[MediaAccessResponse])
 def get_media_access_url(
     media_id: str,
     media_service: MediaService = Depends(get_media_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    access = media_service.create_media_access_url(media_id)
-    return ApiResponse.success(data=MediaAccessResponse.from_access_grant(access))
+    access = media_service.create_media_access_url(media_id, owner_id=owner.owner_id)
+    response = ApiResponse.success(data=MediaAccessResponse.from_access_grant(access))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response

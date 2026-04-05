@@ -9,9 +9,11 @@ from uuid import uuid4
 from api.common.enums import MediaUploadStatus
 from api.common.exceptions import (
     FileTooLargeError,
+    NotFoundError,
     UnsupportedMediaTypeError,
     ValidationError,
 )
+from api.common.ownership import owner_to_storage_path
 from api.db.media_db import MediaRepository
 from api.models.media_model import Media, MediaAccessGrant, MediaUploadResult
 
@@ -83,11 +85,14 @@ class MediaService:
             preview_url_expires_at=expires_at,
         )
 
-    def get_media(self, media_id: str) -> Media:
-        return self.repository.get_media(media_id)
-
-    def create_media_access_url(self, media_id: str) -> MediaAccessGrant:
+    def get_media(self, media_id: str, *, owner_id: str | None = None) -> Media:
         media = self.repository.get_media(media_id)
+        self._ensure_owner(media, owner_id)
+        return media
+
+    def create_media_access_url(self, media_id: str, *, owner_id: str | None = None) -> MediaAccessGrant:
+        media = self.repository.get_media(media_id)
+        self._ensure_owner(media, owner_id)
         read_url, expires_at = self.storage.create_signed_read_url(
             media.storage_key,
             expires_in=self.signed_url_ttl_seconds,
@@ -121,7 +126,7 @@ class MediaService:
     def _build_storage_key(self, *, user_id: str, media_id: str, filename: str) -> str:
         safe_name = self._sanitize_filename(filename)
         today = datetime.now(timezone.utc)
-        return f"media/{user_id}/{today:%Y/%m/%d}/{media_id}-{safe_name}"
+        return f"media/{owner_to_storage_path(user_id)}/{today:%Y/%m/%d}/{media_id}-{safe_name}"
 
     def _sanitize_filename(self, filename: str) -> str:
         safe_name = Path(filename).name.strip() or "upload"
@@ -129,3 +134,8 @@ class MediaService:
 
     def _is_webp(self, content: bytes) -> bool:
         return len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+
+    def _ensure_owner(self, media: Media, owner_id: str | None) -> None:
+        if owner_id is None or media.user_id == owner_id:
+            return
+        raise NotFoundError(f"Media {media.id} not found")

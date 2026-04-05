@@ -6,8 +6,10 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from api.common.deps import require_authenticated_user
+from api.common.ownership import build_user_owner
 from api.common.responses import ApiResponse
-from api.core.config import settings
+from api.models.user_model import User
 from api.models.session_model import Session
 from api.modules.session_engine.review_builder import get_role_label, get_scene_title
 from api.modules.session_engine.service import SessionEngineService
@@ -52,8 +54,9 @@ class HistoryDetailResponse(BaseModel):
 @router.get("/sessions", response_model=ApiResponse[list[HistoryEntryResponse]])
 def list_history_sessions(
     session_service: SessionEngineService = Depends(get_session_service),
+    current_user: User = Depends(require_authenticated_user),
 ) -> Any:
-    sessions = session_service.list_history_sessions(settings.default_user_id)
+    sessions = session_service.list_history_sessions(build_user_owner(current_user.id))
     reviews = {
         session.id: SessionReviewResponse.from_review(
             session_service.get_session_review(session.id)
@@ -72,9 +75,10 @@ def list_history_sessions(
 def get_history_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
+    current_user: User = Depends(require_authenticated_user),
 ) -> Any:
     session, review = session_service.get_history_session_detail(
-        settings.default_user_id,
+        build_user_owner(current_user.id),
         session_id,
     )
     review_response = SessionReviewResponse.from_review(review)

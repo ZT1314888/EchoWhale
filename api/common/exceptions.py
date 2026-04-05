@@ -54,6 +54,18 @@ class StorageError(EchoWhaleError):
     default_message = "Storage error"
 
 
+class AuthenticationError(EchoWhaleError):
+    code = 1002
+    status_code = 401
+    default_message = "Authentication required"
+
+
+class PermissionDeniedError(EchoWhaleError):
+    code = 1003
+    status_code = 403
+    default_message = "Permission denied"
+
+
 class ConfigurationError(EchoWhaleError):
     code = 1005
     status_code = 500

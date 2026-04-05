@@ -9,13 +9,17 @@ class Settings(BaseSettings):
     app_name: str = "EchoWhale API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
-    default_user_id: str = "demo-user"
-    default_user_name: str = "Echo Learner"
     allowed_origins: Annotated[list[str], NoDecode] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
     database_url: str = ""
+    auth_jwt_secret: str = "dev-secret-change-me"
+    auth_access_token_ttl_seconds: int = 900
+    auth_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 14
+    auth_refresh_cookie_name: str = "echowhale_refresh_token"
+    auth_visitor_cookie_name: str = "echowhale_visitor_id"
+    auth_cookie_secure: bool = False
     r2_bucket: str = "echo-whale-media"
     r2_account_id: str = ""
     r2_access_key_id: str = ""
