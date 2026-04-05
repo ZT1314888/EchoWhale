@@ -81,6 +81,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /选择图片/i })).toBeInTheDocument();
     expect(screen.getByText(/试试一个示例场景/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /主导航/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /历史记录/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /六屏预览切换/i })).not.toBeInTheDocument();
@@ -280,13 +281,51 @@ describe("App", () => {
     expect(historyListSpy).not.toHaveBeenCalled();
   });
 
+  it("redirects successful login to the home page when there is no next query", async () => {
+    vi.spyOn(authApi, "login").mockResolvedValue({
+      accessToken: "access-token-1",
+      user: {
+        userId: "user_123",
+        email: "learner@example.com",
+        nickname: "Echo Learner",
+      },
+    });
+
+    await renderApp(["/login"]);
+
+    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+      target: { value: "learner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/密码/i), {
+      target: { value: "secret123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+
+    expect(await screen.findByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent(/登录成功/i);
+    expect(screen.getByText(/已成功登录，欢迎回来/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /关闭登录成功提示/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+  });
+
   it("redirects successful registration to login with the email prefilled", async () => {
     vi.spyOn(authApi, "register").mockResolvedValue(undefined);
 
     await renderApp(["/register?next=%2Fhistory"]);
 
+    expect(screen.getByLabelText(/昵称/i)).toHaveValue("");
+    expect(screen.getByLabelText(/邮箱/i)).toHaveValue("");
+    expect(screen.getByLabelText(/密码/i)).toHaveValue("");
+    fireEvent.change(screen.getByLabelText(/昵称/i), {
+      target: { value: "Echo Learner" },
+    });
     fireEvent.change(screen.getByLabelText(/邮箱/i), {
       target: { value: "learner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/密码/i), {
+      target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
@@ -361,3 +400,4 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /创建账号/i })).toBeInTheDocument();
   });
 });
+

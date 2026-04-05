@@ -9,11 +9,12 @@ export function LoginPage() {
   const location = useLocation();
   const auth = useAuth();
   const routeState = location.state as { prefillEmail?: string } | null;
-  const [email, setEmail] = useState(routeState?.prefillEmail ?? "your.email@example.com");
-  const [password, setPassword] = useState("secret123");
+  const [email, setEmail] = useState(routeState?.prefillEmail ?? "");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loginSucceeded, setLoginSucceeded] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const nextPath = new URLSearchParams(location.search).get("next") || "/history";
+  const nextPath = new URLSearchParams(location.search).get("next") || "/";
 
   if (auth.status === "refreshing") {
     return (
@@ -24,7 +25,7 @@ export function LoginPage() {
   }
 
   if (auth.status === "authenticated") {
-    return <Navigate to={nextPath} replace />;
+    return <Navigate to={nextPath} replace state={loginSucceeded ? { loginSuccess: true } : undefined} />;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -34,7 +35,7 @@ export function LoginPage() {
 
     try {
       await auth.login({ email, password });
-      navigate(nextPath, { replace: true });
+      setLoginSucceeded(true);
     } catch (reason) {
       const typed = reason as { message?: string };
       setError(typed.message ?? "登录失败，请稍后重试。");

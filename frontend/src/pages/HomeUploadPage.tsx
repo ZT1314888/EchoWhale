@@ -1,5 +1,5 @@
-import { type ChangeEvent, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 import { SampleSceneCard } from "../components/SampleSceneCard";
@@ -20,12 +20,42 @@ function validateImage(file: File) {
   return null;
 }
 
+const LOGIN_SUCCESS_TOAST_MS = 2500;
+
 export function HomeUploadPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [selectedFileName, setSelectedFileName] = useState("");
   const [error, setError] = useState("");
+  const [showLoginSuccess, setShowLoginSuccess] = useState(
+    Boolean((location.state as { loginSuccess?: boolean } | null)?.loginSuccess),
+  );
+
+  useEffect(() => {
+    const routeState = location.state as { loginSuccess?: boolean } | null;
+    if (!routeState?.loginSuccess) {
+      return;
+    }
+
+    setShowLoginSuccess(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!showLoginSuccess) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      setShowLoginSuccess(false);
+    }, LOGIN_SUCCESS_TOAST_MS);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [showLoginSuccess]);
 
   function startFromSample(sampleSceneId: string) {
     navigate("/session/loading", {
@@ -71,6 +101,23 @@ export function HomeUploadPage() {
             </Link>
           )}
         </header>
+
+        {showLoginSuccess ? (
+          <section className="success-toast" role="status" aria-live="polite">
+            <div>
+              <p className="success-toast__eyebrow">登录成功</p>
+              <p className="success-toast__text">已成功登录，欢迎回来。</p>
+            </div>
+            <button
+              className="success-toast__close"
+              type="button"
+              aria-label="关闭登录成功提示"
+              onClick={() => setShowLoginSuccess(false)}
+            >
+              关闭提示
+            </button>
+          </section>
+        ) : null}
 
         <main className="home-stage">
           <section className="home-upload-card">
@@ -121,3 +168,4 @@ export function HomeUploadPage() {
     </div>
   );
 }
+
