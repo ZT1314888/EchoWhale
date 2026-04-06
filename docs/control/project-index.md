@@ -8,6 +8,12 @@
 - 真实仓库状态：`api/` 后端 scaffold 已经成型，`frontend/` 和 `tests/` 仍以骨架为主
 - 当前策略：先用 feature 文档拆 backend-heavy 主链路，再逐步推进模块测试和系统集成
 
+## 最新进度快照
+
+- 最新归档：`docs/features/deepgram_voice_agent/feature.md`
+- 本轮结论：语音练习页已从浏览器本地转写切到 Deepgram Voice Agent；后端已新增 `voice/bootstrap` 与 `voice/complete` 链路用于下发 token/settings 与回写 transcript/review
+- 当前主要阻塞：真实 Deepgram token / 麦克风 / 浏览器播放联调仍需补 smoke；scene live 输出仍需补更多真实样本评估
+
 ## 状态词
 
 ### feature
@@ -35,14 +41,14 @@
 | Area | Docs Path | Current Status | Exit Gate | Merge Target | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `platform_foundation` | `docs/modules/platform_foundation/status.md` | `building` | `module_test_passed` | `integration/system` | `ApiResponse` 与全局异常处理已落地，`/api/v1/*` 统一响应壳已形成，`/health` 保持裸探针 |
-| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、create-only 注册、refresh cookie、前端登录态恢复和 `/history` 登录守卫已落地；当前剩余 OAuth、邮箱验证与匿名数据绑定策略 |
+| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、待验证注册、验证/找回闭环、refresh cookie、运行时自动续期和 `/history` 登录守卫已落地；当前剩余 OAuth 与匿名数据绑定策略 |
 | `media_upload` | `docs/modules/media_upload/status.md` | `building` | `module_test_passed` | `integration/system` | 上传/查询/access-url 接口、PG 持久化、统一响应壳与前端 loading 真上传桥接已落地；当前功能剩余真实私有 R2 联调、签名 URL 访问确认与密钥轮换 |
 | `scene_engine` | `docs/modules/scene_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/scene_engine/` 已存在 |
 | `coach_engine` | `docs/modules/coach_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/coach_engine/` 已存在 |
 | `feedback_engine` | `docs/modules/feedback_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/feedback_engine/` 已存在 |
-| `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | start/get/reply/review API、session/message/review 数据库存储与前端真实练习链路已落地；当前剩余 voice 与系统级联调 |
+| `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | start/get/reply/review 与 voice bootstrap/complete API 已落地；当前剩余系统级联调 |
 | `history_review` | `docs/modules/history_review/status.md` | `building` | `module_test_passed` | `integration/system` | history 列表/详情与练后 review 读取已落地，并已切到真实登录用户范围；当前剩余分页和 richer review 策略 |
-| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层已落地，首页选图会走真实 upload + session + review/history；登录注册、refresh 恢复、昵称菜单与 history 守卫已切真 |
+| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层已落地，首页选图会走真实 upload + session + review/history；登录注册、refresh 恢复、昵称菜单与 history 守卫已切真；练习页已改成沉浸式单栏语音入口并接入 Deepgram Voice Agent |
 | `infra_delivery` | `docs/modules/infra_delivery/status.md` | `planned` | `module_test_passed` | `integration/system` | `infra/` 仍以预留结构为主 |
 
 ## 模块清单
@@ -65,9 +71,9 @@
 | Feature | Scope | Status | Exit Gate | Merge Target |
 | --- | --- | --- | --- | --- |
 | 图片上传 | `media_upload` | `in_progress` | `feature_test_passed` | `module/media_upload` |
-| 场景理解 | `scene_engine` | `planned` | `feature_test_passed` | `module/scene_engine` |
-| 对话教练 | `coach_engine` | `planned` | `feature_test_passed` | `module/coach_engine` |
-| 学习反馈 | `feedback_engine` | `planned` | `feature_test_passed` | `module/feedback_engine` |
+| 场景理解 | `scene_engine` | `in_progress` | `feature_test_passed` | `module/scene_engine` |
+| 对话教练 | `coach_engine` | `in_progress` | `feature_test_passed` | `module/coach_engine` |
+| 学习反馈 | `feedback_engine` | `in_progress` | `feature_test_passed` | `module/feedback_engine` |
 | 会话编排 | `session_orchestration` | `in_progress` | `feature_test_passed` | `module/session_orchestration` |
 | 历史查看 | `history_review` | `in_progress` | `feature_test_passed` | `module/history_review` |
 
@@ -89,6 +95,10 @@
 
 ## 目前优先级
 
-1. 补 `upload -> session -> review -> history` 的认证态系统联调
+1. 补 `upload -> session -> deepgram voice -> review -> history` 的认证态系统联调
 2. 再补 feature、module、system 三层测试记录
 3. 最后补版本归档，让 `system` 从 `integrating` 走到 `full_flow_test_passed`
+
+
+
+

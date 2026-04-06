@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/frontend_app`
 - `owner`: `codex`
-- `updated_at`: `2026-04-05`
+- `updated_at`: `2026-04-06`
 
 ## 模块目标
 
@@ -21,8 +21,13 @@
 - 已完成边界：首页本地图片选择后，会在 `StartupLoading` 页发起真实 `POST /api/v1/media/upload`，上传成功后再调用真实 `POST /api/v1/sessions` 进入练习页
 - 已完成边界：首页上传链路已适配统一响应壳，媒体上传成功从 `data` 解包、失败从 `message` 读取错误信息
 - 已完成边界：`PostPracticeReview` 与 `History` 已切到真实 review/history API，不再依赖 mock 数据
+- 已完成边界：练后反馈页失败态已在前端收口，不再透传后端英文 `Session review ... not found`
 - 已完成边界：登录/注册、refresh 恢复和 `History` 路由守卫已切到真实 auth API，匿名主路径会自动携带 `visitor_id`
 - 已完成边界：注册成功后改为回到登录页，登录后右上角收口为昵称悬浮菜单并提供退出登录
+- 已完成边界：登录成功后首页会展示一次性成功提示，支持自动消失与手动关闭
+- 已完成边界：`PracticeSession` 页桌面端布局已调整为“左侧即时提示 + 右侧主练习区”，移动端仍保持主练习内容优先
+- 已完成边界：`PracticeSession` 已重构为沉浸式单栏语音练习页，移除文本输入框、顶栏与侧栏，改为大 logo 动效 + `Talk To Your Agent / End Conversation` 单按钮流
+- 已完成边界：前端已从浏览器 `Web Speech API` 切到 Deepgram Voice Agent bootstrap + WebSocket 实时语音链路，练习页会实时显示 `ConversationText`，并在结束会话时调用后端 `voice/complete` 写回 transcript 与 review
 - 仍然缺失：更完整的系统联调细节，以及真实私有 R2 可访问性确认
 - 当前策略补充：前端展示层继续以中文 `.pen` 为唯一真源，但代码入口已不再保留 demo 切屏器，而是面向生产应用骨架
 
@@ -57,12 +62,14 @@
 - `[x]` 将历史页切到真实 history 列表与详情 API
 - `[x]` 将登录/注册页切到真实 auth API，并为 `/history` 增加登录守卫
 - `[x]` 将注册流程收口为“先建号再登录”，并让首页/应用头部接入真实登录态菜单
+- `[x]` 将练习页从本地浏览器语音识别切到 Deepgram Voice Agent bootstrap / complete API
+- `[x]` 新增 `useDeepgramVoiceAgent` hook，接入 WebSocket、PCM 采集、音频播放与 transcript 状态管理
 
 ## 测试门
 
 - `module_test_passed` 的标准：至少有最小可运行前端壳层并能对齐后端契约，关键上传主路径可调用真实接口，且前端构建与测试有明确通过证据
 - 最少要覆盖的用例：上传入口、会话展示、历史入口
-- 还没覆盖的风险：真实 R2 外链可访问性尚未完成联调；匿名 visitor 与登录用户的端到端系统联调还需补一次
+- 还没覆盖的风险：真实 R2 外链可访问性尚未完成联调；匿名 visitor 与登录用户的端到端系统联调还需补一次；真实浏览器麦克风权限、Deepgram token 与生产网络环境仍需补 smoke
 
 ## 阻塞项
 
@@ -91,6 +98,15 @@
 - `2026-04-05`：新增真实 auth API、前端登录态恢复与 `/history` 守卫，匿名主路径改为自动携带 `visitor_id`
 - `2026-04-05`：注册成功后改为跳转登录页，首页与应用头部接入昵称菜单和退出登录
 - `2026-04-05`：修复昵称悬浮菜单因 hover 空隙与即时关闭导致的回缩问题，退出登录项恢复可点击
+- `2026-04-05`：登录成功后新增首页 success toast，使用一次性路由状态触发，并在首页消费后立即清空避免重复弹出
+- `2026-04-05`：调整 `PracticeSession` 页桌面端双栏顺序为左提示右主区，移动端继续保持主练习内容优先
+- `2026-04-05`：移除注册页昵称、邮箱和密码的示例预填值，保留注册成功后登录页邮箱自动带入
+- `2026-04-05`：为登录页和注册页补充前端空值校验，邮箱/密码为空时改为中文“不能为空”提示，并阻止继续发起 auth 请求
+- `2026-04-05`：为登录失败补充前端错误映射，邮箱或密码错误时统一显示 `邮箱/密码错误`，不再透传英文 `Invalid email or password`
+- `2026-04-05`：收口练后反馈页失败态，review 缺失时不再展示后端英文 `Session review ... not found`，页面仅保留中文标题与返回练习入口
+- `2026-04-06`：loading 页新增 session 创建失败处理；unsupported scene image 会停留当前页并提示用户返回首页换图
+- `2026-04-06`：将 `PracticeSession` 从双栏文本补充页重构为沉浸式单栏语音页，移除文本输入框并新增浏览器语音转写、`Talk To Your Agent / End Conversation` 入口与结束后 review 跳转
+- `2026-04-06`：将 `PracticeSession` 从浏览器 `Web Speech API` 切到 Deepgram Voice Agent，新增 `voice/bootstrap` / `voice/complete` API 消费与 `useDeepgramVoiceAgent` 实时会话 hook
 
 
 

@@ -1,18 +1,20 @@
-import { FormEvent, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { BrandHeader } from "../components/BrandHeader";
-import { getPracticeSession, submitPracticeTurn } from "../services/practiceApi";
-import type { PracticeFeedback, SessionSummary } from "../types/app";
+import { Logo } from "../components/Logo";
+import { useDeepgramVoiceAgent } from "../hooks/useDeepgramVoiceAgent";
+import { getPracticeSession } from "../services/practiceApi";
+import { bootstrapVoiceSession, completeVoiceSession } from "../services/sessionApi";
+import type { SessionSummary } from "../types/app";
 
 export function PracticeSessionPage() {
   const navigate = useNavigate();
   const { sessionId = "" } = useParams();
   const [session, setSession] = useState<SessionSummary | null>(null);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [feedback, setFeedback] = useState<PracticeFeedback | null>(null);
+  const [ending, setEnding] = useState(false);
+  const [conversationStarted, setConversationStarted] = useState(false);
+  const voice = useDeepgramVoiceAgent();
 
   useEffect(() => {
     let alive = true;
@@ -34,151 +36,175 @@ export function PracticeSessionPage() {
     };
   }, [sessionId]);
 
-  async function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSending(true);
-
+  async function onStartConversation() {
     try {
-      const result = await submitPracticeTurn(sessionId, { content: draft });
-
-      setSession((current) => (current ? { ...current, messages: result.messages } : current));
-      setFeedback(result.feedback);
-      setDraft("");
+      setError("");
+      const bootstrap = await bootstrapVoiceSession(sessionId);
+      setSession(bootstrap.session);
+      await voice.startSession(bootstrap);
+      setConversationStarted(true);
     } catch (reason) {
       const typed = reason as { message?: string };
-      setError(typed.message ?? "发送失败，请稍后再试。");
+      setError(typed.message ?? "语音会话启动失败，请稍后再试。");
+      setConversationStarted(false);
+    }
+  }
+
+  async function onEndConversation() {
+    try {
+      setError("");
+      setEnding(true);
+      const result = await voice.endSession();
+      if (!result.conversation.length) {
+        setError("还没有识别到有效语音内容，先说一句再结束本次练习。");
+        return;
+      }
+      await completeVoiceSession(sessionId, {
+        conversation: result.conversation,
+        terminationReason: result.terminationReason,
+      });
+      setConversationStarted(false);
+      navigate(`/session/${sessionId}/review`);
+    } catch (reason) {
+      const typed = reason as { message?: string };
+      setError(typed.message ?? "语音会话结束失败，请稍后再试。");
     } finally {
-      setSending(false);
+      setEnding(false);
     }
   }
 
   if (error && !session) {
     return (
-      <div className="page-shell">
-        <div className="page-frame">
-          <BrandHeader />
-          <main className="empty-stage">
+      <div className="page-shell page-shell--session-immersive">
+        <main className="session-stage session-stage--empty">
+          <section className="session-console session-console--empty">
             <h1>练习暂时不可用</h1>
             <p className="muted-text">{error}</p>
-            <Link className="primary-button" to="/">
+            <Link className="primary-button session-cta-button" to="/">
               返回首页
             </Link>
-          </main>
-        </div>
+          </section>
+        </main>
       </div>
     );
   }
 
   if (!session) {
     return (
-      <div className="page-shell">
-        <div className="page-frame">
-          <BrandHeader />
-          <main className="empty-stage">
+      <div className="page-shell page-shell--session-immersive">
+        <main className="session-stage session-stage--empty">
+          <section className="session-console session-console--empty">
             <h1>正在准备练习会话…</h1>
-          </main>
-        </div>
+          </section>
+        </main>
       </div>
     );
   }
 
+  const isLive =
+    conversationStarted || voice.isConnected || voice.isListening || voice.isThinking || voice.isSpeaking;
+  const roleTitle = session.roleLabel.replace(/^角色 · /, "");
+  const supportingCopy = conversationStarted
+    ? "语音会话已连接。你可以直接开口，系统会实时显示对话内容。"
+    : `你正在和 ${roleTitle} 进行一段英语陪练。点击按钮后开始连续语音，直到手动结束本次会话。`;
+  const statusLabel = ending
+    ? "Ending"
+    : voice.isSpeaking
+      ? "Speaking"
+      : voice.isThinking
+        ? "Thinking"
+        : isLive
+          ? "Listening"
+          : "Ready";
+  const statusToneClass = ending
+    ? "session-status-pill--ending"
+    : voice.isSpeaking || voice.isThinking || isLive
+      ? "session-status-pill--live"
+      : "session-status-pill--ready";
+
   return (
-    <div className="page-shell">
-      <div className="page-frame">
-        <BrandHeader />
-
-        <main className="page-grid page-grid--session">
-          <section className="panel-section">
-            <div className="section-header">
-              <div>
-                <p className="eyebrow">Practice Session</p>
-                <h2>练习会话</h2>
-              </div>
-              <span className="info-pill">语音优先模式</span>
+    <div className="page-shell page-shell--session-immersive">
+      <main className="session-stage">
+        <section className={`session-hero${isLive ? " session-hero--live" : ""}`}>
+          <div className="session-logo-cluster" aria-hidden="true">
+            <span className="session-logo-ring session-logo-ring--outer" />
+            <span className="session-logo-ring session-logo-ring--mid" />
+            <span className="session-logo-ring session-logo-ring--inner" />
+            <div className="session-logo-mark">
+              <Logo className="session-logo-svg" title="" />
             </div>
-
-            <article className="panel-card panel-card--soft">
-              <p className="eyebrow">场景速写</p>
-              <h3>{session.title}</h3>
-              <p className="scene-role">{session.roleLabel}</p>
-              <p className="muted-text">{session.openingPrompt}</p>
-              <div className="pill-row">
-                {session.tags.map((tag) => (
-                  <span key={tag} className="info-pill">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </article>
-
-            <section className="message-stack">
-              {session.messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={message.role === "learner" ? "message-card message-card--learner" : "message-card"}
-                >
-                  <p className="eyebrow">{message.label}</p>
-                  <p>{message.content}</p>
-                </article>
+          </div>
+          <div className="session-hero-copy">
+            <p className="eyebrow eyebrow--brand">Voice Practice Session</p>
+            <h1>{session.title}</h1>
+            <p className="session-hero-text">{supportingCopy}</p>
+            <p className="session-hero-prompt">{session.openingPrompt}</p>
+            <div className="session-tag-row">
+              {session.tags.map((tag) => (
+                <span key={tag} className="session-tag">
+                  {tag}
+                </span>
               ))}
-            </section>
-
-            <section className="panel-card voice-dock">
-              <p className="eyebrow">语音底座</p>
-              <div className="voice-row">
-                <button className="mic-button" type="button">
-                  开口
+            </div>
+            <div className="session-hero-actions">
+              {conversationStarted ? (
+                <button
+                  className="ghost-button session-cta-button session-cta-button--end"
+                  type="button"
+                  onClick={onEndConversation}
+                  disabled={ending}
+                >
+                  {ending ? "Ending…" : "End Conversation"}
                 </button>
-                <div>
-                  <h3>{session.voiceTitle}</h3>
-                  <p className="muted-text">{session.voiceBody}</p>
-                </div>
-              </div>
+              ) : (
+                <button className="primary-button session-cta-button" type="button" onClick={onStartConversation}>
+                  Talk To Your Agent
+                </button>
+              )}
+            </div>
+            {voice.error || error ? <p className="session-inline-error">{voice.error || error}</p> : null}
+          </div>
+        </section>
 
-              <form className="composer" onSubmit={onSubmit}>
-                <label className="field-label" htmlFor="practice-input">
-                  文本补充
-                </label>
-                <textarea
-                  id="practice-input"
-                  className="input-field input-field--textarea"
-                  placeholder="先写一句英文回答，再补第二句细节。"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
-                {error ? <p className="form-error">{error}</p> : null}
-                <div className="action-row">
-                  <button className="primary-button" type="submit" disabled={sending}>
-                    {sending ? "发送中…" : "发送回答"}
-                  </button>
-                  <button className="ghost-button" type="button" onClick={() => navigate(`/session/${sessionId}/review`)}>
-                    查看练后反馈
-                  </button>
-                </div>
-              </form>
-            </section>
+        <section className={`session-console${isLive ? " session-console--live" : ""}`}>
+          <div className="session-console-header">
+            <div>
+              <p className="eyebrow">Conversation Feed</p>
+              <h2>{roleTitle}</h2>
+            </div>
+            <span className={`session-status-pill ${statusToneClass}`}>{statusLabel}</span>
+          </div>
 
-            {feedback ? (
-              <section className="review-grid">
-                <article className="metric-card">
-                  <h3>{feedback.grammar.title}</h3>
-                  <p>{feedback.grammar.body}</p>
-                </article>
-                <article className="metric-card">
-                  <h3>{feedback.moreNatural.title}</h3>
-                  <p>{feedback.moreNatural.body}</p>
-                </article>
-              </section>
-            ) : null}
-          </section>
-
-          <aside className="panel-card panel-card--soft side-note">
-            <p className="eyebrow">即时提示</p>
-            <p>{session.liveHint}</p>
-          </aside>
-        </main>
-      </div>
+          <div className="session-thread" role="log" aria-live="polite">
+            {session.messages.map((message) => (
+              <article
+                key={message.id}
+                className={
+                  message.role === "learner"
+                    ? "session-bubble session-bubble--learner"
+                    : "session-bubble session-bubble--coach"
+                }
+              >
+                <p className="eyebrow">{message.label}</p>
+                <p>{message.content}</p>
+              </article>
+            ))}
+            {voice.transcript.map((message, index) => (
+              <article
+                key={`live-${message.role}-${index}`}
+                className={
+                  message.role === "user"
+                    ? "session-bubble session-bubble--learner session-bubble--live"
+                    : "session-bubble session-bubble--coach session-bubble--live"
+                }
+              >
+                <p className="eyebrow">{message.role === "user" ? "你 · 实时转写" : "Agent · 实时回复"}</p>
+                <p>{message.content}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }
