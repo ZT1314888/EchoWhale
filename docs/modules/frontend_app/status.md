@@ -26,8 +26,9 @@
 - 已完成边界：登录/注册、refresh 恢复和 `History` 路由守卫已切到真实 auth API，匿名主路径会自动携带 `visitor_id`
 - 已完成边界：注册成功后改为回到登录页，登录后右上角收口为昵称悬浮菜单并提供退出登录
 - 已完成边界：登录成功后首页会展示一次性成功提示，支持自动消失与手动关闭
-- 已完成边界：`PracticeSession` 页桌面端布局已调整为“左侧即时提示 + 右侧主练习区”，移动端仍保持主练习内容优先
-- 已完成边界：`PracticeSession` 已重构为沉浸式单栏语音练习页，移除文本输入框、顶栏与侧栏，改为大 logo 动效 + `Talk To Your Agent / End Conversation` 单按钮流
+- 已完成边界：`PracticeSession` 页桌面端已收口为“左侧 logo 主舞台 + 右侧实时对话”的双栏语音练习区，移动端仍保持单栏且主对话优先
+- 已完成边界：`PracticeSession` 现已移除文本输入框、顶栏与旧侧栏，左栏只保留可点击鲸鱼 logo；logo 本身兼任 start/end 单按钮，并在点击后切换到持续 wifi 动效
+- 已完成边界：`PracticeSession` 对话流会在新消息到来时自动定位到最新消息位置，并隐藏显眼滚动条视觉，避免出现右侧拖拽条观感
 - 已完成边界：前端已从浏览器 `Web Speech API` 切到 Deepgram Voice Agent bootstrap + WebSocket 实时语音链路，练习页会实时显示 `ConversationText`，并在结束会话时调用后端 `voice/complete` 写回 transcript 与 review
 - 仍然缺失：更完整的系统联调细节，以及真实私有 R2 可访问性确认
 - 当前策略补充：前端展示层继续以中文 `.pen` 为唯一真源，但代码入口已不再保留 demo 切屏器，而是面向生产应用骨架
@@ -65,6 +66,7 @@
 - `[x]` 将登录/注册页切到真实 auth API，并为 `/history` 增加登录守卫
 - `[x]` 将注册流程收口为“先建号再登录”，并让首页/应用头部接入真实登录态菜单
 - `[x]` 将练习页从本地浏览器语音识别切到 Deepgram Voice Agent bootstrap / complete API
+- `[x]` 将语音练习页重构为左侧 logo 主舞台 + 右侧实时对话双栏布局，并补自动滚动到最新消息
 - `[x]` 新增 `useDeepgramVoiceAgent` hook，接入 WebSocket、PCM 采集、音频播放与 transcript 状态管理
 
 ## 测试门
@@ -110,6 +112,7 @@
 - `2026-04-06`：将 `PracticeSession` 从双栏文本补充页重构为沉浸式单栏语音页，移除文本输入框并新增浏览器语音转写、`Talk To Your Agent / End Conversation` 入口与结束后 review 跳转
 - `2026-04-06`：将 `PracticeSession` 从浏览器 `Web Speech API` 切到 Deepgram Voice Agent，新增 `voice/bootstrap` / `voice/complete` API 消费与 `useDeepgramVoiceAgent` 实时会话 hook
 - `2026-04-07`：新增 `createSamplePracticeSession`，并将首页示例场景从 mock `session-*` 切到真实 `sess_*` 会话创建；sample 练习页现在可继续走真实 voice/review/history
+- `2026-04-07`：将 `PracticeSession` 从沉浸式单栏语音页调整为桌面端双栏布局，左侧收口为单一鲸鱼 logo 按钮与 wifi 动效主舞台，右侧独立实时对话，并在新消息到来时自动滚动到最新位置
 
 
 

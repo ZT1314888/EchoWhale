@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Logo } from "../components/Logo";
@@ -7,13 +7,19 @@ import { getPracticeSession } from "../services/practiceApi";
 import { bootstrapVoiceSession, completeVoiceSession } from "../services/sessionApi";
 import type { SessionSummary } from "../types/app";
 
+type LogoVisualState = "idle" | "activating" | "live" | "ending";
+
 export function PracticeSessionPage() {
   const navigate = useNavigate();
   const { sessionId = "" } = useParams();
   const [session, setSession] = useState<SessionSummary | null>(null);
   const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
   const [ending, setEnding] = useState(false);
   const [conversationStarted, setConversationStarted] = useState(false);
+  const [showActivationPulse, setShowActivationPulse] = useState(false);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
+  const activationTimeoutRef = useRef<number | null>(null);
   const voice = useDeepgramVoiceAgent();
 
   useEffect(() => {
@@ -36,9 +42,34 @@ export function PracticeSessionPage() {
     };
   }, [sessionId]);
 
+  useEffect(() => {
+    conversationEndRef.current?.scrollIntoView({ block: "end" });
+  }, [session?.messages.length, voice.transcript.length]);
+
+  useEffect(() => {
+    return () => {
+      if (activationTimeoutRef.current !== null) {
+        window.clearTimeout(activationTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  function triggerActivationPulse() {
+    if (activationTimeoutRef.current !== null) {
+      window.clearTimeout(activationTimeoutRef.current);
+    }
+    setShowActivationPulse(true);
+    activationTimeoutRef.current = window.setTimeout(() => {
+      setShowActivationPulse(false);
+      activationTimeoutRef.current = null;
+    }, 900);
+  }
+
   async function onStartConversation() {
     try {
       setError("");
+      setStarting(true);
+      triggerActivationPulse();
       const bootstrap = await bootstrapVoiceSession(sessionId);
       setSession(bootstrap.session);
       await voice.startSession(bootstrap);
@@ -47,6 +78,8 @@ export function PracticeSessionPage() {
       const typed = reason as { message?: string };
       setError(typed.message ?? "语音会话启动失败，请稍后再试。");
       setConversationStarted(false);
+    } finally {
+      setStarting(false);
     }
   }
 
@@ -105,9 +138,6 @@ export function PracticeSessionPage() {
   const isLive =
     conversationStarted || voice.isConnected || voice.isListening || voice.isThinking || voice.isSpeaking;
   const roleTitle = session.roleLabel.replace(/^角色 · /, "");
-  const supportingCopy = conversationStarted
-    ? "语音会话已连接。你可以直接开口，系统会实时显示对话内容。"
-    : `你正在和 ${roleTitle} 进行一段英语陪练。点击按钮后开始连续语音，直到手动结束本次会话。`;
   const statusLabel = ending
     ? "Ending"
     : voice.isSpeaking
@@ -122,59 +152,58 @@ export function PracticeSessionPage() {
     : voice.isSpeaking || voice.isThinking || isLive
       ? "session-status-pill--live"
       : "session-status-pill--ready";
+  const logoVisualState: LogoVisualState = ending
+    ? "ending"
+    : isLive
+        ? "live"
+        : starting || showActivationPulse
+          ? "activating"
+        : "idle";
+  const logoButtonLabel = ending
+    ? "Ending voice practice"
+    : isLive
+      ? "End voice practice"
+      : starting
+        ? "Connecting voice practice"
+        : "Start voice practice";
 
   return (
     <div className="page-shell page-shell--session-immersive">
       <main className="session-stage">
-        <section className={`session-hero${isLive ? " session-hero--live" : ""}`}>
-          <div className="session-logo-cluster" aria-hidden="true">
-            <span className="session-logo-ring session-logo-ring--outer" />
-            <span className="session-logo-ring session-logo-ring--mid" />
-            <span className="session-logo-ring session-logo-ring--inner" />
-            <div className="session-logo-mark">
-              <Logo className="session-logo-svg" title="" />
-            </div>
-          </div>
-          <div className="session-hero-copy">
-            <p className="eyebrow eyebrow--brand">Voice Practice Session</p>
-            <h1>{session.title}</h1>
-            <p className="session-hero-text">{supportingCopy}</p>
-            <p className="session-hero-prompt">{session.openingPrompt}</p>
-            <div className="session-tag-row">
-              {session.tags.map((tag) => (
-                <span key={tag} className="session-tag">
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div className="session-hero-actions">
-              {conversationStarted ? (
-                <button
-                  className="ghost-button session-cta-button session-cta-button--end"
-                  type="button"
-                  onClick={onEndConversation}
-                  disabled={ending}
-                >
-                  {ending ? "Ending…" : "End Conversation"}
-                </button>
-              ) : (
-                <button className="primary-button session-cta-button" type="button" onClick={onStartConversation}>
-                  Talk To Your Agent
-                </button>
-              )}
-            </div>
-            {voice.error || error ? <p className="session-inline-error">{voice.error || error}</p> : null}
+        <section className={`session-aside session-aside--${logoVisualState}`} data-testid="session-aside">
+          <div className="session-aside-sticky">
+            <button
+              className="session-logo-button"
+              type="button"
+              onClick={isLive ? onEndConversation : onStartConversation}
+              disabled={starting || ending}
+              aria-label={logoButtonLabel}
+              data-state={logoVisualState}
+            >
+              <span className="session-logo-ring session-logo-ring--outer" aria-hidden="true" />
+              <span className="session-logo-ring session-logo-ring--mid" aria-hidden="true" />
+              <span className="session-logo-ring session-logo-ring--inner" aria-hidden="true" />
+              <span className="session-logo-aura" aria-hidden="true" />
+              <span className="session-logo-mark" aria-hidden="true">
+                <Logo className="session-logo-svg" title="" />
+              </span>
+            </button>
           </div>
         </section>
 
-        <section className={`session-console${isLive ? " session-console--live" : ""}`}>
+        <section
+          className={`session-console${isLive ? " session-console--live" : ""}`}
+          data-testid="session-conversation-panel"
+        >
           <div className="session-console-header">
-            <div>
-              <p className="eyebrow">Conversation Feed</p>
-              <h2>{roleTitle}</h2>
+            <div className="session-console-heading">
+              <p className="eyebrow eyebrow--brand">Voice Practice Session</p>
+              <h1>{session.title}</h1>
+              <p className="session-console-meta">{roleTitle}</p>
             </div>
             <span className={`session-status-pill ${statusToneClass}`}>{statusLabel}</span>
           </div>
+          {voice.error || error ? <p className="session-inline-error session-inline-error--console">{voice.error || error}</p> : null}
 
           <div className="session-thread" role="log" aria-live="polite">
             {session.messages.map((message) => (
@@ -203,6 +232,7 @@ export function PracticeSessionPage() {
                 <p>{message.content}</p>
               </article>
             ))}
+            <div ref={conversationEndRef} aria-hidden="true" />
           </div>
         </section>
       </main>

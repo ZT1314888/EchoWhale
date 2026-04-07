@@ -45,7 +45,61 @@ afterEach(() => {
 });
 
 describe("PracticeSessionPage", () => {
-  it("starts with Deepgram bootstrap and completes with voice transcript persistence", async () => {
+  it("renders the icon-only aside and keeps the conversation pinned to the latest message", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(window.HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    const voiceState = {
+      error: "",
+      isConnected: false,
+      isListening: false,
+      isThinking: false,
+      isSpeaking: false,
+      transcript: [] as Array<{ role: "assistant" | "user"; content: string }>,
+      startSession: vi.fn().mockResolvedValue(undefined),
+      endSession: vi.fn().mockResolvedValue({
+        conversation: [],
+        terminationReason: "user_ended",
+        clientDiagnostics: {},
+      }),
+    };
+
+    vi.mocked(getPracticeSession).mockResolvedValue(session);
+    vi.mocked(useDeepgramVoiceAgent).mockImplementation(() => voiceState);
+
+    const view = render(
+      <MemoryRouter initialEntries={["/session/sess_real"]}>
+        <Routes>
+          <Route path="/session/:sessionId" element={<PracticeSessionPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/咖啡店柜台点单/i)).toBeInTheDocument();
+    expect(screen.getByTestId("session-aside")).toBeInTheDocument();
+    expect(screen.getByTestId("session-conversation-panel")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /talk to your agent/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/opening prompt/i)).not.toBeInTheDocument();
+
+    voiceState.transcript = [{ role: "assistant", content: "Can you give me a quick status update?" }];
+    view.rerender(
+      <MemoryRouter initialEntries={["/session/sess_real"]}>
+        <Routes>
+          <Route path="/session/:sessionId" element={<PracticeSessionPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  it("uses the logo button as the single start and end control", async () => {
     vi.mocked(getPracticeSession).mockResolvedValue(session);
     vi.mocked(bootstrapVoiceSession).mockResolvedValue({
       sessionId: "sess_real",
@@ -119,13 +173,14 @@ describe("PracticeSessionPage", () => {
     );
 
     expect(await screen.findByText(/咖啡店柜台点单/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /talk to your agent/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start voice practice/i }));
 
     await waitFor(() => {
       expect(bootstrapVoiceSession).toHaveBeenCalledWith("sess_real");
     });
+    expect(screen.getByRole("button", { name: /end voice practice/i })).toHaveAttribute("data-state", "live");
 
-    fireEvent.click(screen.getByRole("button", { name: /end conversation/i }));
+    fireEvent.click(screen.getByRole("button", { name: /end voice practice/i }));
 
     await waitFor(() => {
       expect(completeVoiceSession).toHaveBeenCalledWith("sess_real", {

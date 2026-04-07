@@ -32,6 +32,7 @@ export function Logo({
       <title>{title}</title>
       <path
         d="M 88 58 Q 100 48 112 58"
+        data-wave="short"
         fill="none"
         stroke={`url(#${echoWaveId})`}
         strokeWidth="8"
@@ -39,6 +40,7 @@ export function Logo({
       />
       <path
         d="M 76 44 Q 100 28 124 44"
+        data-wave="mid"
         fill="none"
         stroke={`url(#${echoWaveId})`}
         strokeWidth="8"
@@ -46,6 +48,7 @@ export function Logo({
       />
       <path
         d="M 64 30 Q 100 6 136 30"
+        data-wave="long"
         fill="none"
         stroke={`url(#${echoWaveId})`}
         strokeWidth="8"
@@ -53,9 +56,10 @@ export function Logo({
       />
       <path
         d="M 40 110 C 40 70, 80 70, 100 70 C 130 70, 150 90, 150 110 Q 165 105, 175 100 Q 170 120, 150 125 C 100 140, 50 130, 40 110 Z"
+        data-whale-body="true"
         fill={`url(#${whaleBodyId})`}
       />
-      <circle cx="65" cy="95" r="5" fill="#FFFFFF" />
+      <circle cx="65" cy="95" r="5" fill="#FFFFFF" data-whale-eye="true" />
     </svg>
   );
 }
