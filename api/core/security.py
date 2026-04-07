@@ -68,12 +68,52 @@ def decode_access_token(token: str, *, secret: str) -> dict[str, Any]:
     return payload
 
 
+def create_service_token(
+    *,
+    subject: str,
+    token_type: str,
+    secret: str,
+    expires_in_seconds: int,
+    extra_claims: dict[str, Any] | None = None,
+) -> str:
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": subject,
+        "typ": token_type,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(seconds=expires_in_seconds)).timestamp()),
+    }
+    if extra_claims:
+        payload.update(extra_claims)
+    return _encode_jwt(payload, secret)
+
+
+def decode_service_token(
+    token: str,
+    *,
+    secret: str,
+    expected_type: str,
+) -> dict[str, Any]:
+    payload = _decode_jwt(token, secret)
+    if payload.get("typ") != expected_type:
+        raise AuthenticationError("Authentication required")
+    return payload
+
+
 def generate_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 
 
 def hash_refresh_token(refresh_token: str) -> str:
     return hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+
+
+def generate_action_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_action_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def generate_visitor_id() -> str:

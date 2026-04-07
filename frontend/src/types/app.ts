@@ -4,7 +4,8 @@ export type SampleScene = {
   id: string;
   title: string;
   body: string;
-  imageClass: string;
+  imageSrc: string;
+  imageAlt: string;
   roleLabel: string;
   openingPrompt: string;
   tags: string[];
@@ -102,6 +103,31 @@ export type SubmitPracticeTurnResult = {
   feedback: PracticeFeedback;
 };
 
+export type VoiceConversationItem = {
+  role: "assistant" | "user";
+  content: string;
+};
+
+export type VoiceBootstrapResult = {
+  sessionId: string;
+  deepgramAccessToken: string;
+  deepgramWsUrl: string;
+  expiresIn: number;
+  agentSettings: Record<string, unknown>;
+  session: SessionSummary;
+};
+
+export type VoiceCompleteInput = {
+  conversation: VoiceConversationItem[];
+  terminationReason: string;
+  clientDiagnostics?: Record<string, unknown>;
+};
+
+export type VoiceCompleteResult = {
+  session: SessionSummary;
+  review: ReviewSummary;
+};
+
 export type AuthCredentials = {
   email: string;
   password: string;
@@ -111,11 +137,36 @@ export type RegisterPayload = AuthCredentials & {
   nickname: string;
 };
 
-export type AuthResult = {
-  userName: string;
+export type EmailPayload = {
+  email: string;
+};
+
+export type TokenPayload = {
+  token: string;
+};
+
+export type ResetPasswordPayload = TokenPayload & {
+  password: string;
+};
+
+export type AuthUser = {
+  userId: string;
+  email: string;
+  nickname: string;
+};
+
+export type AuthSession = {
+  accessToken: string;
+  user: AuthUser;
+};
+
+export type AuthState = {
+  status: "refreshing" | "anonymous" | "authenticated";
+  user: AuthUser | null;
 };
 
 export type AppError = {
   code: string;
   message: string;
+  reason?: string;
 };

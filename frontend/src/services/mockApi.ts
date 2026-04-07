@@ -2,7 +2,7 @@ import { baseSession, defaultFeedback, historyDetails, historyEntries, sampleSce
 import type {
   AppError,
   AuthCredentials,
-  AuthResult,
+  AuthSession,
   HistoryDetail,
   HistoryEntry,
   PracticeTurnInput,
@@ -112,7 +112,7 @@ export async function getHistorySession(sessionId: string): Promise<HistoryDetai
   return wait(detail);
 }
 
-export async function login(credentials: AuthCredentials): Promise<AuthResult> {
+export async function login(credentials: AuthCredentials): Promise<AuthSession> {
   if (!credentials.email.trim()) {
     throw toError("AUTH_INVALID", "请输入邮箱地址。");
   }
@@ -121,14 +121,28 @@ export async function login(credentials: AuthCredentials): Promise<AuthResult> {
     throw toError("AUTH_INVALID", "请输入密码。");
   }
 
-  return wait({ userName: "Echo Learner" });
+  return wait({
+    accessToken: "mock-access-token",
+    user: {
+      userId: "mock-user",
+      email: credentials.email.trim(),
+      nickname: "Echo Learner",
+    },
+  });
 }
 
-export async function register(payload: RegisterPayload): Promise<AuthResult> {
+export async function register(payload: RegisterPayload): Promise<AuthSession> {
   if (!payload.nickname.trim()) {
     throw toError("AUTH_INVALID", "请输入昵称。");
   }
 
   await login(payload);
-  return wait({ userName: payload.nickname.trim() });
+  return wait({
+    accessToken: "mock-access-token",
+    user: {
+      userId: "mock-user",
+      email: payload.email.trim(),
+      nickname: payload.nickname.trim(),
+    },
+  });
 }

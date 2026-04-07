@@ -4,13 +4,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import type { AuthCredentials, AuthSession, AuthState, RegisterPayload } from "../types/app";
-import { login as loginRequest, logout as logoutRequest, refresh, register as registerRequest } from "../services/authApi";
-import { setAccessToken } from "../services/apiClient";
+import {
+  login as loginRequest,
+  logout as logoutRequest,
+  refresh as refreshRequest,
+  register as registerRequest,
+} from "../services/authApi";
+import { configureApiClientAuth, resetApiClientAuth, setAccessToken } from "../services/apiClient";
 
 type AuthContextValue = AuthState & {
   login: (credentials: AuthCredentials) => Promise<AuthSession>;
@@ -21,52 +27,64 @@ type AuthContextValue = AuthState & {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const isMountedRef = useRef(true);
   const [state, setState] = useState<AuthState>({
     status: "refreshing",
     user: null,
   });
 
-  useEffect(() => {
-    let active = true;
+  function applyAuthenticatedState(session: AuthSession) {
+    setAccessToken(session.accessToken);
+    if (!isMountedRef.current) {
+      return session.accessToken;
+    }
+    startTransition(() => {
+      setState({
+        status: "authenticated",
+        user: session.user,
+      });
+    });
+    return session.accessToken;
+  }
 
-    refresh()
-      .then((session) => {
-        if (!active) {
-          return;
-        }
-        setAccessToken(session.accessToken);
-        startTransition(() => {
-          setState({
-            status: "authenticated",
-            user: session.user,
-          });
-        });
-      })
-      .catch(() => {
-        if (!active) {
-          return;
-        }
-        setAccessToken(null);
-        startTransition(() => {
-          setState({
-            status: "anonymous",
-            user: null,
-          });
-        });
+  function applyAnonymousState() {
+    setAccessToken(null);
+    if (!isMountedRef.current) {
+      return;
+    }
+    startTransition(() => {
+      setState({
+        status: "anonymous",
+        user: null,
+      });
+    });
+  }
+
+  async function refreshSession() {
+    const session = await refreshRequest();
+    return applyAuthenticatedState(session);
+  }
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    configureApiClientAuth({
+      refreshSession,
+      handleAuthFailure: applyAnonymousState,
+    });
+
+    refreshSession().catch(() => {
+        applyAnonymousState();
       });
 
     return () => {
-      active = false;
+      isMountedRef.current = false;
+      resetApiClientAuth();
     };
   }, []);
 
   async function login(credentials: AuthCredentials): Promise<AuthSession> {
     const session = await loginRequest(credentials);
-    setAccessToken(session.accessToken);
-    setState({
-      status: "authenticated",
-      user: session.user,
-    });
+    applyAuthenticatedState(session);
     return session;
   }
 
@@ -76,11 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     await logoutRequest();
-    setAccessToken(null);
-    setState({
-      status: "anonymous",
-      user: null,
-    });
+    applyAnonymousState();
   }
 
   const value = useMemo<AuthContextValue>(

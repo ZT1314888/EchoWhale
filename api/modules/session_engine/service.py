@@ -7,7 +7,13 @@ from api.db.session_db import SessionRepository
 from api.integrations.storage.r2 import R2StorageService
 from api.models.review_model import SessionReview
 from api.modules.session_engine.agent import SessionEngineAgent
-from api.modules.session_engine.schema import ReplyInput, StartSessionInput
+from api.modules.session_engine.schema import (
+    ReplyInput,
+    StartSessionInput,
+    VoiceBootstrapResult,
+    VoiceCompleteInput,
+    VoiceCompleteResult,
+)
 
 
 class SessionEngineService:
@@ -51,6 +57,31 @@ class SessionEngineService:
     def get_history_session_detail(self, user_id: str, session_id: str) -> tuple[Session, SessionReview]:
         session = self._ensure_owner(self.agent.get(session_id), user_id)
         return (session, self.agent.get_review(session_id))
+
+    def bootstrap_voice_session(
+        self,
+        session_id: str,
+        owner_id: str | None = None,
+    ) -> VoiceBootstrapResult:
+        self._ensure_owner(self.agent.get(session_id), owner_id)
+        return self.agent.bootstrap_voice_session(session_id)
+
+    def complete_voice_session(
+        self,
+        session_id: str,
+        conversation,
+        termination_reason: str,
+        client_diagnostics: dict[str, object] | None = None,
+        owner_id: str | None = None,
+    ) -> VoiceCompleteResult:
+        self._ensure_owner(self.agent.get(session_id), owner_id)
+        payload = VoiceCompleteInput(
+            session_id=session_id,
+            conversation=conversation,
+            termination_reason=termination_reason,
+            client_diagnostics=client_diagnostics or {},
+        )
+        return self.agent.complete_voice_session(payload)
 
     def _ensure_owner(self, session: Session, owner_id: str | None) -> Session:
         if owner_id is None or session.user_id == owner_id:

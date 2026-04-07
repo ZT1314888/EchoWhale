@@ -15,7 +15,7 @@ from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
 from api.modules.session_engine.service import SessionEngineService
-from api.modules.session_engine.schema import LearnerMessagePayload
+from api.modules.session_engine.schema import LearnerMessagePayload, VoiceConversationTurn
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -27,6 +27,12 @@ class StartSessionRequest(BaseModel):
 
 class SessionReplyRequest(LearnerMessagePayload):
     pass
+
+
+class VoiceCompleteRequest(BaseModel):
+    conversation: list[VoiceConversationTurn]
+    termination_reason: str = "user_ended"
+    client_diagnostics: dict[str, object] = {}
 
 
 class SessionMessageResponse(BaseModel):
@@ -52,7 +58,8 @@ class SessionResponse(BaseModel):
     role: str
     opener: str
     status: str
-    labels: list[str]
+    visual_anchors: list[str]
+    vocab_candidates: list[str]
     messages: list[SessionMessageResponse]
 
     @classmethod
@@ -64,7 +71,8 @@ class SessionResponse(BaseModel):
             role=session.role,
             opener=session.opener,
             status=session.status.value,
-            labels=session.labels,
+            visual_anchors=list(session.visual_anchors),
+            vocab_candidates=list(session.vocab_candidates),
             messages=[SessionMessageResponse.from_message(message) for message in session.messages],
         )
 
@@ -143,6 +151,20 @@ class SessionReplyResponse(BaseModel):
         return cls(session=SessionResponse.from_session(session), feedback=feedback)
 
 
+class VoiceBootstrapResponse(BaseModel):
+    session_id: str
+    deepgram_access_token: str
+    expires_in: float
+    deepgram_ws_url: str
+    agent_settings: dict[str, object]
+    session: SessionResponse
+
+
+class VoiceCompleteResponse(BaseModel):
+    session: SessionResponse
+    review: SessionReviewResponse
+
+
 def get_session_service() -> SessionEngineService:
     return SessionEngineService(
         media_lookup=build_media_repository(),
@@ -203,5 +225,60 @@ def get_session_review(
 ) -> Any:
     review = session_service.get_session_review(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=SessionReviewResponse.from_review(review))
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
+
+
+@router.post("/{session_id}/voice/bootstrap", response_model=ApiResponse[VoiceBootstrapResponse])
+def bootstrap_voice_session(
+    session_id: str,
+    session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
+) -> Any:
+    bootstrap = session_service.bootstrap_voice_session(session_id, owner_id=owner.owner_id)
+    response = ApiResponse.success(
+        data=VoiceBootstrapResponse(
+            session_id=bootstrap["session_id"] if isinstance(bootstrap, dict) else bootstrap.session_id,
+            deepgram_access_token=bootstrap["deepgram_access_token"]
+            if isinstance(bootstrap, dict)
+            else bootstrap.deepgram_access_token,
+            expires_in=bootstrap["expires_in"] if isinstance(bootstrap, dict) else bootstrap.expires_in,
+            deepgram_ws_url=bootstrap["deepgram_ws_url"]
+            if isinstance(bootstrap, dict)
+            else bootstrap.deepgram_ws_url,
+            agent_settings=bootstrap["agent_settings"] if isinstance(bootstrap, dict) else bootstrap.agent_settings,
+            session=SessionResponse.from_session(
+                bootstrap["session"] if isinstance(bootstrap, dict) else bootstrap.session
+            ),
+        )
+    )
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
+
+
+@router.post("/{session_id}/voice/complete", response_model=ApiResponse[VoiceCompleteResponse])
+def complete_voice_session(
+    session_id: str,
+    payload: VoiceCompleteRequest,
+    session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
+) -> Any:
+    result = session_service.complete_voice_session(
+        session_id=session_id,
+        conversation=payload.conversation,
+        termination_reason=payload.termination_reason,
+        client_diagnostics=payload.client_diagnostics,
+        owner_id=owner.owner_id,
+    )
+    response = ApiResponse.success(
+        data=VoiceCompleteResponse(
+            session=SessionResponse.from_session(
+                result["session"] if isinstance(result, dict) else result.session
+            ),
+            review=SessionReviewResponse.from_review(
+                result["review"] if isinstance(result, dict) else result.review
+            ),
+        )
+    )
     apply_visitor_cookie(response=response, owner=owner)
     return response

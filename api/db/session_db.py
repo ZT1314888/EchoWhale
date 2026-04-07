@@ -47,6 +47,8 @@ class SessionRecord(Base):
     role: Mapped[str] = mapped_column(String(128))
     opener: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), index=True)
+    visual_anchors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    vocab_candidates: Mapped[list[str]] = mapped_column(JSON, default=list)
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
@@ -212,6 +214,8 @@ class SqlAlchemySessionRepository:
                 role=session.role,
                 opener=session.opener,
                 status=session.status.value,
+                visual_anchors=list(session.visual_anchors),
+                vocab_candidates=list(session.vocab_candidates),
                 labels=list(session.labels),
                 created_at=session.created_at,
                 updated_at=session.updated_at,
@@ -225,6 +229,8 @@ class SqlAlchemySessionRepository:
         record.role = session.role
         record.opener = session.opener
         record.status = session.status.value
+        record.visual_anchors = list(session.visual_anchors)
+        record.vocab_candidates = list(session.vocab_candidates)
         record.labels = list(session.labels)
         record.created_at = session.created_at
         record.updated_at = session.updated_at
@@ -294,6 +300,11 @@ def build_session_repository(session_factory: SessionFactory | None = None) -> S
 
 
 def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Session:
+    visual_anchors = list(getattr(record, "visual_anchors", []) or [])
+    vocab_candidates = list(getattr(record, "vocab_candidates", []) or [])
+    if not visual_anchors and not vocab_candidates and record.labels:
+        vocab_candidates = list(record.labels or [])
+
     return Session(
         id=record.id,
         user_id=record.user_id,
@@ -302,6 +313,8 @@ def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Ses
         role=record.role,
         opener=record.opener,
         status=SessionStatus(record.status),
+        visual_anchors=visual_anchors,
+        vocab_candidates=vocab_candidates,
         labels=list(record.labels or []),
         messages=[
             Message(

@@ -1,4 +1,5 @@
 import type { AppError, ReviewSummary } from "../types/app";
+import { apiFetch } from "./apiClient";
 
 type ApiResponse<T> = {
   code?: number;
@@ -25,6 +26,17 @@ function toError(message: string, code = "REVIEW_API_FAILED"): AppError {
   return { code, message };
 }
 
+function translateReviewMessage(message: string): string {
+  if (
+    message === "Resource not found" ||
+    (message.includes("Session review") && message.includes("not found"))
+  ) {
+    return "练后反馈还没准备好。";
+  }
+
+  return message;
+}
+
 function toReviewSummary(review: BackendReviewSummary): ReviewSummary {
   return {
     sessionId: review.session_id,
@@ -44,14 +56,14 @@ export async function getPracticeReview(sessionId: string): Promise<ReviewSummar
   let response: Response;
 
   try {
-    response = await fetch(`/api/v1/sessions/${sessionId}/review`);
+    response = await apiFetch(`/api/v1/sessions/${sessionId}/review`);
   } catch {
     throw toError("读取练后反馈失败。");
   }
 
   const payload = (await response.json()) as ApiResponse<BackendReviewSummary>;
   if (!response.ok || !payload.data) {
-    throw toError(payload.message ?? "读取练后反馈失败。");
+    throw toError(translateReviewMessage(payload.message ?? "读取练后反馈失败。"));
   }
 
   return toReviewSummary(payload.data);

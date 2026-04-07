@@ -15,7 +15,7 @@ EchoWhale is an image-grounded English conversation coach. Users upload a real-w
 
 ```bash
 uv sync
-uv run uvicorn api.main:app --reload
+uv run uvicorn api.main:app --reload --port 8001
 ```
 
 ### Frontend
@@ -26,7 +26,7 @@ npm install
 npm run dev
 ```
 
-In development, Vite proxies `/api/*` requests to `http://localhost:8000` by default.
+In development, Vite proxies `/api/*` requests to `http://localhost:8001` by default.
 If your backend runs elsewhere, set `VITE_API_PROXY_TARGET` before `npm run dev`.
 
 ## Current scope
@@ -40,3 +40,6 @@ This scaffold provides:
 - a lightweight React demo interface
 
 The next step is replacing mock providers with real model and Cloudflare adapters.
+
+cloudflared tunnel --url http://localhost:8001
+codex resume 019d636e-11c2-7ff3-94c1-8b2ed7df579e

@@ -350,4 +350,94 @@ describe("authApi", () => {
     expect(result.accessToken).toBe("access-token-2");
     expect(result.user.userId).toBe("user_123");
   });
+
+  it("throws when logout returns a non-success status", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+    }) as typeof fetch;
+
+    await expect(authApi.logout()).rejects.toMatchObject({
+      code: "AUTH_API_FAILED",
+      message: "退出登录失败。",
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("posts resend verification requests with credentials included", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: new Headers(),
+    }) as typeof fetch;
+
+    await expect(authApi.resendVerification({ email: "learner@example.com" })).resolves.toBeUndefined();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/auth/resend-verification", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email: "learner@example.com" }),
+    });
+  });
+
+  it("posts verify email tokens with credentials included", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: new Headers(),
+    }) as typeof fetch;
+
+    await expect(authApi.verifyEmail("verify-token")).resolves.toBeUndefined();
+
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/auth/verify-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ token: "verify-token" }),
+    });
+  });
+
+  it("posts password recovery and reset requests with credentials included", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+        headers: new Headers(),
+      }) as typeof fetch;
+
+    await expect(authApi.forgotPassword({ email: "learner@example.com" })).resolves.toBeUndefined();
+    await expect(
+      authApi.resetPassword({
+        token: "reset-token",
+        password: "renew1234",
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(1, "/api/v1/auth/forgot-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ email: "learner@example.com" }),
+    });
+    expect(globalThis.fetch).toHaveBeenNthCalledWith(2, "/api/v1/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        token: "reset-token",
+        password: "renew1234",
+      }),
+    });
+  });
 });

@@ -106,10 +106,11 @@ def test_upload_image_returns_media_metadata(client: TestClient) -> None:
     assert body["data"]["filename"] == "coffee-shop.png"
     assert body["data"]["content_type"] == "image/png"
     assert body["data"]["file_size"] == len(PNG_BYTES)
-    assert body["data"]["storage_key"].startswith("media/demo-user/")
-    assert body["data"]["preview_url"].startswith("https://signed.test/media/demo-user/")
+    assert body["data"]["storage_key"].startswith("media/visitor/")
+    assert body["data"]["preview_url"].startswith("https://signed.test/media/visitor/")
     assert body["data"]["preview_url_expires_at"] == "2026-04-02T12:00:00Z"
     assert body["data"]["upload_status"] == "uploaded"
+    assert "echowhale_visitor_id=" in response.headers.get("set-cookie", "")
 
 
 def test_upload_rejects_unsupported_content_type(client: TestClient) -> None:
@@ -171,7 +172,7 @@ def test_get_media_returns_stored_metadata(client: TestClient) -> None:
     assert body["message"] == "Success"
     assert body["data"]["media_id"] == media_id
     assert body["data"]["filename"] == "lunch.png"
-    assert body["data"]["storage_key"].startswith("media/demo-user/")
+    assert body["data"]["storage_key"].startswith("media/visitor/")
     assert body["data"]["upload_status"] == "uploaded"
     assert body["data"]["preview_url"] is None
     assert body["data"]["preview_url_expires_at"] is None

@@ -1,4 +1,9 @@
-from pydantic import BaseModel, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+from api.models.review_model import SessionReview
+from api.models.session_model import Session
 
 
 class StartSessionInput(BaseModel):
@@ -20,3 +25,44 @@ class LearnerMessagePayload(BaseModel):
 
 class ReplyInput(LearnerMessagePayload):
     session_id: str
+
+
+class VoiceConversationTurn(BaseModel):
+    role: Literal["assistant", "user"]
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def normalize_content(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Conversation content cannot be empty")
+        return normalized
+
+
+class VoiceCompleteInput(BaseModel):
+    session_id: str
+    conversation: list[VoiceConversationTurn] = Field(default_factory=list)
+    termination_reason: str = "user_ended"
+    client_diagnostics: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("conversation")
+    @classmethod
+    def validate_conversation(cls, value: list[VoiceConversationTurn]) -> list[VoiceConversationTurn]:
+        if not value:
+            raise ValueError("Conversation cannot be empty")
+        return value
+
+
+class VoiceBootstrapResult(BaseModel):
+    session_id: str
+    deepgram_access_token: str
+    expires_in: float
+    deepgram_ws_url: str
+    agent_settings: dict[str, object]
+    session: Session
+
+
+class VoiceCompleteResult(BaseModel):
+    session: Session
+    review: SessionReview

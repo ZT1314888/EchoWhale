@@ -1,4 +1,5 @@
 import type { AppError, UploadedMedia } from "../types/app";
+import { apiFetch } from "./apiClient";
 
 type ApiResponse<T> = {
   code?: number;
@@ -31,7 +32,7 @@ export async function uploadMedia(file: File): Promise<UploadedMedia> {
   let response: Response;
 
   try {
-    response = await fetch("/api/v1/media/upload", {
+    response = await apiFetch("/api/v1/media/upload", {
       method: "POST",
       body: formData,
     });

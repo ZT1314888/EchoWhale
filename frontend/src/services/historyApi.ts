@@ -1,4 +1,5 @@
 import type { AppError, HistoryDetail, HistoryEntry, SessionSummary } from "../types/app";
+import { apiFetch } from "./apiClient";
 
 type ApiResponse<T> = {
   code?: number;
@@ -19,7 +20,9 @@ type BackendSession = {
   role: string;
   opener: string;
   status: string;
-  labels: string[];
+  visual_anchors?: string[];
+  vocab_candidates?: string[];
+  labels?: string[];
   messages: BackendSessionMessage[];
 };
 
@@ -45,7 +48,8 @@ type BackendHistoryEntry = {
   scene_title: string;
   role_label: string;
   preview: string;
-  tags: string[];
+  vocab_candidates?: string[];
+  tags?: string[];
   review_title: string;
   review_summary: string;
 };
@@ -94,7 +98,7 @@ function toSessionSummary(session: BackendSession): SessionSummary {
     title: sceneMeta.title,
     roleLabel: `角色 · ${session.role}`,
     openingPrompt: `开场提示：${session.opener}`,
-    tags: session.labels,
+    tags: session.vocab_candidates ?? session.labels ?? [],
     liveHint: sceneMeta.liveHint,
     voiceTitle: "点一下，用声音回答",
     voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",
@@ -130,7 +134,7 @@ function toHistoryEntry(entry: BackendHistoryEntry): HistoryEntry {
     sceneTitle: entry.scene_title,
     roleLabel: entry.role_label,
     preview: entry.preview,
-    tags: entry.tags,
+    tags: entry.vocab_candidates ?? entry.tags ?? [],
     reviewTitle: entry.review_title,
     reviewSummary: entry.review_summary,
   };
@@ -140,7 +144,7 @@ export async function listHistorySessions(): Promise<HistoryEntry[]> {
   let response: Response;
 
   try {
-    response = await fetch("/api/v1/history/sessions");
+    response = await apiFetch("/api/v1/history/sessions");
   } catch {
     throw toError("历史记录加载失败。");
   }
@@ -157,7 +161,7 @@ export async function getHistorySession(sessionId: string): Promise<HistoryDetai
   let response: Response;
 
   try {
-    response = await fetch(`/api/v1/history/sessions/${sessionId}`);
+    response = await apiFetch(`/api/v1/history/sessions/${sessionId}`);
   } catch {
     throw toError("复盘详情加载失败。");
   }

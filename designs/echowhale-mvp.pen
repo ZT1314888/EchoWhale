@@ -8,18 +8,18 @@
       "y": 80,
       "name": "Component Library",
       "width": 420,
-      "fill": "$color/night",
+      "fill": "$color/background-soft",
       "layout": "vertical",
-      "gap": 24,
+      "gap": 18,
       "padding": 24,
       "children": [
         {
           "type": "text",
           "id": "5qeNV",
           "name": "libLabel2",
-          "fill": "#FFFFFF66",
-          "content": "Pencil component source",
-          "fontFamily": "IBM Plex Mono",
+          "fill": "#7D97A4",
+          "content": "Pencil component source · redesigned flow",
+          "fontFamily": "Inter",
           "fontSize": 12,
           "fontWeight": "600",
           "letterSpacing": 0.28
@@ -27,72 +27,138 @@
         {
           "type": "frame",
           "id": "zVKkY",
-          "name": "Component/UploadDropzone",
+          "name": "Component/UploadSceneCard",
           "reusable": true,
           "width": "fill_container",
-          "fill": "$color/panel",
-          "cornerRadius": "$radius/panel",
+          "fill": "#FFFFFF",
+          "cornerRadius": 16,
           "stroke": {
             "thickness": 1,
-            "fill": "#FFFFFF1A"
+            "fill": "$color/line"
           },
           "layout": "vertical",
           "gap": 16,
-          "padding": 20,
+          "padding": 24,
           "children": [
             {
               "type": "text",
-              "id": "l8mSY",
-              "fill": "#FFFFFF66",
-              "content": "EchoWhale",
-              "fontFamily": "IBM Plex Mono",
-              "fontSize": 11,
-              "fontWeight": "600",
-              "letterSpacing": 0.28
-            },
-            {
-              "type": "text",
-              "id": "csHiD",
-              "fill": "$color/foam",
-              "content": "Upload today's scene",
-              "fontFamily": "Newsreader",
-              "fontSize": 30,
+              "id": "FZdmG",
+              "name": "uploadEyebrow",
+              "fill": "$color/primary",
+              "content": "从这里开始",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 13,
               "fontWeight": "700"
             },
             {
               "type": "text",
-              "id": "xhqOL",
+              "id": "xHDXZ",
+              "name": "uploadTitle",
+              "fill": "$color/foam",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "上传一个场景，马上开口练习。",
+              "lineHeight": 1.15,
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 32,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "mgw0g",
+              "name": "uploadBody",
               "fill": "$color/mist",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Turn one real-world image into a compact speaking rehearsal with scene detection, role-play, and live feedback.",
+              "content": "拖入一张生活图片，让 EchoWhale 把它整理成一轮安静、专注的口语练习。",
               "lineHeight": 1.6,
-              "fontFamily": "Funnel Sans",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 15,
               "fontWeight": "normal"
             },
             {
               "type": "frame",
-              "id": "P5CNK",
+              "id": "gbt4R",
+              "name": "dropzone",
+              "width": "fill_container",
+              "fill": "$color/panel-strong",
+              "cornerRadius": 16,
+              "stroke": {
+                "thickness": 2,
+                "fill": "$color/accent"
+              },
+              "layout": "vertical",
+              "gap": 12,
+              "padding": [
+                28,
+                24
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "id": "P9yoF",
+                  "type": "ref",
+                  "ref": "8N3yK",
+                  "width": 72,
+                  "height": 72,
+                  "name": "dropzoneLogo",
+                  "x": 126,
+                  "y": 28
+                },
+                {
+                  "type": "text",
+                  "id": "kPgnI",
+                  "name": "dropzoneTitle",
+                  "fill": "$color/foam",
+                  "content": "点击上传，或把图片拖到这里",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 16,
+                  "fontWeight": "700"
+                },
+                {
+                  "type": "text",
+                  "id": "uerBb",
+                  "name": "dropzoneBody",
+                  "fill": "$color/mist",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "支持 JPG / PNG，最大 10 MB。我们会先读场景、定角色，再准备第一句开场提示。",
+                  "lineHeight": 1.5,
+                  "textAlign": "center",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "B69jL",
+              "name": "ctaRow",
               "width": "fill_container",
               "gap": 12,
               "children": [
                 {
                   "type": "frame",
-                  "id": "MMXZ4",
-                  "fill": "$color/aqua",
-                  "cornerRadius": "$radius/pill",
+                  "id": "9Gp5i",
+                  "name": "primaryAction",
+                  "fill": "$color/primary",
+                  "cornerRadius": 999,
+                  "layout": "vertical",
                   "padding": [
-                    12,
-                    16
+                    14,
+                    18
                   ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
                   "children": [
                     {
                       "type": "text",
-                      "id": "3DLSY",
-                      "fill": "#07121F",
-                      "content": "Upload today's scene",
-                      "fontFamily": "Funnel Sans",
+                      "id": "rljpt",
+                      "name": "primaryLabel",
+                      "fill": "#FFFFFF",
+                      "content": "选择图片",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "700"
                     }
@@ -100,94 +166,29 @@
                 },
                 {
                   "type": "frame",
-                  "id": "hG8UZ",
-                  "fill": "#FFFFFF0F",
-                  "cornerRadius": "$radius/pill",
+                  "id": "DAsfN",
+                  "name": "secondaryAction",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 999,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#FFFFFF1A"
+                    "fill": "$color/line"
                   },
+                  "layout": "vertical",
                   "padding": [
-                    12,
-                    16
+                    14,
+                    18
                   ],
+                  "justifyContent": "center",
+                  "alignItems": "center",
                   "children": [
                     {
                       "type": "text",
-                      "id": "yDqzV",
+                      "id": "88LMQ",
+                      "name": "secondaryLabel",
                       "fill": "$color/foam",
-                      "content": "Preview mapping",
-                      "fontFamily": "Funnel Sans",
-                      "fontSize": 14,
-                      "fontWeight": "600"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "t5hPL",
-              "width": "fill_container",
-              "gap": 12,
-              "children": [
-                {
-                  "type": "frame",
-                  "id": "gDyvf",
-                  "width": "fill_container",
-                  "fill": "#00000022",
-                  "cornerRadius": "$radius/card",
-                  "layout": "vertical",
-                  "gap": 6,
-                  "padding": 16,
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "mZ8pb",
-                      "fill": "#FFFFFF55",
-                      "content": "Detected mood",
-                      "fontFamily": "IBM Plex Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.22
-                    },
-                    {
-                      "type": "text",
-                      "id": "lHMPr",
-                      "fill": "$color/foam",
-                      "content": "Quick service, casual tone",
-                      "fontFamily": "Funnel Sans",
-                      "fontSize": 14,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "r4fQt",
-                  "width": "fill_container",
-                  "fill": "#00000022",
-                  "cornerRadius": "$radius/card",
-                  "layout": "vertical",
-                  "gap": 6,
-                  "padding": 16,
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "coYQL",
-                      "fill": "#FFFFFF55",
-                      "content": "Learner goal",
-                      "fontFamily": "IBM Plex Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.22
-                    },
-                    {
-                      "type": "text",
-                      "id": "joZjj",
-                      "fill": "$color/foam",
-                      "content": "Place an order and keep it natural",
-                      "fontFamily": "Funnel Sans",
+                      "content": "使用示例场景",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 14,
                       "fontWeight": "600"
                     }
@@ -200,14 +201,14 @@
         {
           "type": "frame",
           "id": "Wvlrq",
-          "name": "Component/SceneSummaryCard",
+          "name": "Component/SceneMiniHeader",
           "reusable": true,
           "width": "fill_container",
           "fill": "$color/panel-strong",
           "cornerRadius": "$radius/panel",
           "stroke": {
             "thickness": 1,
-            "fill": "#FFFFFF1A"
+            "fill": "$color/line"
           },
           "layout": "vertical",
           "gap": 14,
@@ -216,9 +217,9 @@
             {
               "type": "text",
               "id": "tIXKh",
-              "fill": "#FFFFFF66",
-              "content": "Live scene",
-              "fontFamily": "IBM Plex Mono",
+              "fill": "#7D97A4",
+              "content": "场景速写",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 11,
               "fontWeight": "600",
               "letterSpacing": 0.28
@@ -227,8 +228,8 @@
               "type": "text",
               "id": "VKay6",
               "fill": "$color/foam",
-              "content": "Cafe counter order",
-              "fontFamily": "Newsreader",
+              "content": "咖啡店柜台点单",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 24,
               "fontWeight": "700"
             },
@@ -236,8 +237,8 @@
               "type": "text",
               "id": "SAw4I",
               "fill": "$color/foam",
-              "content": "Friendly barista",
-              "fontFamily": "Funnel Sans",
+              "content": "角色 · 友好的店员",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 16,
               "fontWeight": "700"
             },
@@ -247,9 +248,9 @@
               "fill": "$color/mist",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "Hi there! What can I get started for you today?",
+              "content": "开场提示：店员先向你问好。先用一句简短英文回应，把对话顺利打开。",
               "lineHeight": 1.6,
-              "fontFamily": "Funnel Sans",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 14,
               "fontWeight": "normal"
             },
@@ -262,8 +263,12 @@
                 {
                   "type": "frame",
                   "id": "m0bLs",
-                  "fill": "#FFFFFF0F",
+                  "fill": "#FFFFFF",
                   "cornerRadius": "$radius/pill",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
                   "padding": [
                     8,
                     12
@@ -272,9 +277,9 @@
                     {
                       "type": "text",
                       "id": "8TfJy",
-                      "fill": "$color/foam",
-                      "content": "menu",
-                      "fontFamily": "Funnel Sans",
+                      "fill": "$color/mist",
+                      "content": "点单菜单",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     }
@@ -283,8 +288,12 @@
                 {
                   "type": "frame",
                   "id": "gHo4e",
-                  "fill": "#FFFFFF0F",
+                  "fill": "#FFFFFF",
                   "cornerRadius": "$radius/pill",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
                   "padding": [
                     8,
                     12
@@ -293,9 +302,9 @@
                     {
                       "type": "text",
                       "id": "eJiCT",
-                      "fill": "$color/foam",
-                      "content": "cashier",
-                      "fontFamily": "Funnel Sans",
+                      "fill": "$color/mist",
+                      "content": "轻松语气",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "normal"
                     }
@@ -308,14 +317,14 @@
         {
           "type": "frame",
           "id": "AsjZf",
-          "name": "Component/SessionMessage",
+          "name": "Component/DialogBubble",
           "reusable": true,
           "width": "fill_container",
-          "fill": "#FFFFFF0D",
+          "fill": "#FFFFFF",
           "cornerRadius": "$radius/card",
           "stroke": {
             "thickness": 1,
-            "fill": "#FFFFFF14"
+            "fill": "$color/line"
           },
           "layout": "vertical",
           "gap": 10,
@@ -330,9 +339,9 @@
                 {
                   "type": "text",
                   "id": "Rb0PA",
-                  "fill": "#FFFFFF66",
+                  "fill": "#7D97A4",
                   "content": "Coach",
-                  "fontFamily": "IBM Plex Mono",
+                  "fontFamily": "Inter",
                   "fontSize": 11,
                   "fontWeight": "600",
                   "letterSpacing": 0.22
@@ -340,9 +349,9 @@
                 {
                   "type": "text",
                   "id": "m2QW5",
-                  "fill": "#FFFFFF3D",
-                  "content": "m1",
-                  "fontFamily": "IBM Plex Mono",
+                  "fill": "#A4B4BC",
+                  "content": "voice",
+                  "fontFamily": "Inter",
                   "fontSize": 11,
                   "fontWeight": "normal"
                 }
@@ -356,7 +365,7 @@
               "width": "fill_container",
               "content": "Of course. Do you want the latte for here or to go?",
               "lineHeight": 1.6,
-              "fontFamily": "Funnel Sans",
+              "fontFamily": "Inter",
               "fontSize": 14,
               "fontWeight": "normal"
             }
@@ -365,14 +374,14 @@
         {
           "type": "frame",
           "id": "1gCci",
-          "name": "Component/FeedbackCard",
+          "name": "Component/ReviewHero",
           "reusable": true,
           "width": "fill_container",
-          "fill": "$color/panel-strong",
+          "fill": "$color/panel",
           "cornerRadius": "$radius/panel",
           "stroke": {
             "thickness": 1,
-            "fill": "$color/aqua"
+            "fill": "$color/line"
           },
           "layout": "vertical",
           "gap": 14,
@@ -382,15 +391,16 @@
               "type": "text",
               "id": "i7Rgf",
               "fill": "$color/foam",
-              "content": "Grammar rescue",
-              "fontFamily": "Newsreader",
+              "content": "本轮回响",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 24,
               "fontWeight": "700"
             },
             {
               "type": "frame",
               "id": "2UkMA",
-              "fill": "#00000022",
+              "width": "fill_container",
+              "fill": "$color/panel-strong",
               "cornerRadius": "$radius/card",
               "layout": "vertical",
               "gap": 8,
@@ -399,9 +409,9 @@
                 {
                   "type": "text",
                   "id": "6JjxR",
-                  "fill": "#FFFFFF66",
-                  "content": "Grammar",
-                  "fontFamily": "IBM Plex Mono",
+                  "fill": "#7D97A4",
+                  "content": "最佳时刻",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600",
                   "letterSpacing": 0.22
@@ -412,9 +422,9 @@
                   "fill": "$color/mist",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Add please to sound warmer in service situations.",
+                  "content": "你先把主需求说清楚，再补细节，让整段交流听起来更顺，也更容易被理解。",
                   "lineHeight": 1.6,
-                  "fontFamily": "Funnel Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 13,
                   "fontWeight": "normal"
                 }
@@ -423,7 +433,8 @@
             {
               "type": "frame",
               "id": "3h8mY",
-              "fill": "#00000022",
+              "width": "fill_container",
+              "fill": "$color/panel-strong",
               "cornerRadius": "$radius/card",
               "layout": "vertical",
               "gap": 8,
@@ -432,9 +443,9 @@
                 {
                   "type": "text",
                   "id": "iutW5",
-                  "fill": "#FFFFFF66",
-                  "content": "More natural",
-                  "fontFamily": "IBM Plex Mono",
+                  "fill": "#7D97A4",
+                  "content": "下一次尝试",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600",
                   "letterSpacing": 0.22
@@ -445,9 +456,9 @@
                   "fill": "$color/foam",
                   "textGrowth": "fixed-width",
                   "width": "fill_container",
-                  "content": "Could I get an iced latte and maybe a muffin, please?",
+                  "content": "先用短句开口，再追加杯型、温度或带走方式，会比一口气塞进长句更自然。",
                   "lineHeight": 1.6,
-                  "fontFamily": "Funnel Sans",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 13,
                   "fontWeight": "normal"
                 }
@@ -458,14 +469,14 @@
         {
           "type": "frame",
           "id": "aNOhh",
-          "name": "Component/HistoryItem",
+          "name": "Component/ReviewMetricCard",
           "reusable": true,
           "width": "fill_container",
-          "fill": "#00000022",
+          "fill": "#FFFFFF",
           "cornerRadius": "$radius/card",
           "stroke": {
             "thickness": 1,
-            "fill": "#FFFFFF14"
+            "fill": "$color/line"
           },
           "layout": "vertical",
           "gap": 10,
@@ -481,16 +492,20 @@
                   "type": "text",
                   "id": "h5N8W",
                   "fill": "$color/foam",
-                  "content": "Restaurant lunch",
-                  "fontFamily": "Funnel Sans",
+                  "content": "语法",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 15,
                   "fontWeight": "700"
                 },
                 {
                   "type": "frame",
                   "id": "7kezD",
-                  "fill": "#FFFFFF0F",
+                  "fill": "$color/panel-strong",
                   "cornerRadius": "$radius/pill",
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
                   "padding": [
                     6,
                     10
@@ -499,9 +514,9 @@
                     {
                       "type": "text",
                       "id": "lLLht",
-                      "fill": "#FFFFFF66",
-                      "content": "Flow stable",
-                      "fontFamily": "IBM Plex Mono",
+                      "fill": "$color/mist",
+                      "content": "Sharper request",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 10,
                       "fontWeight": "normal"
                     }
@@ -512,9 +527,9 @@
             {
               "type": "text",
               "id": "FmjEE",
-              "fill": "#FFFFFF55",
-              "content": "Server",
-              "fontFamily": "IBM Plex Mono",
+              "fill": "#7D97A4",
+              "content": "Focus",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 11,
               "fontWeight": "600",
               "letterSpacing": 0.22
@@ -525,92 +540,275 @@
               "fill": "$color/mist",
               "textGrowth": "fixed-width",
               "width": "fill_container",
-              "content": "You practiced ordering a sandwich combo and clarified drink options.",
+              "content": "Use polite request forms such as 'Could I get...' to sound natural in service situations.",
               "lineHeight": 1.6,
-              "fontFamily": "Funnel Sans",
+              "fontFamily": "Noto Sans SC",
               "fontSize": 13,
               "fontWeight": "normal"
             }
           ]
-        }
-      ]
-    },
-    {
-      "type": "frame",
-      "id": "65SGy",
-      "x": 520,
-      "y": 80,
-      "name": "Screen/Home",
-      "width": 1440,
-      "height": 1160,
-      "fill": "$color/night",
-      "layout": "vertical",
-      "gap": 24,
-      "padding": 28,
-      "children": [
+        },
         {
           "type": "frame",
-          "id": "RifwR",
-          "name": "homeHeaderB",
+          "id": "o48hQ",
+          "name": "Component/FeatureStrip",
+          "reusable": true,
           "width": "fill_container",
-          "padding": [
-            4,
-            0
-          ],
-          "justifyContent": "space_between",
+          "gap": 12,
           "children": [
             {
               "type": "frame",
-              "id": "6e4Rd",
-              "gap": 12,
+              "id": "dQ77T",
+              "name": "featureCard1",
+              "width": 108,
+              "fill": "$color/panel-strong",
+              "cornerRadius": 24,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
               "children": [
                 {
-                  "type": "frame",
-                  "id": "Y5RdC",
-                  "width": 44,
-                  "height": 44,
-                  "fill": "$color/aqua",
-                  "cornerRadius": 22
+                  "type": "text",
+                  "id": "9BkA1",
+                  "fill": "#7D97A4",
+                  "content": "Scene read",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 0.22
                 },
                 {
-                  "type": "frame",
-                  "id": "v47nH",
-                  "layout": "vertical",
-                  "gap": 4,
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "vKvj6",
-                      "fill": "$color/foam",
-                      "content": "EchoWhale",
-                      "fontFamily": "Newsreader",
-                      "fontSize": 28,
-                      "fontWeight": "700"
-                    },
-                    {
-                      "type": "text",
-                      "id": "0Vxat",
-                      "fill": "#FFFFFF55",
-                      "content": "Pencil-first prototype cockpit",
-                      "fontFamily": "IBM Plex Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.24
-                    }
-                  ]
+                  "type": "text",
+                  "id": "RRzaQ",
+                  "fill": "$color/foam",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Find the likely setting and speaking goal from one image.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
                 }
               ]
             },
             {
               "type": "frame",
-              "id": "E60ft",
+              "id": "LlkJf",
+              "name": "featureCard2",
+              "width": 108,
+              "fill": "$color/panel-strong",
+              "cornerRadius": 24,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
               "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "cQD9M",
+                  "fill": "#7D97A4",
+                  "content": "Role-play",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 0.22
+                },
+                {
+                  "type": "text",
+                  "id": "7PN0I",
+                  "fill": "$color/foam",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Wake the whale and answer aloud instead of filling forms.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "RW77R",
+              "name": "featureCard3",
+              "width": 108,
+              "fill": "$color/panel-strong",
+              "cornerRadius": 24,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
+              "gap": 8,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "tRjN6",
+                  "fill": "#7D97A4",
+                  "content": "Review echo",
+                  "fontFamily": "Inter",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 0.22
+                },
+                {
+                  "type": "text",
+                  "id": "wzvNC",
+                  "fill": "$color/foam",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "Finish with one clear review page instead of dense side panels.",
+                  "lineHeight": 1.5,
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "XP6uI",
+          "name": "Component/LoadingPulseCard",
+          "reusable": true,
+          "width": "fill_container",
+          "fill": "#FFFFFF00",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 0,
+            "fill": "#FFFFFF00"
+          },
+          "layout": "vertical",
+          "gap": 16,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "wqApI",
+              "name": "orbField",
+              "width": 220,
+              "height": 220,
+              "fill": "#FFFFFF00",
+              "layout": "none",
+              "children": [
+                {
+                  "type": "ellipse",
+                  "id": "1OOHk",
+                  "x": 18,
+                  "y": 18,
+                  "name": "ring1",
+                  "fill": "#FFFFFF00",
+                  "width": 184,
+                  "height": 184,
+                  "stroke": {
+                    "thickness": 2,
+                    "fill": "#0A84FF22"
+                  }
+                },
+                {
+                  "type": "ellipse",
+                  "id": "daYuG",
+                  "x": 42,
+                  "y": 42,
+                  "name": "ring2",
+                  "fill": "#FFFFFF00",
+                  "width": 136,
+                  "height": 136,
+                  "stroke": {
+                    "thickness": 2,
+                    "fill": "#32ADE655"
+                  }
+                },
+                {
+                  "type": "ellipse",
+                  "id": "OdzV3",
+                  "x": 63,
+                  "y": 63,
+                  "name": "ring3",
+                  "fill": "#FFFFFF",
+                  "width": 94,
+                  "height": 94,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#D8E4EE"
+                  }
+                },
+                {
+                  "id": "nqCBc",
+                  "type": "ref",
+                  "ref": "8N3yK",
+                  "x": 74,
+                  "y": 74,
+                  "width": 72,
+                  "height": 72,
+                  "name": "loadingLogo"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "IgxvE",
+              "name": "loadingLabel",
+              "fill": "$color/primary",
+              "content": "EchoWhale 正在聆听这个场景",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 13,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "Xamug",
+              "name": "loadingTitle",
+              "fill": "$color/foam",
+              "textGrowth": "fixed-width",
+              "width": 420,
+              "content": "正在分析你的上传内容…",
+              "lineHeight": 1.2,
+              "textAlign": "center",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "dFT7s",
+              "name": "loadingBody",
+              "fill": "$color/mist",
+              "textGrowth": "fixed-width",
+              "width": 420,
+              "content": "我们正在识别环境、分配角色，并准备第一轮可直接接话的开场。",
+              "lineHeight": 1.6,
+              "textAlign": "center",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "nQyPY",
+              "name": "loadingStages",
+              "gap": 10,
+              "justifyContent": "center",
               "children": [
                 {
                   "type": "frame",
-                  "id": "RziHd",
-                  "fill": "#FFFFFF0F",
-                  "cornerRadius": "$radius/pill",
+                  "id": "pNhtg",
+                  "name": "stageScene",
+                  "fill": "#EAF4FF",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#B7D8F6"
+                  },
                   "padding": [
                     8,
                     12
@@ -618,10 +816,38 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "tx06D",
-                      "fill": "$color/foam",
-                      "content": "Home",
-                      "fontFamily": "Funnel Sans",
+                      "id": "ssiV9",
+                      "name": "sceneText",
+                      "fill": "#0A84FF",
+                      "content": "场景",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "700"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "D6W1F",
+                  "name": "stageRole",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#D8E4EE"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "2AuQx",
+                      "name": "roleText",
+                      "fill": "#667A8A",
+                      "content": "角色",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "600"
                     }
@@ -629,9 +855,14 @@
                 },
                 {
                   "type": "frame",
-                  "id": "NYCnk",
-                  "fill": "#FFFFFF0F",
-                  "cornerRadius": "$radius/pill",
+                  "id": "YHYQ5",
+                  "name": "stageReady",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#D8E4EE"
+                  },
                   "padding": [
                     8,
                     12
@@ -639,31 +870,11 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "2vLY2",
-                      "fill": "$color/foam",
-                      "content": "Session",
-                      "fontFamily": "Funnel Sans",
-                      "fontSize": 12,
-                      "fontWeight": "600"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "uItYw",
-                  "fill": "#FFFFFF0F",
-                  "cornerRadius": "$radius/pill",
-                  "padding": [
-                    8,
-                    12
-                  ],
-                  "children": [
-                    {
-                      "type": "text",
-                      "id": "8CSlv",
-                      "fill": "$color/foam",
-                      "content": "History",
-                      "fontFamily": "Funnel Sans",
+                      "id": "Oovk8",
+                      "name": "readyText",
+                      "fill": "#667A8A",
+                      "content": "准备完成",
+                      "fontFamily": "Noto Sans SC",
                       "fontSize": 12,
                       "fontWeight": "600"
                     }
@@ -675,125 +886,125 @@
         },
         {
           "type": "frame",
-          "id": "q31pp",
-          "name": "homeContentB",
+          "id": "vvRrK",
+          "name": "Component/LiveHintCard",
+          "reusable": true,
           "width": "fill_container",
-          "height": "fill_container",
-          "gap": 24,
+          "fill": "$color/panel-strong",
+          "cornerRadius": 24,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "layout": "vertical",
+          "gap": 8,
+          "padding": 16,
           "children": [
             {
-              "type": "frame",
-              "id": "VJGt1",
-              "name": "homeMainB",
+              "type": "text",
+              "id": "JTYWD",
+              "fill": "#7D97A4",
+              "content": "Live hint",
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "600",
+              "letterSpacing": 0.22
+            },
+            {
+              "type": "text",
+              "id": "DVnP7",
+              "fill": "$color/foam",
+              "textGrowth": "fixed-width",
               "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 24,
+              "content": "Try a shorter opener first, then add the extra detail in your second sentence.",
+              "lineHeight": 1.5,
+              "fontFamily": "Inter",
+              "fontSize": 13,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "cIRlc",
+          "name": "Component/VoiceDock",
+          "reusable": true,
+          "width": "fill_container",
+          "fill": "$color/panel",
+          "cornerRadius": 28,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 18,
+          "children": [
+            {
+              "type": "text",
+              "id": "pT8vR",
+              "fill": "#7D97A4",
+              "content": "Voice dock",
+              "fontFamily": "Inter",
+              "fontSize": 11,
+              "fontWeight": "600",
+              "letterSpacing": 0.22
+            },
+            {
+              "type": "frame",
+              "id": "IN4bQ",
+              "name": "voiceRow",
+              "width": "fill_container",
+              "gap": 14,
               "children": [
                 {
-                  "id": "gwzPJ",
-                  "type": "ref",
-                  "ref": "zVKkY",
-                  "width": "fill_container",
-                  "name": "homeUploadB",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 0,
-                  "descendants": {
-                    "xhqOL": {
-                      "width": "fill_container"
-                    },
-                    "P5CNK": {
-                      "width": "fill_container",
-                      "y": 136
-                    },
-                    "t5hPL": {
-                      "width": "fill_container",
-                      "y": 194
-                    },
-                    "gDyvf": {
-                      "width": "fill_container"
-                    },
-                    "r4fQt": {
-                      "width": "fill_container",
-                      "x": 486
+                  "type": "frame",
+                  "id": "bJ7wI",
+                  "name": "voiceButton",
+                  "width": 68,
+                  "height": 68,
+                  "fill": "$color/aqua",
+                  "cornerRadius": 999,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "1PfSr",
+                      "fill": "#163847",
+                      "content": "Speak",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "700"
                     }
-                  }
+                  ]
                 },
                 {
                   "type": "frame",
-                  "id": "EFAaE",
-                  "name": "homeOverviewB",
+                  "id": "Iz8q3",
+                  "name": "voiceCopy",
                   "width": "fill_container",
-                  "gap": 16,
+                  "layout": "vertical",
+                  "gap": 6,
                   "children": [
                     {
-                      "type": "frame",
-                      "id": "Ha4fq",
-                      "width": "fill_container",
-                      "fill": "$color/panel-strong",
-                      "cornerRadius": "$radius/card",
-                      "layout": "vertical",
-                      "gap": 8,
-                      "padding": 18,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "MPOgl",
-                          "fill": "#FFFFFF66",
-                          "content": "Current contract state",
-                          "fontFamily": "IBM Plex Mono",
-                          "fontSize": 11,
-                          "fontWeight": "600",
-                          "letterSpacing": 0.24
-                        },
-                        {
-                          "type": "text",
-                          "id": "lJWKP",
-                          "fill": "$color/mist",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Frontend shell is active and waiting for real upload and session routes.",
-                          "lineHeight": 1.6,
-                          "fontFamily": "Funnel Sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "type": "text",
+                      "id": "0dyvA",
+                      "fill": "$color/foam",
+                      "content": "Tap and answer aloud",
+                      "fontFamily": "Inter",
+                      "fontSize": 24,
+                      "fontWeight": "700"
                     },
                     {
-                      "type": "frame",
-                      "id": "Jf7t8",
+                      "type": "text",
+                      "id": "flM39",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
                       "width": "fill_container",
-                      "fill": "$color/panel-strong",
-                      "cornerRadius": "$radius/card",
-                      "layout": "vertical",
-                      "gap": 8,
-                      "padding": 18,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "CIILt",
-                          "fill": "#FFFFFF66",
-                          "content": "Primary flow",
-                          "fontFamily": "IBM Plex Mono",
-                          "fontSize": 11,
-                          "fontWeight": "600",
-                          "letterSpacing": 0.24
-                        },
-                        {
-                          "type": "text",
-                          "id": "KT869",
-                          "fill": "$color/foam",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Upload to infer scene, role-play, and return short feedback.",
-                          "lineHeight": 1.6,
-                          "fontFamily": "Funnel Sans",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
-                        }
-                      ]
+                      "content": "Text entry stays available, but the main action is always voice-first.",
+                      "lineHeight": 1.5,
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -801,92 +1012,1058 @@
             },
             {
               "type": "frame",
-              "id": "fOrxS",
-              "name": "homeSideB",
-              "width": 360,
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 18,
+              "id": "h8YPb",
+              "name": "voiceAlt",
+              "fill": "$color/panel-strong",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "padding": [
+                10,
+                14
+              ],
               "children": [
                 {
-                  "id": "TJhVT",
-                  "type": "ref",
-                  "ref": "Wvlrq",
+                  "type": "text",
+                  "id": "YOHDo",
+                  "fill": "$color/foam",
+                  "content": "Type instead",
+                  "fontFamily": "Inter",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "6lJtg",
+          "name": "Component/AuthPanel",
+          "reusable": true,
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 24,
+          "children": [
+            {
+              "id": "tZ6Su",
+              "type": "ref",
+              "ref": "8N3yK",
+              "width": 72,
+              "height": 72,
+              "name": "authLogo",
+              "y": 24,
+              "x": 24
+            },
+            {
+              "type": "text",
+              "id": "HHb1z",
+              "name": "authTitle",
+              "fill": "$color/foam",
+              "content": "Welcome back",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "fl9X0",
+              "name": "authBody",
+              "fill": "$color/mist",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Sign in lightly and get back to scene-based speaking practice.",
+              "lineHeight": 1.6,
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "id": "aMmH2",
+              "type": "ref",
+              "ref": "dV1FM",
+              "width": "fill_container",
+              "name": "googleButton",
+              "y": 217,
+              "height": "fit_content",
+              "x": 24,
+              "descendants": {
+                "e8iI2": {
+                  "x": 16,
+                  "y": 14
+                },
+                "iKTDp": {
+                  "content": "G",
+                  "fill": "$color/primary",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "700",
+                  "x": 8.5,
+                  "y": 4
+                },
+                "ouB6J": {
+                  "content": "Continue with Google",
+                  "fill": "$color/foam",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "600",
+                  "x": 56,
+                  "y": 18
+                }
+              }
+            },
+            {
+              "id": "AVvft",
+              "type": "ref",
+              "ref": "dV1FM",
+              "width": "fill_container",
+              "fill": "$color/foam",
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/foam"
+              },
+              "name": "githubButton",
+              "y": 285,
+              "height": "fit_content",
+              "x": 24,
+              "descendants": {
+                "e8iI2": {
+                  "fill": "#FFFFFF14",
+                  "x": 16,
+                  "y": 14
+                },
+                "iKTDp": {
+                  "content": "GH",
+                  "fill": "#FFFFFF",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "700",
+                  "x": 5,
+                  "y": 5.5
+                },
+                "ouB6J": {
+                  "content": "Continue with GitHub",
+                  "fill": "#FFFFFF",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "600",
+                  "x": 56,
+                  "y": 18
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "3G8QT",
+              "name": "divider",
+              "width": "fill_container",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "pYRI4",
+                  "name": "dividerLineLeft",
                   "width": "fill_container",
-                  "name": "homeSummaryB",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 0,
-                  "descendants": {
-                    "RHGAU": {
-                      "width": "fill_container"
-                    },
-                    "egRBL": {
-                      "width": "fill_container",
-                      "y": 154
-                    }
-                  }
+                  "height": 1,
+                  "fill": "$color/line"
                 },
                 {
                   "type": "text",
-                  "id": "sr6AD",
-                  "name": "homeHistoryTitleB",
+                  "id": "QvnLK",
+                  "name": "dividerText",
+                  "fill": "$color/mist",
+                  "content": "or use email",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "frame",
+                  "id": "hvuJg",
+                  "name": "dividerLineRight",
+                  "width": "fill_container",
+                  "height": 1,
+                  "fill": "$color/line"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "oLa07",
+              "name": "emailField",
+              "width": "fill_container",
+              "fill": "$color/panel-strong",
+              "cornerRadius": 14,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
+              "gap": 6,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Gpigc",
+                  "name": "emailLabel",
+                  "fill": "$color/mist",
+                  "content": "Email",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "QThNp",
+                  "name": "emailValue",
                   "fill": "$color/foam",
-                  "content": "History review",
-                  "fontFamily": "Newsreader",
-                  "fontSize": 24,
+                  "content": "your.email@example.com",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "sCUK8",
+              "name": "passwordField",
+              "width": "fill_container",
+              "fill": "$color/panel-strong",
+              "cornerRadius": 14,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
+              "gap": 6,
+              "padding": 16,
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RLh8C",
+                  "name": "passwordLabel",
+                  "fill": "$color/mist",
+                  "content": "Password",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "UC0YB",
+                  "name": "passwordValue",
+                  "fill": "$color/foam",
+                  "content": "Password hidden",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "S67LO",
+              "name": "continueButton",
+              "width": "fill_container",
+              "fill": "$color/primary",
+              "cornerRadius": 999,
+              "layout": "vertical",
+              "padding": [
+                14,
+                16
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "dNNPK",
+                  "name": "continueLabel",
+                  "fill": "#FFFFFF",
+                  "content": "Continue",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
                   "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "ctISP",
+              "name": "authFooter",
+              "fill": "$color/mist",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "New here? Create an account in one step and save every practice echo.",
+              "lineHeight": 1.5,
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 13,
+              "fontWeight": "normal"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "OcHIY",
+          "name": "Component/AuthAside",
+          "reusable": true,
+          "width": "fill_container",
+          "fill": "$color/background-soft",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "layout": "vertical",
+          "gap": 12,
+          "padding": 24,
+          "children": [
+            {
+              "id": "2e6MK",
+              "type": "ref",
+              "ref": "8N3yK",
+              "width": 72,
+              "height": 72,
+              "name": "authAsideLogo",
+              "y": 24,
+              "x": 24
+            },
+            {
+              "type": "text",
+              "id": "EnQNX",
+              "name": "authAsideEyebrow",
+              "fill": "$color/primary",
+              "content": "EchoWhale",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 14,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "9Lzju",
+              "name": "authAsideTitle",
+              "fill": "$color/foam",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Return to your quiet speaking lane",
+              "lineHeight": 1.2,
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 28,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "EPGJr",
+              "name": "authAsideBody",
+              "fill": "$color/mist",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Lightweight sign-in, scene-first speaking practice, and one compact feedback echo after every session.",
+              "lineHeight": 1.6,
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 14,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "g9dhD",
+              "name": "authAsideTags",
+              "width": "fill_container",
+              "gap": 8,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "5ESKq",
+                  "name": "tag1",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "gcHki",
+                      "name": "tag1Text",
+                      "fill": "$color/foam",
+                      "content": "Scene upload",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "600"
+                    }
+                  ]
                 },
                 {
-                  "id": "vAjXI",
-                  "type": "ref",
-                  "ref": "aNOhh",
-                  "width": "fill_container",
-                  "name": "homeHistory1B",
-                  "x": 0,
-                  "y": 263,
-                  "descendants": {
-                    "kDDsk": {
-                      "width": "fill_container"
-                    },
-                    "7kezD": {
-                      "x": 242
-                    },
-                    "uU8sA": {
-                      "width": "fill_container"
+                  "type": "frame",
+                  "id": "WQiUL",
+                  "name": "tag2",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 999,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "padding": [
+                    8,
+                    12
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "CYHsi",
+                      "name": "tag2Text",
+                      "fill": "$color/foam",
+                      "content": "Voice-first",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 12,
+                      "fontWeight": "600"
                     }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "8N3yK",
+          "name": "Component/BrandLogoMark",
+          "reusable": true,
+          "clip": true,
+          "width": 72,
+          "height": 72,
+          "fill": "#FFFFFF00",
+          "stroke": {
+            "thickness": 0,
+            "fill": "#FFFFFF00"
+          },
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "3DeSB",
+              "x": 0,
+              "y": 0,
+              "name": "waveOuter",
+              "geometry": "M31.68 20.88q4.32-3.6 8.64 0",
+              "fill": "#FFFFFF00",
+              "width": 72,
+              "height": 72,
+              "stroke": {
+                "thickness": 2.8,
+                "cap": "round",
+                "fill": {
+                  "type": "gradient",
+                  "gradientType": "linear",
+                  "enabled": true,
+                  "rotation": 180,
+                  "size": {
+                    "height": 1
+                  },
+                  "colors": [
+                    {
+                      "color": "#0A84FF",
+                      "position": 0
+                    },
+                    {
+                      "color": "#30D158",
+                      "position": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "path",
+              "id": "eFV4P",
+              "x": 0,
+              "y": 0,
+              "name": "waveMiddle",
+              "geometry": "M27.36 15.84q8.64-5.76 17.28 0",
+              "fill": "#FFFFFF00",
+              "width": 72,
+              "height": 72,
+              "stroke": {
+                "thickness": 2.8,
+                "cap": "round",
+                "fill": {
+                  "type": "gradient",
+                  "gradientType": "linear",
+                  "enabled": true,
+                  "rotation": 180,
+                  "size": {
+                    "height": 1
+                  },
+                  "colors": [
+                    {
+                      "color": "#0A84FF",
+                      "position": 0
+                    },
+                    {
+                      "color": "#30D158",
+                      "position": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "path",
+              "id": "RYS5T",
+              "x": 0,
+              "y": 0,
+              "name": "waveInner",
+              "geometry": "M23.04 10.8q12.96-8.64 25.92 0",
+              "fill": "#FFFFFF00",
+              "width": 72,
+              "height": 72,
+              "stroke": {
+                "thickness": 2.8,
+                "cap": "round",
+                "fill": {
+                  "type": "gradient",
+                  "gradientType": "linear",
+                  "enabled": true,
+                  "rotation": 180,
+                  "size": {
+                    "height": 1
+                  },
+                  "colors": [
+                    {
+                      "color": "#0A84FF",
+                      "position": 0
+                    },
+                    {
+                      "color": "#30D158",
+                      "position": 1
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "type": "path",
+              "id": "xJDYb",
+              "x": 0,
+              "y": 0,
+              "name": "whaleBody",
+              "geometry": "M14.4 39.6c0-14.4 14.4-14.4 21.6-14.4 10.8 0 18 7.2 18 14.4q5.4-1.8 9-3.6-1.8 7.2-9 9c-18 5.4-36 1.8-39.6-5.4z",
+              "fill": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 135,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "#32ADE6",
+                    "position": 0
+                  },
+                  {
+                    "color": "#0A84FF",
+                    "position": 1
                   }
+                ]
+              },
+              "width": 72,
+              "height": 72
+            },
+            {
+              "type": "ellipse",
+              "id": "G6jur",
+              "x": 23.4,
+              "y": 34.2,
+              "name": "whaleEye",
+              "fill": "#FFFFFF",
+              "width": 3.6,
+              "height": 3.6
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "dV1FM",
+          "name": "Component/AuthSocialButton",
+          "reusable": true,
+          "width": "fill_container",
+          "fill": "#FFFFFF",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "gap": 12,
+          "padding": [
+            14,
+            16
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "e8iI2",
+              "name": "iconWrap",
+              "width": 28,
+              "height": 28,
+              "fill": "$color/panel-strong",
+              "cornerRadius": 999,
+              "layout": "vertical",
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "iKTDp",
+                  "name": "socialIconText",
+                  "fill": "$color/primary",
+                  "content": "G",
+                  "fontFamily": "$type/body-font",
+                  "fontSize": 14,
+                  "fontWeight": "700"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "ouB6J",
+              "name": "label",
+              "fill": "$color/foam",
+              "content": "Continue with Google",
+              "fontFamily": "$type/body-font",
+              "fontSize": 14,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "5jhlZ",
+          "name": "Component/SampleSceneCard",
+          "reusable": true,
+          "width": 180,
+          "fill": "#FFFFFF",
+          "cornerRadius": 16,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "layout": "vertical",
+          "gap": 10,
+          "padding": 12,
+          "children": [
+            {
+              "type": "frame",
+              "id": "Myg5j",
+              "name": "sampleImage",
+              "width": "fill_container",
+              "height": 104,
+              "fill": "$color/panel-strong",
+              "cornerRadius": 12,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              }
+            },
+            {
+              "type": "text",
+              "id": "DhRTh",
+              "name": "sampleTitle",
+              "fill": "$color/foam",
+              "content": "Coffee shop",
+              "fontFamily": "$type/body-font",
+              "fontSize": 14,
+              "fontWeight": "700"
+            },
+            {
+              "type": "text",
+              "id": "ke4bk",
+              "name": "sampleBody",
+              "fill": "$color/mist",
+              "textGrowth": "fixed-width",
+              "width": "fill_container",
+              "content": "Order drinks, answer follow-up questions.",
+              "lineHeight": 1.5,
+              "fontFamily": "$type/body-font",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "65SGy",
+      "x": 520,
+      "y": 80,
+      "name": "Screen/HomeUpload",
+      "width": 1440,
+      "height": 1160,
+      "fill": "$color/background-soft",
+      "layout": "vertical",
+      "gap": 36,
+      "padding": [
+        32,
+        40
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "ZZ6Ym",
+          "name": "homeTopRow",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "Re7BE",
+              "type": "ref",
+              "ref": "8N3yK",
+              "width": 56,
+              "height": 56,
+              "name": "homeLogo",
+              "x": 0,
+              "y": 0
+            },
+            {
+              "type": "text",
+              "id": "qBY0p",
+              "name": "homeWordmark",
+              "fill": "$color/foam",
+              "content": "EchoWhale",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 24,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "aD30k",
+              "name": "homeAuthButton",
+              "fill": "#FFFFFF",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "layout": "vertical",
+              "padding": [
+                12,
+                16
+              ],
+              "justifyContent": "center",
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "CNXcr",
+                  "name": "homeAuthText",
+                  "fill": "$color/foam",
+                  "content": "登录 / 注册",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 14,
+                  "fontWeight": "600"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "zTNQc",
+          "name": "homeMain",
+          "width": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "alignItems": "center",
+          "children": [
+            {
+              "id": "bYRwc",
+              "type": "ref",
+              "ref": "zVKkY",
+              "width": 780,
+              "name": "homeUpload",
+              "height": "fit_content",
+              "x": 290,
+              "y": 0,
+              "descendants": {
+                "FZdmG": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 24,
+                  "y": 24
+                },
+                "xHDXZ": {
+                  "width": "fill_container",
+                  "fontFamily": "Noto Sans SC",
+                  "x": 24,
+                  "y": 59
+                },
+                "mgw0g": {
+                  "width": "fill_container",
+                  "y": 112,
+                  "fontFamily": "Noto Sans SC",
+                  "x": 24
+                },
+                "gbt4R": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "y": 152,
+                  "x": 24
+                },
+                "P9yoF": {
+                  "x": 330
+                },
+                "kPgnI": {
+                  "x": 261.5,
+                  "fontFamily": "Noto Sans SC",
+                  "y": 112
+                },
+                "uerBb": {
+                  "width": "fill_container",
+                  "fontFamily": "Noto Sans SC",
+                  "x": 24,
+                  "y": 147
+                },
+                "B69jL": {
+                  "width": "fill_container",
+                  "y": 363,
+                  "height": "fit_content",
+                  "x": 24
+                },
+                "9Gp5i": {
+                  "width": "fit_content",
+                  "height": "fit_content"
+                },
+                "rljpt": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 18,
+                  "y": 14
+                },
+                "DAsfN": {
+                  "width": "fit_content",
+                  "height": "fit_content",
+                  "x": 104
+                },
+                "88LMQ": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 18,
+                  "y": 14
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "GUZ8B",
+              "name": "homeSamplesTitle",
+              "fill": "$color/foam",
+              "content": "试试一个示例场景",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 22,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "hp7iS",
+              "name": "homeSamplesRow",
+              "width": 1100,
+              "gap": 18,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "9rAFw",
+                  "name": "sampleCard1",
+                  "width": 354,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "VPbIs",
+                      "name": "sampleCard1Image",
+                      "metadata": {
+                        "type": "unsplash",
+                        "username": "nputra",
+                        "link": "https://unsplash.com/@nputra",
+                        "author": "Nafinia Putra"
+                      },
+                      "width": "fill_container",
+                      "height": 140,
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "https://images.unsplash.com/photo-1453614512568-c4024d13c247?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NDM0ODN8MHwxfHJhbmRvbXx8fHx8fHx8fDE3NzQ5NjY4NDZ8&ixlib=rb-4.1.0&q=80&w=1080",
+                        "mode": "fill"
+                      },
+                      "cornerRadius": 12
+                    },
+                    {
+                      "type": "text",
+                      "id": "NjhHB",
+                      "name": "sampleCard1Title",
+                      "fill": "$color/foam",
+                      "content": "咖啡店点单",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 16,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "imxJh",
+                      "name": "sampleCard1Body",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "练习点饮料、回应店员，再把语气说得自然一些。",
+                      "lineHeight": 1.5,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 },
                 {
-                  "id": "D8Nux",
-                  "type": "ref",
-                  "ref": "aNOhh",
-                  "width": "fill_container",
-                  "name": "homeHistory2B",
-                  "x": 0,
-                  "y": 414,
-                  "descendants": {
-                    "kDDsk": {
-                      "width": "fill_container"
+                  "type": "frame",
+                  "id": "9pt08",
+                  "name": "sampleCard2",
+                  "width": 354,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "TN1d3",
+                      "name": "sampleCard2Image",
+                      "metadata": {
+                        "type": "unsplash",
+                        "username": "benkolde",
+                        "link": "https://unsplash.com/@benkolde",
+                        "author": "Ben Kolde"
+                      },
+                      "width": "fill_container",
+                      "height": 140,
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "https://images.unsplash.com/photo-1512486130939-2c4f79935e4f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NDM0ODN8MHwxfHJhbmRvbXx8fHx8fHx8fDE3NzQ5NjY4NDd8&ixlib=rb-4.1.0&q=80&w=1080",
+                        "mode": "fill"
+                      },
+                      "cornerRadius": 12
                     },
-                    "h5N8W": {
-                      "content": "Office hallway"
+                    {
+                      "type": "text",
+                      "id": "iEqFG",
+                      "name": "sampleCard2Title",
+                      "fill": "$color/foam",
+                      "content": "办公室交流",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 16,
+                      "fontWeight": "700"
                     },
-                    "7kezD": {
-                      "width": "fit_content",
-                      "x": 224
-                    },
-                    "lLLht": {
-                      "content": "Tone improving"
-                    },
-                    "FmjEE": {
-                      "content": "Colleague"
-                    },
-                    "uU8sA": {
-                      "content": "You practiced small talk about workload and followed up naturally.",
-                      "width": "fill_container"
+                    {
+                      "type": "text",
+                      "id": "u8ELB",
+                      "name": "sampleCard2Body",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "练习快速汇报状态、回应一个问题，并保持简洁。",
+                      "lineHeight": 1.5,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
-                  }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "09wf4",
+                  "name": "sampleCard3",
+                  "width": 354,
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 10,
+                  "padding": 12,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "2XzBn",
+                      "name": "sampleCard3Image",
+                      "metadata": {
+                        "type": "unsplash",
+                        "username": "bodegastaples",
+                        "link": "https://unsplash.com/@bodegastaples",
+                        "author": "Mike Watford"
+                      },
+                      "width": "fill_container",
+                      "height": 140,
+                      "fill": {
+                        "type": "image",
+                        "enabled": true,
+                        "url": "https://images.unsplash.com/photo-1613539266165-e444d4d3c977?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NDM0ODN8MHwxfHJhbmRvbXx8fHx8fHx8fDE3NzQ5NjY4NDd8&ixlib=rb-4.1.0&q=80&w=1080",
+                        "mode": "fill"
+                      },
+                      "cornerRadius": 12
+                    },
+                    {
+                      "type": "text",
+                      "id": "yB6eV",
+                      "name": "sampleCard3Title",
+                      "fill": "$color/foam",
+                      "content": "街头问路",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 16,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "YhhHW",
+                      "name": "sampleCard3Body",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "练习问路、确认路线，再把关键地标清楚地重复出来。",
+                      "lineHeight": 1.5,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 }
               ]
             }
@@ -899,6 +2076,142 @@
       "id": "s2k63",
       "x": 2040,
       "y": 80,
+      "name": "Screen/StartupLoading",
+      "width": 1440,
+      "height": 1160,
+      "fill": "$color/background-soft",
+      "layout": "none",
+      "children": [
+        {
+          "type": "frame",
+          "id": "BDk50",
+          "x": 0,
+          "y": 0,
+          "name": "loadingBackground",
+          "metadata": {
+            "type": "unsplash",
+            "username": "waryxfox",
+            "link": "https://unsplash.com/@waryxfox",
+            "author": "Skylar Michael"
+          },
+          "width": 1440,
+          "height": 1160,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "https://images.unsplash.com/photo-1583424538664-82b5da055a82?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w4NDM0ODN8MHwxfHJhbmRvbXx8fHx8fHx8fDE3NzQ5NjY3NTZ8&ixlib=rb-4.1.0&q=80&w=1080",
+            "mode": "fill"
+          },
+          "effect": {
+            "type": "blur",
+            "radius": 12
+          }
+        },
+        {
+          "type": "frame",
+          "id": "RwXTT",
+          "x": 0,
+          "y": 0,
+          "name": "loadingOverlay",
+          "width": 1440,
+          "height": 1160,
+          "fill": "#FFFFFFD9"
+        },
+        {
+          "type": "frame",
+          "id": "6IqnZ",
+          "x": 1180,
+          "y": 32,
+          "name": "loadingChip",
+          "fill": "#FFFFFF",
+          "cornerRadius": 999,
+          "stroke": {
+            "thickness": 1,
+            "fill": "$color/line"
+          },
+          "padding": [
+            10,
+            14
+          ],
+          "children": [
+            {
+              "type": "text",
+              "id": "93PNb",
+              "name": "loadingChipText",
+              "fill": "$color/mist",
+              "content": "正在分析上传内容",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 12,
+              "fontWeight": "600"
+            }
+          ]
+        },
+        {
+          "id": "wAB7Y",
+          "type": "ref",
+          "ref": "XP6uI",
+          "x": 510,
+          "y": 290,
+          "width": 420,
+          "height": "fit_content",
+          "name": "loadingCard",
+          "descendants": {
+            "wqApI": {
+              "x": 100
+            },
+            "IgxvE": {
+              "x": 121,
+              "y": 236
+            },
+            "Xamug": {
+              "x": 0,
+              "y": 271
+            },
+            "dFT7s": {
+              "x": 0,
+              "y": 321
+            },
+            "nQyPY": {
+              "x": 114.5,
+              "y": 359,
+              "width": "fit_content",
+              "height": "fit_content"
+            },
+            "pNhtg": {
+              "width": "fit_content",
+              "height": "fit_content"
+            },
+            "ssiV9": {
+              "x": 12,
+              "y": 8
+            },
+            "D6W1F": {
+              "x": 59,
+              "width": "fit_content",
+              "height": "fit_content"
+            },
+            "2AuQx": {
+              "x": 12,
+              "y": 8
+            },
+            "YHYQ5": {
+              "x": 118,
+              "width": "fit_content",
+              "height": "fit_content"
+            },
+            "Oovk8": {
+              "x": 12,
+              "y": 8
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "UvTSB",
+      "x": 3560,
+      "y": 80,
       "name": "Screen/PracticeSession",
       "width": 1440,
       "height": 1160,
@@ -909,43 +2222,30 @@
       "children": [
         {
           "type": "frame",
-          "id": "L8jj4",
-          "name": "practiceHeaderE",
+          "id": "RGQYy",
+          "name": "sessionHeader",
           "width": "fill_container",
           "justifyContent": "space_between",
           "children": [
             {
-              "type": "frame",
-              "id": "xhL7w",
-              "layout": "vertical",
-              "gap": 4,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "qEjrM",
-                  "fill": "#FFFFFF66",
-                  "content": "Session engine",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.24
-                },
-                {
-                  "type": "text",
-                  "id": "rDTDj",
-                  "fill": "$color/foam",
-                  "content": "Practice cockpit",
-                  "fontFamily": "Newsreader",
-                  "fontSize": 32,
-                  "fontWeight": "700"
-                }
-              ]
+              "type": "text",
+              "id": "qJjW4",
+              "fill": "$color/foam",
+              "content": "练习会话",
+              "fontFamily": "Source Han Sans CN",
+              "fontSize": 32,
+              "fontWeight": "700"
             },
             {
               "type": "frame",
-              "id": "kua4E",
-              "fill": "#FFFFFF0F",
-              "cornerRadius": "$radius/pill",
+              "id": "qJbex",
+              "name": "sessionTag",
+              "fill": "$color/panel",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
               "padding": [
                 10,
                 14
@@ -953,13 +2253,13 @@
               "children": [
                 {
                   "type": "text",
-                  "id": "MFnhE",
-                  "fill": "#FFFFFF66",
-                  "content": "Scene to coach to feedback",
-                  "fontFamily": "IBM Plex Mono",
+                  "id": "NrPHD",
+                  "fill": "$color/mist",
+                  "content": "语音优先模式",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 11,
                   "fontWeight": "600",
-                  "letterSpacing": 0.18
+                  "letterSpacing": 0.22
                 }
               ]
             }
@@ -967,130 +2267,217 @@
         },
         {
           "type": "frame",
-          "id": "4NzQo",
-          "name": "practiceContentE",
+          "id": "hX32j",
+          "name": "sessionContent",
           "width": "fill_container",
           "height": "fill_container",
           "gap": 24,
           "children": [
             {
               "type": "frame",
-              "id": "96Cs2",
-              "name": "practiceMainE",
-              "width": "fill_container",
+              "id": "sqFsR",
+              "name": "sessionLeft",
+              "width": 930,
               "height": "fill_container",
               "layout": "vertical",
               "gap": 18,
               "children": [
                 {
-                  "type": "frame",
-                  "id": "NbbYL",
-                  "name": "practiceOpenerF",
+                  "id": "fFXXi",
+                  "type": "ref",
+                  "ref": "Wvlrq",
                   "width": "fill_container",
-                  "fill": "#F0BF6618",
-                  "cornerRadius": "$radius/card",
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#F0BF6633"
-                  },
+                  "height": "fit_content",
+                  "x": 0,
+                  "y": 0,
+                  "descendants": {
+                    "tIXKh": {
+                      "fontFamily": "Noto Sans SC",
+                      "x": 18,
+                      "y": 18
+                    },
+                    "VKay6": {
+                      "fontFamily": "Noto Sans SC",
+                      "x": 18,
+                      "y": 48
+                    },
+                    "SAw4I": {
+                      "fontFamily": "Noto Sans SC",
+                      "x": 18,
+                      "y": 97
+                    },
+                    "RHGAU": {
+                      "width": "fill_container",
+                      "fontFamily": "Noto Sans SC",
+                      "x": 18,
+                      "y": 134
+                    },
+                    "egRBL": {
+                      "width": "fill_container",
+                      "y": 170,
+                      "height": "fit_content",
+                      "x": 18
+                    },
+                    "m0bLs": {
+                      "width": "fit_content",
+                      "height": "fit_content"
+                    },
+                    "8TfJy": {
+                      "fontFamily": "Noto Sans SC",
+                      "x": 12,
+                      "y": 8
+                    },
+                    "gHo4e": {
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "x": 81
+                    },
+                    "eJiCT": {
+                      "fontFamily": "Noto Sans SC",
+                      "x": 12,
+                      "y": 8
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "VSat9",
+                  "name": "messageStack",
+                  "width": "fill_container",
                   "layout": "vertical",
-                  "gap": 8,
-                  "padding": 18,
+                  "gap": 12,
                   "children": [
                     {
-                      "type": "text",
-                      "id": "7T4WT",
-                      "fill": "#FFFFFF66",
-                      "content": "Opener",
-                      "fontFamily": "IBM Plex Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.24
+                      "type": "frame",
+                      "id": "KYAn1",
+                      "name": "msgCoach",
+                      "width": "fill_container",
+                      "fill": "$color/panel",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "fUBzL",
+                          "fill": "#7D97A4",
+                          "content": "教练 · 语音引导",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.22
+                        },
+                        {
+                          "type": "text",
+                          "id": "XUNRs",
+                          "fill": "$color/foam",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "你好，今天想先点什么？先用一句简短英文把主需求说出来。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     },
                     {
-                      "type": "text",
-                      "id": "hNJFx",
-                      "fill": "$color/foam",
-                      "textGrowth": "fixed-width",
+                      "type": "frame",
+                      "id": "UAmLR",
+                      "name": "msgLearner",
                       "width": "fill_container",
-                      "content": "Hi there! What can I get started for you today?",
-                      "lineHeight": 1.6,
-                      "fontFamily": "Funnel Sans",
-                      "fontSize": 15,
-                      "fontWeight": "normal"
+                      "fill": "$color/panel-strong",
+                      "cornerRadius": 24,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/aqua"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "tM7EY",
+                          "fill": "#7D97A4",
+                          "content": "你 · 本轮回答",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.22
+                        },
+                        {
+                          "type": "text",
+                          "id": "SDxtX",
+                          "fill": "$color/foam",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Could I get an iced latte, please?",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
                     }
                   ]
                 },
                 {
-                  "id": "zNidY",
+                  "id": "DZ6pt",
                   "type": "ref",
-                  "ref": "AsjZf",
+                  "ref": "cIRlc",
                   "width": "fill_container",
-                  "name": "practiceMsg1F",
                   "height": "fit_content",
                   "x": 0,
-                  "y": 100,
+                  "y": 425,
                   "descendants": {
-                    "T9pUj": {
-                      "width": "fill_container"
+                    "pT8vR": {
+                      "fontFamily": "Noto Sans SC",
+                      "content": "语音底座",
+                      "x": 18,
+                      "y": 18
                     },
-                    "m2QW5": {
-                      "x": 884
+                    "IN4bQ": {
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "x": 18,
+                      "y": 46
                     },
-                    "u4QLq": {
-                      "width": "fill_container"
-                    }
-                  }
-                },
-                {
-                  "id": "Vbkcl",
-                  "type": "ref",
-                  "ref": "AsjZf",
-                  "width": "fill_container",
-                  "name": "practiceMsg2F",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 196,
-                  "fill": "#71DFD118",
-                  "stroke": {
-                    "thickness": 1,
-                    "fill": "#71DFD133"
-                  },
-                  "descendants": {
-                    "T9pUj": {
-                      "width": "fill_container"
+                    "1PfSr": {
+                      "fontFamily": "Noto Sans SC",
+                      "content": "开口"
                     },
-                    "Rb0PA": {
-                      "content": "You"
+                    "Iz8q3": {
+                      "width": "fill_container",
+                      "height": "fit_content",
+                      "x": 82
                     },
-                    "m2QW5": {
-                      "x": 884
+                    "0dyvA": {
+                      "fontFamily": "Noto Sans SC",
+                      "content": "点一下，用声音回答"
                     },
-                    "u4QLq": {
-                      "content": "Can I have one iced latte and maybe a muffin?",
-                      "width": "fill_container"
-                    }
-                  }
-                },
-                {
-                  "id": "NWD34",
-                  "type": "ref",
-                  "ref": "AsjZf",
-                  "width": "fill_container",
-                  "name": "practiceMsg3F",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 292,
-                  "descendants": {
-                    "T9pUj": {
-                      "width": "fill_container"
+                    "flM39": {
+                      "width": "fill_container",
+                      "fontFamily": "Noto Sans SC",
+                      "content": "文本输入仍然可用，但页面主动作始终是先开口再补充。",
+                      "y": 41
                     },
-                    "m2QW5": {
-                      "x": 884
+                    "h8YPb": {
+                      "y": 126,
+                      "width": "fit_content",
+                      "height": "fit_content",
+                      "x": 18
                     },
-                    "u4QLq": {
-                      "content": "Of course. Do you want the latte for here or to go?",
-                      "width": "fill_container"
+                    "YOHDo": {
+                      "fontFamily": "Noto Sans SC",
+                      "content": "改用文字输入",
+                      "x": 14,
+                      "y": 10
                     }
                   }
                 }
@@ -1098,37 +2485,34 @@
             },
             {
               "type": "frame",
-              "id": "qWuhW",
-              "name": "practiceSideE",
+              "id": "zE7fG",
+              "name": "sessionRight",
               "width": 430,
               "height": "fill_container",
               "layout": "vertical",
-              "gap": 18,
+              "gap": 16,
               "children": [
                 {
-                  "id": "KbQwu",
+                  "id": "hL749",
                   "type": "ref",
-                  "ref": "1gCci",
+                  "ref": "vvRrK",
                   "width": "fill_container",
-                  "name": "practiceFeedbackF",
                   "x": 0,
-                  "y": 0
-                },
-                {
-                  "id": "5yyeL",
-                  "type": "ref",
-                  "ref": "Wvlrq",
-                  "width": "fill_container",
-                  "name": "practiceSummaryF",
-                  "x": 0,
-                  "y": 500,
+                  "y": 0,
+                  "height": "fit_content",
                   "descendants": {
-                    "RHGAU": {
-                      "content": "Primary learner goal: place an order naturally and keep the conversation moving.",
-                      "width": "fill_container"
+                    "JTYWD": {
+                      "fontFamily": "Noto Sans SC",
+                      "content": "即时提示",
+                      "x": 16,
+                      "y": 16
                     },
-                    "egRBL": {
-                      "width": "fill_container"
+                    "DVnP7": {
+                      "width": "fill_container",
+                      "fontFamily": "Noto Sans SC",
+                      "content": "先用更短的开场句，再把额外细节放到第二句里，会更稳。",
+                      "x": 16,
+                      "y": 40
                     }
                   }
                 }
@@ -1140,8 +2524,1812 @@
     },
     {
       "type": "frame",
-      "id": "UvTSB",
-      "x": 3560,
+      "id": "6fvge",
+      "x": 5129,
+      "y": 80,
+      "name": "Screen/PostPracticeReview",
+      "width": 1440,
+      "height": 1160,
+      "fill": "$color/night",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 28,
+      "children": [
+        {
+          "type": "frame",
+          "id": "bd0YJ",
+          "name": "reviewHeader",
+          "width": "fill_container",
+          "justifyContent": "space_between",
+          "children": [
+            {
+              "type": "text",
+              "id": "NBMOT",
+              "fill": "$color/foam",
+              "content": "练后反馈",
+              "fontFamily": "Noto Sans SC",
+              "fontSize": 32,
+              "fontWeight": "700"
+            },
+            {
+              "type": "frame",
+              "id": "juwoj",
+              "name": "reviewTag",
+              "fill": "$color/panel",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
+              "padding": [
+                10,
+                14
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "g8cOX",
+                  "fill": "$color/mist",
+                  "content": "本轮回响",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 11,
+                  "fontWeight": "600",
+                  "letterSpacing": 0.22
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "lBP28",
+          "name": "reviewContent",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "children": [
+            {
+              "id": "uNkq2",
+              "type": "ref",
+              "ref": "1gCci",
+              "width": "fill_container",
+              "x": 0,
+              "y": 0,
+              "height": "fit_content",
+              "descendants": {
+                "i7Rgf": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 18,
+                  "y": 18
+                },
+                "2UkMA": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 18,
+                  "y": 67
+                },
+                "6JjxR": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 14,
+                  "y": 14
+                },
+                "p465B": {
+                  "fontFamily": "Noto Sans SC",
+                  "width": "fill_container",
+                  "x": 14,
+                  "y": 38
+                },
+                "3h8mY": {
+                  "width": "fill_container",
+                  "height": "fit_content",
+                  "x": 18,
+                  "y": 154
+                },
+                "iutW5": {
+                  "fontFamily": "Noto Sans SC",
+                  "x": 14,
+                  "y": 14
+                },
+                "g2vRr": {
+                  "fontFamily": "Noto Sans SC",
+                  "width": "fill_container",
+                  "x": 14,
+                  "y": 38
+                }
+              }
+            },
+            {
+              "type": "frame",
+              "id": "qYALs",
+              "name": "reviewMetrics",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "9x4Tl",
+                  "name": "reviewCol1",
+                  "width": 684,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Vo0qu",
+                      "name": "metric1",
+                      "width": "fill_container",
+                      "fill": "$color/panel",
+                      "cornerRadius": 28,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "h638k",
+                          "fill": "$color/foam",
+                          "content": "语法",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "text",
+                          "id": "YEG3I",
+                          "fill": "$color/mist",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "你的请求句式已经比较礼貌、清楚。继续把 “Could I get...” 放在开头，会更自然。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "TAftx",
+                      "name": "metric2",
+                      "width": "fill_container",
+                      "fill": "$color/panel",
+                      "cornerRadius": 28,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "AA37d",
+                          "fill": "$color/foam",
+                          "content": "更自然",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "text",
+                          "id": "3UIS2",
+                          "fill": "$color/mist",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "在咖啡店里，先说饮品再补额外需求，会比一开始就把所有信息堆进去更顺。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "pAfYs",
+                  "name": "reviewCol2",
+                  "width": 684,
+                  "layout": "vertical",
+                  "gap": 16,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "c8TGO",
+                      "name": "metric3",
+                      "width": "fill_container",
+                      "fill": "$color/panel",
+                      "cornerRadius": 28,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "KxxJ2",
+                          "fill": "$color/foam",
+                          "content": "有用词汇",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "text",
+                          "id": "AoKGn",
+                          "fill": "$color/mist",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "iced latte · for here · to go · could I get · anything else",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mzWRh",
+                      "name": "metric4",
+                      "width": "fill_container",
+                      "fill": "$color/panel",
+                      "cornerRadius": 28,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 18,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "hxuNN",
+                          "fill": "$color/foam",
+                          "content": "下一轮建议",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 24,
+                          "fontWeight": "700"
+                        },
+                        {
+                          "type": "text",
+                          "id": "HCDym",
+                          "fill": "$color/mist",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "把同一个场景再练一轮，第二个问题回答得更快一点，不必解释太多。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "2cMUz",
+              "name": "Frame 1",
+              "clip": true,
+              "width": 232,
+              "height": 31,
+              "fill": "#FFFFFF",
+              "layout": "none"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "JCnlr",
+      "x": 6640,
+      "y": 80,
+      "name": "Screen/Login",
+      "width": 1440,
+      "height": 1160,
+      "fill": "$color/night",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 28,
+      "children": [
+        {
+          "type": "frame",
+          "id": "rxqjR",
+          "name": "loginContent",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "qgmtc",
+              "name": "loginRow",
+              "width": 1140,
+              "gap": 24,
+              "children": [
+                {
+                  "id": "6kKfs",
+                  "type": "ref",
+                  "ref": "OcHIY",
+                  "width": 520,
+                  "x": 0,
+                  "y": 0,
+                  "height": "fit_content",
+                  "descendants": {
+                    "2e6MK": {
+                      "y": 24,
+                      "x": 24
+                    },
+                    "EnQNX": {
+                      "x": 24,
+                      "y": 108
+                    },
+                    "9Lzju": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 140,
+                      "content": "回到你的安静开口通道",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 26
+                    },
+                    "EPGJr": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 183,
+                      "content": "轻量登录，继续以场景为起点的口语练习；每轮结束后，只保留一份简短回响。",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "g9dhD": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 239,
+                      "height": "fit_content"
+                    },
+                    "5ESKq": {
+                      "width": "fit_content",
+                      "height": "fit_content"
+                    },
+                    "gcHki": {
+                      "x": 12,
+                      "y": 8,
+                      "content": "场景上传",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "WQiUL": {
+                      "x": 81,
+                      "width": "fit_content",
+                      "height": "fit_content"
+                    },
+                    "CYHsi": {
+                      "x": 12,
+                      "y": 8,
+                      "content": "语音优先",
+                      "fontFamily": "Noto Sans SC"
+                    }
+                  }
+                },
+                {
+                  "id": "A506k",
+                  "type": "ref",
+                  "ref": "6lJtg",
+                  "width": 520,
+                  "height": "fit_content",
+                  "x": 544,
+                  "y": 0,
+                  "descendants": {
+                    "tZ6Su": {
+                      "y": 24,
+                      "x": 24
+                    },
+                    "HHb1z": {
+                      "x": 24,
+                      "y": 108,
+                      "content": "欢迎回来",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 26
+                    },
+                    "fl9X0": {
+                      "width": 440,
+                      "x": 24,
+                      "y": 158,
+                      "content": "轻量登录后，继续你刚才停下来的那一轮场景口语练习。",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "aMmH2": {
+                      "width": "fill_container",
+                      "y": 192,
+                      "height": "fit_content",
+                      "x": 24
+                    },
+                    "aMmH2/e8iI2": {
+                      "x": 16,
+                      "y": 14
+                    },
+                    "aMmH2/iKTDp": {
+                      "x": 8.5,
+                      "y": 4
+                    },
+                    "aMmH2/ouB6J": {
+                      "content": "使用 Google 继续",
+                      "fontFamily": "Noto Sans SC",
+                      "x": 56,
+                      "y": 18
+                    },
+                    "AVvft": {
+                      "width": "fill_container",
+                      "y": 260,
+                      "height": "fit_content",
+                      "x": 24
+                    },
+                    "AVvft/e8iI2": {
+                      "x": 16,
+                      "y": 14
+                    },
+                    "AVvft/iKTDp": {
+                      "x": 5,
+                      "y": 5.5
+                    },
+                    "AVvft/ouB6J": {
+                      "content": "使用 GitHub 继续",
+                      "fontFamily": "Noto Sans SC",
+                      "x": 56,
+                      "y": 18
+                    },
+                    "3G8QT": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 328,
+                      "height": "fit_content"
+                    },
+                    "pYRI4": {
+                      "width": "fill_container",
+                      "y": 8
+                    },
+                    "QvnLK": {
+                      "x": 205.5,
+                      "content": "或使用邮箱",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "hvuJg": {
+                      "width": "fill_container",
+                      "x": 278.5,
+                      "y": 8
+                    },
+                    "oLa07": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 357,
+                      "height": "fit_content"
+                    },
+                    "Gpigc": {
+                      "x": 16,
+                      "y": 16,
+                      "content": "邮箱",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "QThNp": {
+                      "x": 16,
+                      "y": 39,
+                      "content": "your.email@example.com",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "sCUK8": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 444,
+                      "height": "fit_content"
+                    },
+                    "RLh8C": {
+                      "x": 16,
+                      "y": 16,
+                      "content": "密码",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "UC0YB": {
+                      "x": 16,
+                      "y": 39,
+                      "content": "已隐藏密码",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "S67LO": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 531,
+                      "height": "fit_content"
+                    },
+                    "dNNPK": {
+                      "x": 194,
+                      "y": 14,
+                      "content": "继续进入练习",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "ctISP": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 591,
+                      "content": "第一次来到这里？一步创建账号，把每次练习的回响都保存下来。",
+                      "fontFamily": "Noto Sans SC"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "frame",
+      "id": "CzHCx",
+      "x": 8160,
+      "y": 80,
+      "name": "Screen/Register",
+      "width": 1440,
+      "height": 1160,
+      "fill": "$color/night",
+      "layout": "vertical",
+      "gap": 24,
+      "padding": 28,
+      "children": [
+        {
+          "type": "frame",
+          "id": "TTcau",
+          "name": "registerContent",
+          "width": "fill_container",
+          "height": "fill_container",
+          "layout": "vertical",
+          "gap": 24,
+          "justifyContent": "center",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "uEOae",
+              "name": "registerRow",
+              "width": 1140,
+              "gap": 24,
+              "children": [
+                {
+                  "id": "KDaWW",
+                  "type": "ref",
+                  "ref": "OcHIY",
+                  "width": 520,
+                  "x": 0,
+                  "y": 0,
+                  "height": "fit_content",
+                  "descendants": {
+                    "2e6MK": {
+                      "y": 24,
+                      "x": 24
+                    },
+                    "EnQNX": {
+                      "x": 24,
+                      "y": 108
+                    },
+                    "9Lzju": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 140,
+                      "content": "回到你的安静开口通道",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 26
+                    },
+                    "EPGJr": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 183,
+                      "content": "轻量注册后，把你的场景、回响和下一轮练习都安静地留在这里。",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "g9dhD": {
+                      "width": "fill_container",
+                      "x": 24,
+                      "y": 217,
+                      "height": "fit_content"
+                    },
+                    "5ESKq": {
+                      "width": "fit_content",
+                      "height": "fit_content"
+                    },
+                    "gcHki": {
+                      "x": 12,
+                      "y": 8,
+                      "content": "场景上传",
+                      "fontFamily": "Noto Sans SC"
+                    },
+                    "WQiUL": {
+                      "x": 81,
+                      "width": "fit_content",
+                      "height": "fit_content"
+                    },
+                    "CYHsi": {
+                      "x": 12,
+                      "y": 8,
+                      "content": "语音优先",
+                      "fontFamily": "Noto Sans SC"
+                    }
+                  }
+                },
+                {
+                  "type": "frame",
+                  "id": "NcfaW",
+                  "name": "registerPanel",
+                  "width": 520,
+                  "fill": "$color/panel",
+                  "cornerRadius": 32,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 24,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "R47t8",
+                      "fill": "$color/foam",
+                      "content": "创建你的开口通道",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 26,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "lsWYe",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
+                      "width": 440,
+                      "content": "创建账号后，你可以保存场景、回看回响，并从下一轮语音练习继续。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "E86PV",
+                      "name": "fieldName",
+                      "width": "fill_container",
+                      "fill": "$color/panel-strong",
+                      "cornerRadius": 22,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "NdDL2",
+                          "fill": "#7D97A4",
+                          "content": "昵称",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.22
+                        },
+                        {
+                          "type": "text",
+                          "id": "jlWOx",
+                          "fill": "$color/mist",
+                          "content": "给自己一个练习身份",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "KhtcO",
+                      "name": "fieldJoinEmail",
+                      "width": "fill_container",
+                      "fill": "$color/panel-strong",
+                      "cornerRadius": 22,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "uFf6x",
+                          "fill": "#7D97A4",
+                          "content": "邮箱",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.22
+                        },
+                        {
+                          "type": "text",
+                          "id": "c3PvY",
+                          "fill": "$color/mist",
+                          "content": "name@example.com",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "BpVQ9",
+                      "name": "fieldJoinPassword",
+                      "width": "fill_container",
+                      "fill": "$color/panel-strong",
+                      "cornerRadius": 22,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "RHvyg",
+                          "fill": "#7D97A4",
+                          "content": "密码",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 11,
+                          "fontWeight": "600",
+                          "letterSpacing": 0.22
+                        },
+                        {
+                          "type": "text",
+                          "id": "owgti",
+                          "fill": "$color/mist",
+                          "content": "创建一个密码",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "5HIJ8",
+                      "name": "registerButton",
+                      "fill": "$color/aqua",
+                      "cornerRadius": 999,
+                      "padding": [
+                        12,
+                        16
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "me3lI",
+                          "fill": "#163847",
+                          "content": "创建账号",
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "LkU9c",
+                      "fill": "$color/mist",
+                      "textGrowth": "fixed-width",
+                      "width": "fill_container",
+                      "content": "已经有账号了？登录后，从上次鲸鱼停下来的那句继续。",
+                      "lineHeight": 1.5,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 13,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uMGKW",
+      "type": "ref",
+      "ref": "OcHIY",
+      "x": 9640,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "2e6MK": {
+          "y": 24,
+          "x": 24
+        },
+        "EnQNX": {
+          "x": 24,
+          "y": 108
+        },
+        "9Lzju": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 140
+        },
+        "EPGJr": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 220
+        },
+        "g9dhD": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 298,
+          "height": "fit_content"
+        },
+        "5ESKq": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "gcHki": {
+          "x": 12,
+          "y": 8
+        },
+        "WQiUL": {
+          "x": 111,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "CYHsi": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "grY4p",
+      "type": "ref",
+      "ref": "OcHIY",
+      "x": 10052,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "2e6MK": {
+          "y": 24,
+          "x": 24
+        },
+        "EnQNX": {
+          "x": 24,
+          "y": 108
+        },
+        "9Lzju": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 140
+        },
+        "EPGJr": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 220
+        },
+        "g9dhD": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 298,
+          "height": "fit_content"
+        },
+        "5ESKq": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "gcHki": {
+          "x": 12,
+          "y": 8
+        },
+        "WQiUL": {
+          "x": 111,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "CYHsi": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "9lohA",
+      "type": "ref",
+      "ref": "6lJtg",
+      "x": 10464,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tZ6Su": {
+          "y": 24,
+          "x": 24
+        },
+        "HHb1z": {
+          "x": 24,
+          "y": 108
+        },
+        "fl9X0": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 161
+        },
+        "aMmH2": {
+          "width": "fill_container",
+          "y": 217,
+          "height": "fit_content",
+          "x": 24
+        },
+        "aMmH2/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "aMmH2/iKTDp": {
+          "x": 8.5,
+          "y": 4
+        },
+        "aMmH2/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "AVvft": {
+          "width": "fill_container",
+          "y": 285,
+          "height": "fit_content",
+          "x": 24
+        },
+        "AVvft/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "AVvft/iKTDp": {
+          "x": 5,
+          "y": 5.5
+        },
+        "AVvft/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "3G8QT": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 353,
+          "height": "fit_content"
+        },
+        "pYRI4": {
+          "width": "fill_container",
+          "y": 8
+        },
+        "QvnLK": {
+          "x": 127
+        },
+        "hvuJg": {
+          "width": "fill_container",
+          "x": 209,
+          "y": 8
+        },
+        "oLa07": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 382,
+          "height": "fit_content"
+        },
+        "Gpigc": {
+          "x": 16,
+          "y": 16
+        },
+        "QThNp": {
+          "x": 16,
+          "y": 39
+        },
+        "sCUK8": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 469,
+          "height": "fit_content"
+        },
+        "RLh8C": {
+          "x": 16,
+          "y": 16
+        },
+        "UC0YB": {
+          "x": 16,
+          "y": 39
+        },
+        "S67LO": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 556,
+          "height": "fit_content"
+        },
+        "dNNPK": {
+          "x": 130,
+          "y": 14
+        },
+        "ctISP": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 616
+        }
+      }
+    },
+    {
+      "id": "G5IVX",
+      "type": "ref",
+      "ref": "6lJtg",
+      "x": 10876,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tZ6Su": {
+          "y": 24,
+          "x": 24
+        },
+        "HHb1z": {
+          "x": 24,
+          "y": 108
+        },
+        "fl9X0": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 161
+        },
+        "aMmH2": {
+          "width": "fill_container",
+          "y": 217,
+          "height": "fit_content",
+          "x": 24
+        },
+        "aMmH2/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "aMmH2/iKTDp": {
+          "x": 8.5,
+          "y": 4
+        },
+        "aMmH2/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "AVvft": {
+          "width": "fill_container",
+          "y": 285,
+          "height": "fit_content",
+          "x": 24
+        },
+        "AVvft/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "AVvft/iKTDp": {
+          "x": 5,
+          "y": 5.5
+        },
+        "AVvft/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "3G8QT": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 353,
+          "height": "fit_content"
+        },
+        "pYRI4": {
+          "width": "fill_container",
+          "y": 8
+        },
+        "QvnLK": {
+          "x": 127
+        },
+        "hvuJg": {
+          "width": "fill_container",
+          "x": 209,
+          "y": 8
+        },
+        "oLa07": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 382,
+          "height": "fit_content"
+        },
+        "Gpigc": {
+          "x": 16,
+          "y": 16
+        },
+        "QThNp": {
+          "x": 16,
+          "y": 39
+        },
+        "sCUK8": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 469,
+          "height": "fit_content"
+        },
+        "RLh8C": {
+          "x": 16,
+          "y": 16
+        },
+        "UC0YB": {
+          "x": 16,
+          "y": 39
+        },
+        "S67LO": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 556,
+          "height": "fit_content"
+        },
+        "dNNPK": {
+          "x": 130,
+          "y": 14
+        },
+        "ctISP": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 616
+        }
+      }
+    },
+    {
+      "id": "3S80F",
+      "type": "ref",
+      "ref": "6lJtg",
+      "x": 11288,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tZ6Su": {
+          "y": 24,
+          "x": 24
+        },
+        "HHb1z": {
+          "x": 24,
+          "y": 108
+        },
+        "fl9X0": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 161
+        },
+        "aMmH2": {
+          "width": "fill_container",
+          "y": 217,
+          "height": "fit_content",
+          "x": 24
+        },
+        "aMmH2/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "aMmH2/iKTDp": {
+          "x": 8.5,
+          "y": 4
+        },
+        "aMmH2/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "AVvft": {
+          "width": "fill_container",
+          "y": 285,
+          "height": "fit_content",
+          "x": 24
+        },
+        "AVvft/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "AVvft/iKTDp": {
+          "x": 5,
+          "y": 5.5
+        },
+        "AVvft/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "3G8QT": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 353,
+          "height": "fit_content"
+        },
+        "pYRI4": {
+          "width": "fill_container",
+          "y": 8
+        },
+        "QvnLK": {
+          "x": 127
+        },
+        "hvuJg": {
+          "width": "fill_container",
+          "x": 209,
+          "y": 8
+        },
+        "oLa07": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 382,
+          "height": "fit_content"
+        },
+        "Gpigc": {
+          "x": 16,
+          "y": 16
+        },
+        "QThNp": {
+          "x": 16,
+          "y": 39
+        },
+        "sCUK8": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 469,
+          "height": "fit_content"
+        },
+        "RLh8C": {
+          "x": 16,
+          "y": 16
+        },
+        "UC0YB": {
+          "x": 16,
+          "y": 39
+        },
+        "S67LO": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 556,
+          "height": "fit_content"
+        },
+        "dNNPK": {
+          "x": 130,
+          "y": 14
+        },
+        "ctISP": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 616
+        }
+      }
+    },
+    {
+      "id": "A1UHd",
+      "type": "ref",
+      "ref": "6lJtg",
+      "x": 11700,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tZ6Su": {
+          "y": 24,
+          "x": 24
+        },
+        "HHb1z": {
+          "x": 24,
+          "y": 108
+        },
+        "fl9X0": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 161
+        },
+        "aMmH2": {
+          "width": "fill_container",
+          "y": 217,
+          "height": "fit_content",
+          "x": 24
+        },
+        "aMmH2/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "aMmH2/iKTDp": {
+          "x": 8.5,
+          "y": 4
+        },
+        "aMmH2/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "AVvft": {
+          "width": "fill_container",
+          "y": 285,
+          "height": "fit_content",
+          "x": 24
+        },
+        "AVvft/e8iI2": {
+          "x": 16,
+          "y": 14
+        },
+        "AVvft/iKTDp": {
+          "x": 5,
+          "y": 5.5
+        },
+        "AVvft/ouB6J": {
+          "x": 56,
+          "y": 18
+        },
+        "3G8QT": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 353,
+          "height": "fit_content"
+        },
+        "pYRI4": {
+          "width": "fill_container",
+          "y": 8
+        },
+        "QvnLK": {
+          "x": 127
+        },
+        "hvuJg": {
+          "width": "fill_container",
+          "x": 209,
+          "y": 8
+        },
+        "oLa07": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 382,
+          "height": "fit_content"
+        },
+        "Gpigc": {
+          "x": 16,
+          "y": 16
+        },
+        "QThNp": {
+          "x": 16,
+          "y": 39
+        },
+        "sCUK8": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 469,
+          "height": "fit_content"
+        },
+        "RLh8C": {
+          "x": 16,
+          "y": 16
+        },
+        "UC0YB": {
+          "x": 16,
+          "y": 39
+        },
+        "S67LO": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 556,
+          "height": "fit_content"
+        },
+        "dNNPK": {
+          "x": 130,
+          "y": 14
+        },
+        "ctISP": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 616
+        }
+      }
+    },
+    {
+      "id": "YgWKg",
+      "type": "ref",
+      "ref": "Wvlrq",
+      "x": 12112,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tIXKh": {
+          "x": 18,
+          "y": 18
+        },
+        "VKay6": {
+          "x": 18,
+          "y": 48
+        },
+        "SAw4I": {
+          "x": 18,
+          "y": 97
+        },
+        "RHGAU": {
+          "width": "fill_container",
+          "x": 18,
+          "y": 134
+        },
+        "egRBL": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 192
+        },
+        "m0bLs": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "8TfJy": {
+          "x": 12,
+          "y": 8
+        },
+        "gHo4e": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 81
+        },
+        "eJiCT": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "ah5sU",
+      "type": "ref",
+      "ref": "Wvlrq",
+      "x": 12524,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tIXKh": {
+          "x": 18,
+          "y": 18
+        },
+        "VKay6": {
+          "x": 18,
+          "y": 48
+        },
+        "SAw4I": {
+          "x": 18,
+          "y": 97
+        },
+        "RHGAU": {
+          "width": "fill_container",
+          "x": 18,
+          "y": 134
+        },
+        "egRBL": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 192
+        },
+        "m0bLs": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "8TfJy": {
+          "x": 12,
+          "y": 8
+        },
+        "gHo4e": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 81
+        },
+        "eJiCT": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "uZ9f0",
+      "type": "ref",
+      "ref": "Wvlrq",
+      "x": 12936,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "tIXKh": {
+          "x": 18,
+          "y": 18
+        },
+        "VKay6": {
+          "x": 18,
+          "y": 48
+        },
+        "SAw4I": {
+          "x": 18,
+          "y": 97
+        },
+        "RHGAU": {
+          "width": "fill_container",
+          "x": 18,
+          "y": 134
+        },
+        "egRBL": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 192
+        },
+        "m0bLs": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "8TfJy": {
+          "x": 12,
+          "y": 8
+        },
+        "gHo4e": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 81
+        },
+        "eJiCT": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "ExWNS",
+      "type": "ref",
+      "ref": "cIRlc",
+      "x": 13348,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "pT8vR": {
+          "x": 18,
+          "y": 18
+        },
+        "IN4bQ": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 43
+        },
+        "Iz8q3": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 82
+        },
+        "flM39": {
+          "width": "fill_container",
+          "y": 35
+        },
+        "h8YPb": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 18,
+          "y": 130
+        },
+        "YOHDo": {
+          "x": 14,
+          "y": 10
+        }
+      }
+    },
+    {
+      "id": "lT0lY",
+      "type": "ref",
+      "ref": "cIRlc",
+      "x": 13760,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "pT8vR": {
+          "x": 18,
+          "y": 18
+        },
+        "IN4bQ": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 43
+        },
+        "Iz8q3": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 82
+        },
+        "flM39": {
+          "width": "fill_container",
+          "y": 35
+        },
+        "h8YPb": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 18,
+          "y": 130
+        },
+        "YOHDo": {
+          "x": 14,
+          "y": 10
+        }
+      }
+    },
+    {
+      "id": "wiYQq",
+      "type": "ref",
+      "ref": "zVKkY",
+      "x": 14172,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "FZdmG": {
+          "x": 24,
+          "y": 24
+        },
+        "xHDXZ": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 59
+        },
+        "mgw0g": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 149
+        },
+        "gbt4R": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 213,
+          "height": "fit_content"
+        },
+        "P9yoF": {
+          "x": 126,
+          "y": 28
+        },
+        "kPgnI": {
+          "x": 57.5,
+          "y": 112
+        },
+        "uerBb": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 147
+        },
+        "B69jL": {
+          "width": "fill_container",
+          "x": 24,
+          "y": 444,
+          "height": "fit_content"
+        },
+        "9Gp5i": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "rljpt": {
+          "x": 18,
+          "y": 14
+        },
+        "DAsfN": {
+          "x": 104,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "88LMQ": {
+          "x": 18,
+          "y": 14
+        }
+      }
+    },
+    {
+      "id": "aPm3p",
+      "type": "ref",
+      "ref": "XP6uI",
+      "x": 14584,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "wqApI": {
+          "x": 76
+        },
+        "IgxvE": {
+          "x": 97,
+          "y": 236
+        },
+        "Xamug": {
+          "x": -24,
+          "y": 271
+        },
+        "dFT7s": {
+          "x": -24,
+          "y": 321
+        },
+        "nQyPY": {
+          "x": 90.5,
+          "y": 359,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "pNhtg": {
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "ssiV9": {
+          "x": 12,
+          "y": 8
+        },
+        "D6W1F": {
+          "x": 59,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "2AuQx": {
+          "x": 12,
+          "y": 8
+        },
+        "YHYQ5": {
+          "x": 118,
+          "width": "fit_content",
+          "height": "fit_content"
+        },
+        "Oovk8": {
+          "x": 12,
+          "y": 8
+        }
+      }
+    },
+    {
+      "id": "eXx0W",
+      "type": "ref",
+      "ref": "cIRlc",
+      "x": 14996,
+      "y": 80,
+      "height": "fit_content",
+      "descendants": {
+        "pT8vR": {
+          "x": 18,
+          "y": 18
+        },
+        "IN4bQ": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 18,
+          "y": 43
+        },
+        "Iz8q3": {
+          "width": "fill_container",
+          "height": "fit_content",
+          "x": 82
+        },
+        "flM39": {
+          "width": "fill_container",
+          "y": 35
+        },
+        "h8YPb": {
+          "width": "fit_content",
+          "height": "fit_content",
+          "x": 18,
+          "y": 130
+        },
+        "YOHDo": {
+          "x": 14,
+          "y": 10
+        }
+      }
+    },
+    {
+      "type": "frame",
+      "id": "1cwxX",
+      "x": 15448,
       "y": 80,
       "name": "Screen/HistoryReview",
       "width": 1440,
@@ -1153,33 +4341,35 @@
       "children": [
         {
           "type": "frame",
-          "id": "WRYGI",
-          "name": "historyHeaderA",
+          "id": "RgcaU",
+          "name": "historyHeader",
           "width": "fill_container",
           "justifyContent": "space_between",
           "children": [
             {
               "type": "frame",
-              "id": "45o7i",
+              "id": "fMfoU",
+              "name": "historyTitleWrap",
               "layout": "vertical",
-              "gap": 4,
+              "gap": 6,
               "children": [
                 {
                   "type": "text",
-                  "id": "WV8MB",
-                  "fill": "#FFFFFF66",
-                  "content": "Review lane",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.24
+                  "id": "uG86U",
+                  "name": "historyEyebrow",
+                  "fill": "$color/primary",
+                  "content": "History Review",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "600"
                 },
                 {
                   "type": "text",
-                  "id": "1JG64",
+                  "id": "nilHU",
+                  "name": "historyTitle",
                   "fill": "$color/foam",
-                  "content": "History review",
-                  "fontFamily": "Newsreader",
+                  "content": "练习历史",
+                  "fontFamily": "Noto Sans SC",
                   "fontSize": 32,
                   "fontWeight": "700"
                 }
@@ -1187,9 +4377,14 @@
             },
             {
               "type": "frame",
-              "id": "iLO7B",
-              "fill": "#FFFFFF0F",
-              "cornerRadius": "$radius/pill",
+              "id": "akKFH",
+              "name": "historyTag",
+              "fill": "$color/panel",
+              "cornerRadius": 999,
+              "stroke": {
+                "thickness": 1,
+                "fill": "$color/line"
+              },
               "padding": [
                 10,
                 14
@@ -1197,118 +4392,13 @@
               "children": [
                 {
                   "type": "text",
-                  "id": "MgBre",
-                  "fill": "#FFFFFF66",
-                  "content": "Archive of practice scenes",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.18
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "type": "frame",
-          "id": "AKf4t",
-          "name": "historyStatsA",
-          "width": "fill_container",
-          "gap": 16,
-          "children": [
-            {
-              "type": "frame",
-              "id": "HMClF",
-              "width": "fill_container",
-              "fill": "$color/panel-strong",
-              "cornerRadius": "$radius/card",
-              "layout": "vertical",
-              "gap": 8,
-              "padding": 18,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "uNzZw",
-                  "fill": "#FFFFFF66",
-                  "content": "This week",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.24
-                },
-                {
-                  "type": "text",
-                  "id": "y8xh2",
-                  "fill": "$color/foam",
-                  "content": "6 scenes",
-                  "fontFamily": "Newsreader",
-                  "fontSize": 28,
-                  "fontWeight": "700"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "mLTXy",
-              "width": "fill_container",
-              "fill": "$color/panel-strong",
-              "cornerRadius": "$radius/card",
-              "layout": "vertical",
-              "gap": 8,
-              "padding": 18,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "oTDDE",
-                  "fill": "#FFFFFF66",
-                  "content": "Best signal",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.24
-                },
-                {
-                  "type": "text",
-                  "id": "3PxMj",
-                  "fill": "$color/foam",
-                  "content": "Ordering flows",
-                  "fontFamily": "Funnel Sans",
-                  "fontSize": 18,
-                  "fontWeight": "700"
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "8Rmom",
-              "width": "fill_container",
-              "fill": "$color/panel-strong",
-              "cornerRadius": "$radius/card",
-              "layout": "vertical",
-              "gap": 8,
-              "padding": 18,
-              "children": [
-                {
-                  "type": "text",
-                  "id": "iNn2L",
-                  "fill": "#FFFFFF66",
-                  "content": "Focus",
-                  "fontFamily": "IBM Plex Mono",
-                  "fontSize": 11,
-                  "fontWeight": "600",
-                  "letterSpacing": 0.24
-                },
-                {
-                  "type": "text",
-                  "id": "AQwz7",
+                  "id": "tj2af",
+                  "name": "historyTagText",
                   "fill": "$color/mist",
-                  "textGrowth": "fixed-width",
-                  "width": "fill_container",
-                  "content": "Shorter, cleaner learner replies",
-                  "lineHeight": 1.5,
-                  "fontFamily": "Funnel Sans",
-                  "fontSize": 18,
-                  "fontWeight": "normal"
+                  "content": "复盘总览",
+                  "fontFamily": "Noto Sans SC",
+                  "fontSize": 12,
+                  "fontWeight": "600"
                 }
               ]
             }
@@ -1316,127 +4406,31 @@
         },
         {
           "type": "frame",
-          "id": "86quh",
-          "name": "historyContentA",
+          "id": "1lwu9",
+          "name": "historyContent",
           "width": "fill_container",
           "height": "fill_container",
           "gap": 24,
           "children": [
             {
               "type": "frame",
-              "id": "LhZ4Y",
-              "name": "historyListA",
-              "width": "fill_container",
-              "height": "fill_container",
-              "layout": "vertical",
-              "gap": 16,
-              "children": [
-                {
-                  "id": "C6Eg5",
-                  "type": "ref",
-                  "ref": "aNOhh",
-                  "width": "fill_container",
-                  "name": "historyItem1B",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 0,
-                  "descendants": {
-                    "kDDsk": {
-                      "width": "fill_container"
-                    },
-                    "7kezD": {
-                      "x": 862
-                    },
-                    "uU8sA": {
-                      "width": "fill_container"
-                    }
-                  }
-                },
-                {
-                  "id": "GEpjv",
-                  "type": "ref",
-                  "ref": "aNOhh",
-                  "width": "fill_container",
-                  "name": "historyItem2B",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 128,
-                  "descendants": {
-                    "kDDsk": {
-                      "width": "fill_container"
-                    },
-                    "h5N8W": {
-                      "content": "Office hallway"
-                    },
-                    "7kezD": {
-                      "width": "fit_content",
-                      "x": 844
-                    },
-                    "lLLht": {
-                      "content": "Tone improving"
-                    },
-                    "FmjEE": {
-                      "content": "Colleague"
-                    },
-                    "uU8sA": {
-                      "content": "You practiced small talk about workload and followed up naturally.",
-                      "width": "fill_container"
-                    }
-                  }
-                },
-                {
-                  "id": "Ba2kA",
-                  "type": "ref",
-                  "ref": "aNOhh",
-                  "width": "fill_container",
-                  "name": "historyItem3B",
-                  "height": "fit_content",
-                  "x": 0,
-                  "y": 256,
-                  "descendants": {
-                    "kDDsk": {
-                      "width": "fill_container"
-                    },
-                    "h5N8W": {
-                      "content": "Street directions"
-                    },
-                    "7kezD": {
-                      "width": "fit_content",
-                      "x": 820
-                    },
-                    "lLLht": {
-                      "content": "Vocabulary boosted"
-                    },
-                    "FmjEE": {
-                      "content": "Passerby"
-                    },
-                    "uU8sA": {
-                      "content": "You asked for the nearest subway and confirmed the walking route.",
-                      "width": "fill_container"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "7rlH8",
-              "name": "historyDetailA",
-              "width": 380,
+              "id": "8Bchg",
+              "name": "historyLeft",
+              "width": 420,
               "height": "fill_container",
               "layout": "vertical",
               "gap": 16,
               "children": [
                 {
                   "type": "frame",
-                  "id": "w2rXw",
-                  "name": "historyDetailCardB",
+                  "id": "0ePh2",
+                  "name": "historyListCard",
                   "width": "fill_container",
-                  "fill": "$color/panel",
-                  "cornerRadius": "$radius/panel",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 16,
                   "stroke": {
                     "thickness": 1,
-                    "fill": "#FFFFFF1A"
+                    "fill": "$color/line"
                   },
                   "layout": "vertical",
                   "gap": 14,
@@ -1444,93 +4438,158 @@
                   "children": [
                     {
                       "type": "text",
-                      "id": "TN4H2",
-                      "fill": "#FFFFFF66",
-                      "content": "Selected replay",
-                      "fontFamily": "IBM Plex Mono",
-                      "fontSize": 11,
-                      "fontWeight": "600",
-                      "letterSpacing": 0.24
-                    },
-                    {
-                      "type": "text",
-                      "id": "nT97X",
+                      "id": "BowiZ",
+                      "name": "historyListTitle",
                       "fill": "$color/foam",
-                      "content": "Restaurant lunch with a server",
-                      "fontFamily": "Newsreader",
-                      "fontSize": 26,
+                      "content": "最近练习",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 24,
                       "fontWeight": "700"
                     },
                     {
-                      "type": "text",
-                      "id": "WY1cw",
-                      "fill": "$color/mist",
-                      "textGrowth": "fixed-width",
-                      "width": "fill_container",
-                      "content": "The learner handled ordering clearly, but still tends to over-explain before making the actual request.",
-                      "lineHeight": 1.6,
-                      "fontFamily": "Funnel Sans",
-                      "fontSize": 14,
-                      "fontWeight": "normal"
-                    },
-                    {
                       "type": "frame",
-                      "id": "OzD1K",
-                      "fill": "#00000022",
-                      "cornerRadius": "$radius/card",
+                      "id": "uLaLm",
+                      "name": "historyListItem1",
+                      "width": "fill_container",
+                      "fill": "$color/panel-strong",
+                      "cornerRadius": 16,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
                       "layout": "vertical",
                       "gap": 8,
-                      "padding": 14,
+                      "padding": 16,
                       "children": [
                         {
                           "type": "text",
-                          "id": "mDRir",
-                          "fill": "#FFFFFF66",
-                          "content": "Suggested next drill",
-                          "fontFamily": "IBM Plex Mono",
-                          "fontSize": 11,
-                          "fontWeight": "600",
-                          "letterSpacing": 0.22
-                        },
+                          "id": "bjEK0",
+                          "name": "historyListItem1Text",
+                          "fill": "$color/foam",
+                          "content": "今天 09:20 · 咖啡店柜台点单\n你已经能稳定用礼貌请求句开口，第二句补细节时仍有提速空间。",
+                          "lineHeight": 1.6,
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "007Lx",
+                      "name": "historyListItem2",
+                      "width": "fill_container",
+                      "fill": "#FFFFFF",
+                      "cornerRadius": 16,
+                      "stroke": {
+                        "thickness": 1,
+                        "fill": "$color/line"
+                      },
+                      "layout": "vertical",
+                      "gap": 8,
+                      "padding": 16,
+                      "children": [
                         {
                           "type": "text",
-                          "id": "76GlQ",
+                          "id": "0loKB",
+                          "name": "historyListItem2Text",
                           "fill": "$color/foam",
-                          "textGrowth": "fixed-width",
-                          "width": "fill_container",
-                          "content": "Repeat the same ordering scene, but cap each learner reply at one sentence.",
+                          "content": "昨天 20:15 · 办公室状态同步\n你能先给结果，再补原因，但结尾动作还可以更明确。",
                           "lineHeight": 1.6,
-                          "fontFamily": "Funnel Sans",
-                          "fontSize": 13,
-                          "fontWeight": "normal"
+                          "fontFamily": "Noto Sans SC",
+                          "fontSize": 14,
+                          "fontWeight": "600"
                         }
                       ]
                     }
                   ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "uD8Nu",
+              "name": "historyRight",
+              "width": 968,
+              "height": "fill_container",
+              "layout": "vertical",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "ke7eG",
+                  "name": "historyHero",
+                  "width": "fill_container",
+                  "fill": "$color/panel",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 18,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RMxkb",
+                      "name": "historyHeroTitle",
+                      "fill": "$color/foam",
+                      "content": "复盘详情",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 24,
+                      "fontWeight": "700"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ffmnb",
+                      "name": "historyHeroBody",
+                      "fill": "$color/mist",
+                      "content": "你先把主需求说清楚，再补细节，让整段交流听起来更顺，也更容易被理解。",
+                      "lineHeight": 1.6,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
+                    }
+                  ]
                 },
                 {
-                  "id": "f0Oa5",
-                  "type": "ref",
-                  "ref": "Wvlrq",
+                  "type": "frame",
+                  "id": "0f6Yx",
+                  "name": "historyReplay",
                   "width": "fill_container",
-                  "name": "historySummaryCardB",
-                  "x": 0,
-                  "y": 312,
-                  "descendants": {
-                    "VKay6": {
-                      "content": "Review priorities"
+                  "fill": "$color/panel-strong",
+                  "cornerRadius": 16,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "$color/line"
+                  },
+                  "layout": "vertical",
+                  "gap": 14,
+                  "padding": 18,
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "5NF64",
+                      "name": "historyReplayTitle",
+                      "fill": "$color/foam",
+                      "content": "消息回放",
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 24,
+                      "fontWeight": "700"
                     },
-                    "SAw4I": {
-                      "content": "Keep requests concise"
-                    },
-                    "RHGAU": {
-                      "content": "Most recent sessions improve when the learner leads with the request before extra details.",
-                      "width": "fill_container"
-                    },
-                    "egRBL": {
-                      "width": "fill_container"
+                    {
+                      "type": "text",
+                      "id": "WkjHh",
+                      "name": "historyReplayBody",
+                      "fill": "$color/foam",
+                      "content": "教练：你好，今天想先点什么？先用一句简短英文把主需求说出来。\n\n你：Could I get an iced latte, please?\n\n教练：Nice. Add one more detail in a second sentence so the reply sounds more complete.",
+                      "lineHeight": 1.7,
+                      "fontFamily": "Noto Sans SC",
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
-                  }
+                  ]
                 }
               ]
             }
@@ -1542,43 +4601,43 @@
   "variables": {
     "color/aqua": {
       "type": "color",
-      "value": "#71DFD1"
+      "value": "#32ADE6"
     },
     "color/ember": {
       "type": "color",
-      "value": "#FF8E6F"
+      "value": "#EE8B6B"
     },
     "color/foam": {
       "type": "color",
-      "value": "#F6F6EE"
+      "value": "#14324A"
     },
     "color/mist": {
       "type": "color",
-      "value": "#A9BDD0"
+      "value": "#667A8A"
     },
     "color/night": {
       "type": "color",
-      "value": "#06121F"
+      "value": "#FFFFFF"
     },
     "color/panel": {
       "type": "color",
-      "value": "#0D1D31"
+      "value": "#FFFFFF"
     },
     "color/panel-strong": {
       "type": "color",
-      "value": "#102640"
+      "value": "#F2F6F9"
     },
     "color/sun": {
       "type": "color",
-      "value": "#F0BF66"
+      "value": "#E8D7A7"
     },
     "radius/card": {
       "type": "number",
-      "value": 24
+      "value": 16
     },
     "radius/panel": {
       "type": "number",
-      "value": 32
+      "value": 16
     },
     "radius/pill": {
       "type": "number",
@@ -1598,19 +4657,47 @@
     },
     "type/body-font": {
       "type": "string",
-      "value": "Funnel Sans"
+      "value": "Inter"
     },
     "type/caption-font": {
       "type": "string",
-      "value": "IBM Plex Mono"
+      "value": "Inter"
     },
     "type/data-font": {
       "type": "string",
-      "value": "Geist Mono"
+      "value": "Inter"
     },
     "type/display-font": {
       "type": "string",
-      "value": "Newsreader"
+      "value": "Inter"
+    },
+    "color/line": {
+      "type": "color",
+      "value": "#D8E4EE"
+    },
+    "shadow/soft": {
+      "type": "string",
+      "value": "0 16px 44px rgba(22,56,71,0.08)"
+    },
+    "color/accent": {
+      "type": "color",
+      "value": "#32ADE6"
+    },
+    "color/background-soft": {
+      "type": "color",
+      "value": "#F8FAFC"
+    },
+    "color/error": {
+      "type": "color",
+      "value": "#FF453A"
+    },
+    "color/primary": {
+      "type": "color",
+      "value": "#0A84FF"
+    },
+    "color/success": {
+      "type": "color",
+      "value": "#30D158"
     }
   }
 }

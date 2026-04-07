@@ -10,7 +10,7 @@ export function PostPracticeReviewPage() {
   const navigate = useNavigate();
   const { sessionId = "" } = useParams();
   const [review, setReview] = useState<ReviewSummary | null>(null);
-  const [error, setError] = useState("");
+  const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -23,9 +23,9 @@ export function PostPracticeReviewPage() {
           setReview(value);
         }
       })
-      .catch((reason: { message?: string }) => {
+      .catch(() => {
         if (alive) {
-          setError(reason.message ?? "暂时无法读取练后反馈。");
+          setHasError(true);
         }
       });
 
@@ -34,14 +34,13 @@ export function PostPracticeReviewPage() {
     };
   }, [sessionId]);
 
-  if (error && !review) {
+  if (hasError && !review) {
     return (
       <div className="page-shell">
         <div className="page-frame">
           <BrandHeader />
           <main className="empty-stage">
             <h1>练后反馈还没准备好</h1>
-            <p className="muted-text">{error}</p>
             <Link className="primary-button" to={`/session/${sessionId}`}>
               返回练习
             </Link>

@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from api.common.exceptions import NotFoundError
 from api.common.deps import require_authenticated_user
 from api.common.ownership import build_user_owner
 from api.common.responses import ApiResponse
@@ -26,7 +27,7 @@ class HistoryEntryResponse(BaseModel):
     scene_title: str
     role_label: str
     preview: str
-    tags: list[str]
+    vocab_candidates: list[str]
     review_title: str
     review_summary: str
 
@@ -39,7 +40,7 @@ class HistoryEntryResponse(BaseModel):
             scene_title=get_scene_title(session.scene),
             role_label=get_role_label(session.scene, session.role),
             preview=review.highlight,
-            tags=list(session.labels),
+            vocab_candidates=list(session.vocab_candidates),
             review_title=review.title,
             review_summary=review.next_try,
         )
@@ -57,17 +58,20 @@ def list_history_sessions(
     current_user: User = Depends(require_authenticated_user),
 ) -> Any:
     sessions = session_service.list_history_sessions(build_user_owner(current_user.id))
-    reviews = {
-        session.id: SessionReviewResponse.from_review(
-            session_service.get_session_review(session.id)
-        )
-        for session in sessions
-    }
+    visible_entries: list[HistoryEntryResponse] = []
+
+    for session in sessions:
+        try:
+            review = SessionReviewResponse.from_review(
+                session_service.get_session_review(session.id)
+            )
+        except NotFoundError:
+            continue
+
+        visible_entries.append(HistoryEntryResponse.from_session(session, review))
+
     return ApiResponse.success(
-        data=[
-            HistoryEntryResponse.from_session(session, reviews[session.id])
-            for session in sessions
-        ]
+        data=visible_entries
     )
 
 

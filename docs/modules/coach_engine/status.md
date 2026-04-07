@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/coach_engine`
 - `owner`: `unassigned`
-- `updated_at`: `2026-03-30`
+- `updated_at`: `2026-04-06`
 
 ## 模块目标
 
@@ -14,15 +14,15 @@
 
 ## 当前真相
 
-- 现有实现：`api/modules/coach_engine/` 目录已存在
-- 已完成边界：schema、state、agent、service、chat provider 骨架
-- 仍然缺失：回复策略验证、多轮上下文覆盖、异常路径测试
+- 现有实现：`api/modules/coach_engine/` 已支持 `visual_anchors + vocab_candidates + recent_messages` 输入契约
+- 已完成边界：schema、state、agent、service、chat provider 骨架、OpenAI-compatible 文本 provider、主备回退逻辑
+- mock 路径已开始把视觉锚点、教学词汇和最近消息带入追问文本，live prompt 也已补上“证据约束下的合理情境扩展”规则
 
 ## 输入输出契约
 
-- 输入：场景设定、历史消息、学习者回复
+- 输入：场景设定、历史消息、学习者回复、视觉锚点、教学词汇候选
 - 输出：教练式回应、下一步交流推进
-- 关键字段：`role`、上下文消息、回复文本
+- 关键字段：`role`、`visual_anchors`、`vocab_candidates`、`recent_messages`、回复文本
 
 ## 代码位置
 
@@ -31,20 +31,26 @@
 
 ## 当前工作
 
-- `[ ]` 明确多轮上下文最小契约
-- `[ ]` 补教练式回复和追问验证
-- `[ ]` 明确角色一致性检查点
+- `[x]` 明确多轮上下文最小契约
+- `[x]` 补 `visual_anchors / recent_messages` 参与回复的回归测试
+- `[x]` 用真实文本模型验证主链路追问可用
+- `[x]` 给 live prompt 增加 grounded reply 约束，允许基于图片证据做有限情境推断
+- `[ ]` 继续验证多样本下的角色一致性与追问稳定性
 
 ## 测试门
 
-- `module_test_passed` 的标准：多轮上下文下回复结构稳定、角色不漂移
-- 最少要覆盖的用例：首轮回复、连续追问、空历史兜底
-- 还没覆盖的风险：真实 LLM 接入后的稳定性差异
+- `module_test_passed` 的标准：多轮上下文下回复结构稳定、角色不漂移、可消费视觉锚点与教学词汇，并避免脱离图片证据的剧情漂移
+- 当前证据：`tests/modules/test_coach_engine.py` 已覆盖 `visual_anchors / vocab_candidates / recent_messages` 输入和 grounded prompt 约束
+- 还没覆盖的风险：真实 LLM 接入后的风格稳定性差异、文本兜底模型当前不适合结构化 JSON 任务
 
 ## 阻塞项
 
-- 真实聊天 provider 尚未接入
+- 主文本模型已完成 live 联调，文本兜底模型仍需更换或继续调试
 
 ## 变更记录
 
+- `2026-04-06`：补 `vocab_candidates` 输入，并将 live prompt 收紧为“证据约束 + 有限情境扩展”
+- `2026-04-05`：扩展上下文输入契约并接入主备文本 provider
 - `2026-03-30`：初始化模块状态文档
+
+

@@ -47,4 +47,19 @@ describe("reviewApi", () => {
     expect(review.title).toBe("本轮回响");
     expect(review.feedback.usefulWords.words).toEqual(["latte", "size", "iced"]);
   });
+
+  it("maps missing review errors into a localized message", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({
+        code: 1004,
+        message: "Session review sess_552fc05a3fac not found",
+      }),
+    }) as typeof fetch;
+
+    await expect(reviewApi.getPracticeReview("sess_552fc05a3fac")).rejects.toMatchObject({
+      code: "REVIEW_API_FAILED",
+      message: "练后反馈还没准备好。",
+    });
+  });
 });

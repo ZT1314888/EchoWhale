@@ -163,6 +163,9 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /选择图片/i })).toBeInTheDocument();
     expect(screen.getByText(/试试一个示例场景/i)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "咖啡店柜台与点单场景" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "办公室内的工作交流场景" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "街头出行与问路场景" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /主导航/i })).not.toBeInTheDocument();

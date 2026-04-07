@@ -27,7 +27,8 @@ def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enfo
         scene="coffee_shop",
         role="barista",
         opener="Hi there, what can I get started for you today?",
-        labels=["coffee"],
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
         messages=[
             Message(
                 id="msg_fk_order_1",

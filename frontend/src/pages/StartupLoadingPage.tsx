@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { StartupAnalysisOrb } from "../components/StartupAnalysisOrb";
 import { uploadMedia } from "../services/mediaApi";
 import { createPracticeSession } from "../services/practiceApi";
-import type { UploadDraft, UploadedMedia } from "../types/app";
+import type { AppError, UploadDraft, UploadedMedia } from "../types/app";
 
 type LoadingState = {
   draft?: UploadDraft;
@@ -22,6 +22,8 @@ export function StartupLoadingPage() {
   const draft = (location.state as LoadingState | null)?.draft;
   const [stageIndex, setStageIndex] = useState(0);
   const [uploadError, setUploadError] = useState("");
+  const [sessionError, setSessionError] = useState<AppError | null>(null);
+  const [startingSession, setStartingSession] = useState(false);
   const [uploading, setUploading] = useState(draft?.source === "file");
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | undefined>(draft?.uploadedMedia);
   const [retryKey, setRetryKey] = useState(0);
@@ -48,6 +50,7 @@ export function StartupLoadingPage() {
       setUploadedMedia(draft.uploadedMedia);
       setUploading(false);
       setUploadError("");
+      setSessionError(null);
       return;
     }
 
@@ -60,6 +63,7 @@ export function StartupLoadingPage() {
     let active = true;
     setUploading(true);
     setUploadError("");
+    setSessionError(null);
 
     uploadMedia(draft.file)
       .then((media) => {
@@ -84,7 +88,7 @@ export function StartupLoadingPage() {
 
   const isComplete = stageIndex === ANALYSIS_STAGES.length - 1;
   const currentStage = ANALYSIS_STAGES[stageIndex].key;
-  const readyToEnter = isComplete && !uploading && !uploadError;
+  const readyToEnter = isComplete && !uploading && !uploadError && !startingSession;
   const nextDraft =
     draft?.source === "file" ? { ...draft, uploadedMedia } : (draft ?? { source: "sample", sampleSceneId: "coffee" });
 
@@ -93,14 +97,30 @@ export function StartupLoadingPage() {
       return;
     }
 
-    const created = await createPracticeSession(nextDraft);
-    navigate(`/session/${created.sessionId}`, {
-      state: { draft: nextDraft },
-    });
+    setStartingSession(true);
+    setSessionError(null);
+    try {
+      const created = await createPracticeSession(nextDraft);
+      navigate(`/session/${created.sessionId}`, {
+        state: { draft: nextDraft },
+      });
+    } catch (reason) {
+      const error = (reason as AppError | null) ?? {
+        code: "SESSION_START_FAILED",
+        message: "创建练习会话失败，请稍后重试。",
+      };
+      setSessionError(error);
+    } finally {
+      setStartingSession(false);
+    }
   }
 
   function retryUpload() {
     setRetryKey((current) => current + 1);
+  }
+
+  function returnHome() {
+    navigate("/");
   }
 
   return (
@@ -128,6 +148,7 @@ export function StartupLoadingPage() {
                       : "图片上传准备中…"}
               </p>
             ) : null}
+            {sessionError ? <p className="muted-text loading-copy">{sessionError.message}</p> : null}
 
             <div className="loading-progress" aria-label="分析进度">
               {ANALYSIS_STAGES.map((item, index) => {
@@ -157,9 +178,26 @@ export function StartupLoadingPage() {
                   重试上传
                 </button>
               </div>
+            ) : sessionError?.code === "UNSUPPORTED_SCENE_IMAGE" ? (
+              <div className="action-row">
+                <button className="primary-button loading-cta" type="button" onClick={returnHome}>
+                  返回首页重新选择
+                </button>
+              </div>
+            ) : sessionError ? (
+              <div className="action-row">
+                <button className="primary-button loading-cta" type="button" onClick={enterPractice}>
+                  重试创建练习
+                </button>
+              </div>
             ) : (
-              <button className="primary-button loading-cta" type="button" onClick={enterPractice} disabled={!readyToEnter}>
-                进入练习
+              <button
+                className="primary-button loading-cta"
+                type="button"
+                onClick={enterPractice}
+                disabled={!readyToEnter}
+              >
+                {startingSession ? "正在创建练习…" : "进入练习"}
               </button>
             )}
           </section>

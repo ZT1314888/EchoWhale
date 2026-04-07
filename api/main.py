@@ -14,6 +14,13 @@ from api.routes.v1 import router as v1_router
 
 logger = logging.getLogger(__name__)
 
+settings.validate_runtime()
+logger.info(
+    "Deepgram voice config status: api_key=%s base_url=%s",
+    "set" if settings.deepgram_api_key.strip() else "missing",
+    "set" if settings.deepgram_agent_base_url.strip() else "missing",
+)
+
 
 app = FastAPI(
     title=settings.app_name,

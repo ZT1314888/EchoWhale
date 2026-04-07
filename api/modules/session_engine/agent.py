@@ -1,10 +1,16 @@
+import inspect
 from uuid import uuid4
 
 from api.common.enums import MediaUploadStatus
+from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import InvalidStateError
+from api.common.exceptions import SceneAnalysisUnavailableError
+from api.common.exceptions import UnsupportedSceneImageError
 from api.core.config import settings
 from api.db.media_db import MediaLookup, build_media_repository
 from api.db.session_db import SessionRepository, build_session_repository
+from api.integrations.deepgram import DeepgramSettingsBuilder
+from api.integrations.deepgram import DeepgramTokenIssuer
 from api.integrations.storage.r2 import R2StorageService
 from api.models.message_model import Message
 from api.models.session_model import Session
@@ -12,7 +18,13 @@ from api.modules.coach_engine.service import CoachEngineService
 from api.modules.feedback_engine.service import FeedbackEngineService
 from api.modules.scene_engine.service import SceneEngineService
 from api.modules.session_engine.review_builder import build_session_review
-from api.modules.session_engine.schema import ReplyInput, StartSessionInput
+from api.modules.session_engine.schema import (
+    ReplyInput,
+    StartSessionInput,
+    VoiceBootstrapResult,
+    VoiceCompleteInput,
+    VoiceCompleteResult,
+)
 
 
 class SessionEngineAgent:
@@ -28,6 +40,8 @@ class SessionEngineAgent:
         self.scene_engine = SceneEngineService()
         self.coach_engine = CoachEngineService()
         self.feedback_engine = FeedbackEngineService()
+        self.voice_token_issuer = DeepgramTokenIssuer()
+        self.voice_settings_builder = DeepgramSettingsBuilder()
 
     def start(self, payload: StartSessionInput) -> Session:
         media = self.media_lookup.get_media(payload.media_id)
@@ -38,7 +52,12 @@ class SessionEngineAgent:
             media.storage_key,
             expires_in=settings.r2_signed_url_ttl_seconds,
         )
-        analysis = self.scene_engine.analyze(media.filename, signed_read_url)
+        try:
+            analysis = self.scene_engine.analyze(media.filename, signed_read_url)
+        except UnsupportedSceneImageError:
+            raise
+        except EchoWhaleError as exc:
+            raise SceneAnalysisUnavailableError() from exc
         session = Session(
             id=f"sess_{uuid4().hex[:12]}",
             user_id=payload.user_id,
@@ -46,7 +65,8 @@ class SessionEngineAgent:
             scene=analysis.scene,
             role=analysis.role,
             opener=analysis.opener,
-            labels=analysis.labels,
+            visual_anchors=analysis.visual_anchors,
+            vocab_candidates=analysis.vocab_candidates,
             messages=[Message(role="assistant", text=analysis.opener)],
         )
         return self.session_repository.save_session(session)
@@ -56,11 +76,18 @@ class SessionEngineAgent:
 
     def reply(self, payload: ReplyInput) -> Session:
         session = self.session_repository.get_session(payload.session_id)
-        feedback = self.feedback_engine.review(payload.learner_message, session.scene)
-        coach_reply = self.coach_engine.respond(
+        feedback = self._review_with_context(
+            learner_message=payload.learner_message,
+            scene=session.scene,
+            vocab_candidates=session.vocab_candidates,
+        )
+        coach_reply = self._respond_with_context(
             scene=session.scene,
             role=session.role,
             learner_message=payload.learner_message,
+            visual_anchors=session.visual_anchors,
+            vocab_candidates=session.vocab_candidates,
+            recent_messages=list(session.messages),
         )
         learner_message = Message(role="user", text=payload.learner_message)
 
@@ -85,3 +112,142 @@ class SessionEngineAgent:
 
     def list_history_sessions(self, user_id: str) -> list[Session]:
         return self.session_repository.list_user_sessions(user_id)
+
+    def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
+        session = self.session_repository.get_session(session_id)
+        token, expires_in = self.voice_token_issuer.issue_token(
+            settings.deepgram_agent_token_ttl_seconds
+        )
+        return VoiceBootstrapResult(
+            session_id=session.id,
+            deepgram_access_token=token,
+            expires_in=expires_in,
+            deepgram_ws_url=settings.deepgram_agent_base_url,
+            agent_settings=self.voice_settings_builder.build(session),
+            session=session,
+        )
+
+    def complete_voice_session(self, payload: VoiceCompleteInput) -> VoiceCompleteResult:
+        session = self.session_repository.get_session(payload.session_id)
+        messages = _build_voice_messages(session, payload)
+        updated_session = session.model_copy(
+            update={
+                "messages": messages,
+            }
+        )
+        stored_session = self.session_repository.save_session(updated_session)
+        last_learner_message = _find_latest_user_content(payload)
+        feedback = self._review_with_context(
+            learner_message=last_learner_message,
+            scene=stored_session.scene,
+            vocab_candidates=stored_session.vocab_candidates,
+        )
+        review = build_session_review(stored_session, feedback)
+        stored_review = self.session_repository.save_session_review(review)
+        return VoiceCompleteResult(session=stored_session, review=stored_review)
+
+    def _review_with_context(
+        self,
+        *,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+    ):
+        parameters = inspect.signature(self.feedback_engine.review).parameters
+        if "vocab_candidates" in parameters:
+            return self.feedback_engine.review(learner_message, scene, vocab_candidates)
+        if "labels" in parameters:
+            return self.feedback_engine.review(learner_message, scene, vocab_candidates)
+        return self.feedback_engine.review(learner_message, scene)
+
+    def _respond_with_context(
+        self,
+        *,
+        scene: str,
+        role: str,
+        learner_message: str,
+        visual_anchors: list[str],
+        vocab_candidates: list[str],
+        recent_messages: list[Message],
+    ):
+        parameters = inspect.signature(self.coach_engine.respond).parameters
+        if "visual_anchors" in parameters and "vocab_candidates" in parameters:
+            return self.coach_engine.respond(
+                scene=scene,
+                role=role,
+                learner_message=learner_message,
+                visual_anchors=visual_anchors,
+                vocab_candidates=vocab_candidates,
+                recent_messages=recent_messages,
+            )
+        if "visual_anchors" in parameters:
+            return self.coach_engine.respond(
+                scene=scene,
+                role=role,
+                learner_message=learner_message,
+                visual_anchors=visual_anchors,
+                recent_messages=recent_messages,
+            )
+        if "labels" in parameters or "recent_messages" in parameters:
+            return self.coach_engine.respond(
+                scene=scene,
+                role=role,
+                learner_message=learner_message,
+                labels=visual_anchors,
+                recent_messages=recent_messages,
+            )
+        return self.coach_engine.respond(scene, role, learner_message)
+
+
+def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list[Message]:
+    transcript: list[Message] = []
+    for index, turn in enumerate(payload.conversation):
+        if (
+            index == 0
+            and turn.role == "assistant"
+            and session.messages
+            and session.messages[0].role == "assistant"
+            and turn.content == session.messages[0].text
+        ):
+            transcript.append(session.messages[0])
+            continue
+        transcript.append(
+            Message(
+                role=turn.role,
+                text=turn.content,
+            )
+        )
+
+    if not session.messages:
+        return transcript
+
+    remainder = list(transcript)
+    if remainder and _message_signature(remainder[0]) == _message_signature(session.messages[0]):
+        remainder = remainder[1:]
+
+    overlap = _find_tail_overlap(existing=session.messages, incoming=remainder)
+    return [*session.messages, *remainder[overlap:]]
+
+
+def _find_latest_user_content(payload: VoiceCompleteInput) -> str:
+    for turn in reversed(payload.conversation):
+        if turn.role == "user":
+            return turn.content
+    return payload.conversation[-1].content
+
+
+def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> int:
+    max_overlap = min(len(existing), len(incoming))
+    for size in range(max_overlap, 0, -1):
+        existing_tail = existing[-size:]
+        incoming_head = incoming[:size]
+        if all(
+            _message_signature(left) == _message_signature(right)
+            for left, right in zip(existing_tail, incoming_head, strict=False)
+        ):
+            return size
+    return 0
+
+
+def _message_signature(message: Message) -> tuple[str, str]:
+    return (message.role, message.text)

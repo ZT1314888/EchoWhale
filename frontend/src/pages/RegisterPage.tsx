@@ -30,18 +30,40 @@ export function RegisterPage() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    const normalizedNickname = nickname.trim();
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedNickname) {
+      setError("昵称不能为空");
+      return;
+    }
+
+    if (!normalizedEmail) {
+      setError("邮箱不能为空");
+      return;
+    }
+
+    if (!normalizedPassword) {
+      setError("密码不能为空");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      await auth.register({ nickname, email, password });
+      await auth.register({
+        nickname: normalizedNickname,
+        email: normalizedEmail,
+        password: normalizedPassword,
+      });
       navigate(
         {
-          pathname: "/login",
-          search: location.search,
+          pathname: "/verify-email",
+          search: `?email=${encodeURIComponent(normalizedEmail)}`,
         },
         {
           replace: true,
-          state: { prefillEmail: email },
         },
       );
     } catch (reason) {

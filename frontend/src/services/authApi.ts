@@ -1,4 +1,12 @@
-import type { AppError, AuthCredentials, AuthSession, AuthUser, RegisterPayload } from "../types/app";
+import type {
+  AppError,
+  AuthCredentials,
+  AuthSession,
+  AuthUser,
+  EmailPayload,
+  RegisterPayload,
+  ResetPasswordPayload,
+} from "../types/app";
 
 type ApiResponse<T> = {
   code?: number;
@@ -7,6 +15,7 @@ type ApiResponse<T> = {
 };
 
 type ValidationErrorDetail = {
+  loc?: unknown;
   msg?: string;
 };
 
@@ -148,6 +157,30 @@ async function parseAuthResponse(
   return toAuthSession(payload);
 }
 
+async function expectNoContent(
+  input: string,
+  init: RequestInit,
+  fallbackMessage: string,
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(input, {
+      ...init,
+      credentials: "include",
+    });
+  } catch {
+    throw toError(fallbackMessage);
+  }
+
+  if (!response.ok) {
+    if (response.headers?.get("content-type")?.includes("application/json")) {
+      const payload = (await response.json()) as ApiResponse<unknown>;
+      throw toError(translateAuthMessage(payload.message ?? fallbackMessage));
+    }
+    throw toError(fallbackMessage);
+  }
+}
+
 export async function login(credentials: AuthCredentials): Promise<AuthSession> {
   return parseAuthResponse(
     "/api/v1/auth/login",
@@ -183,12 +216,53 @@ export async function refresh(): Promise<AuthSession> {
 }
 
 export async function logout(): Promise<void> {
-  try {
-    await fetch("/api/v1/auth/logout", {
+  await expectNoContent("/api/v1/auth/logout", { method: "POST" }, "退出登录失败。");
+}
+
+export async function resendVerification(payload: EmailPayload): Promise<void> {
+  await expectNoContent(
+    "/api/v1/auth/resend-verification",
+    {
       method: "POST",
-      credentials: "include",
-    });
-  } catch {
-    throw toError("退出登录失败。");
-  }
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "验证邮件发送失败，请稍后重试。",
+  );
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  await expectNoContent(
+    "/api/v1/auth/verify-email",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    },
+    "邮箱验证失败，请稍后重试。",
+  );
+}
+
+export async function forgotPassword(payload: EmailPayload): Promise<void> {
+  await expectNoContent(
+    "/api/v1/auth/forgot-password",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "密码找回请求失败，请稍后重试。",
+  );
+}
+
+export async function resetPassword(payload: ResetPasswordPayload): Promise<void> {
+  await expectNoContent(
+    "/api/v1/auth/reset-password",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    },
+    "密码重置失败，请稍后重试。",
+  );
 }

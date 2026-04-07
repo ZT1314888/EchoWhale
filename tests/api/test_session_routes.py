@@ -6,14 +6,21 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 
+from api.common.exceptions import AuthenticationError
 from api.common.exceptions import NotFoundError
+from api.common.exceptions import SceneAnalysisUnavailableError
+from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import VoiceTokenError
 from api.main import app
 from api.models.message_model import Message
 from api.models.session_model import Session
+from api.models.user_model import User
 
 try:
+    from api.routes.v1.auth import get_auth_service
     from api.routes.v1.sessions import get_session_service
 except ImportError:  # pragma: no cover - expected during red phase
+    get_auth_service = None
     get_session_service = None
 
 
@@ -22,12 +29,13 @@ class FakeSessionService:
         self.sessions = {
             "sess_123": Session(
                 id="sess_123",
-                user_id="demo-user",
+                user_id="user:user_123",
                 media_id="med_123",
                 scene="coffee_shop",
                 role="barista",
                 opener="Hi there, what can I get started for you today?",
-                labels=["coffee", "menu"],
+                visual_anchors=["counter", "menu board"],
+                vocab_candidates=["coffee", "order"],
                 messages=[
                     Message(
                         id="msg_1",
@@ -35,7 +43,24 @@ class FakeSessionService:
                         text="Hi there, what can I get started for you today?",
                     )
                 ],
-            )
+            ),
+            "sess_no_review": Session(
+                id="sess_no_review",
+                user_id="user:user_123",
+                media_id="med_456",
+                scene="office",
+                role="teammate",
+                opener="Can you give me a quick status update?",
+                visual_anchors=["glass wall", "sofa"],
+                vocab_candidates=["update", "deadline"],
+                messages=[
+                    Message(
+                        id="msg_pending_1",
+                        role="assistant",
+                        text="Can you give me a quick status update?",
+                    )
+                ],
+            ),
         }
         self.reviews = {
             "sess_123": SimpleNamespace(
@@ -63,7 +88,7 @@ class FakeSessionService:
         }
 
     def start_session(self, user_id: str, media_id: str) -> Session:
-        assert user_id == "demo-user"
+        assert user_id == "user:user_123"
         session = Session(
             id="sess_created",
             user_id=user_id,
@@ -71,7 +96,8 @@ class FakeSessionService:
             scene="coffee_shop",
             role="barista",
             opener="Hi there, what can I get started for you today?",
-            labels=["coffee", "menu"],
+            visual_anchors=["counter", "menu board"],
+            vocab_candidates=["coffee", "order"],
             messages=[
                 Message(
                     id="msg_created_1",
@@ -83,13 +109,20 @@ class FakeSessionService:
         self.sessions[session.id] = session
         return session
 
-    def get_session(self, session_id: str) -> Session:
+    def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+        assert owner_id in (None, "user:user_123")
         session = self.sessions.get(session_id)
         if session is None:
             raise NotFoundError(f"Session {session_id} not found")
         return session
 
-    def reply_to_session(self, session_id: str, learner_message: str) -> Session:
+    def reply_to_session(
+        self,
+        session_id: str,
+        learner_message: str,
+        owner_id: str | None = None,
+    ) -> Session:
+        assert owner_id in (None, "user:user_123")
         session = self.get_session(session_id)
         session.messages.append(
             Message(
@@ -112,21 +145,87 @@ class FakeSessionService:
         )
         return session
 
-    def get_session_review(self, session_id: str):
+    def get_session_review(self, session_id: str, owner_id: str | None = None):
+        assert owner_id in (None, "user:user_123")
         review = self.reviews.get(session_id)
         if review is None:
             raise NotFoundError(f"Session review {session_id} not found")
         return review
 
     def list_history_sessions(self, user_id: str) -> list[Session]:
-        assert user_id == "demo-user"
+        assert user_id == "user:user_123"
         return list(self.sessions.values())
 
     def get_history_session_detail(self, user_id: str, session_id: str):
-        assert user_id == "demo-user"
+        assert user_id == "user:user_123"
         session = self.get_session(session_id)
         review = self.get_session_review(session_id)
         return (session, review)
+
+    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+        assert owner_id in (None, "user:user_123")
+        session = self.get_session(session_id)
+        return {
+            "session_id": session.id,
+            "deepgram_access_token": "dg-token",
+            "expires_in": 600,
+            "deepgram_ws_url": "wss://api.deepgram.com/v1/agent/converse",
+            "agent_settings": {
+                "type": "Settings",
+                "agent": {
+                    "language": "en",
+                    "greeting": session.opener,
+                },
+            },
+            "session": session,
+        }
+
+    def complete_voice_session(
+        self,
+        session_id: str,
+        conversation,
+        termination_reason: str,
+        client_diagnostics: dict[str, object] | None = None,
+        owner_id: str | None = None,
+    ):
+        assert owner_id in (None, "user:user_123")
+        assert termination_reason == "user_ended"
+        assert client_diagnostics == {}
+        session = self.get_session(session_id)
+        session.messages = [
+            Message(id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"),
+            Message(id="msg_2", role="user", text="Could I get an iced latte, please?"),
+            Message(id="msg_3", role="assistant", text="Of course. What size would you like?"),
+        ]
+        self.sessions[session_id] = session
+        review = self.get_session_review("sess_123")
+        self.reviews[session_id] = review
+        return {"session": session, "review": review}
+
+
+class FakeAuthService:
+    def get_current_user(self, *, access_token: str) -> User:
+        if access_token != "valid-access-token":
+            raise AuthenticationError("Authentication required")
+        return User(id="user_123", email="learner@example.com", nickname="Echo Learner")
+
+
+class UnsupportedSessionService:
+    def start_session(self, user_id: str, media_id: str) -> Session:
+        raise UnsupportedSceneImageError(
+            "Unsupported scene image",
+            data={"reason": "image_too_uniform", "retryable": False},
+        )
+
+
+class UnavailableSceneSessionService:
+    def start_session(self, user_id: str, media_id: str) -> Session:
+        raise SceneAnalysisUnavailableError()
+
+
+class VoiceBootstrapFailureSessionService(FakeSessionService):
+    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+        raise VoiceTokenError()
 
 
 @pytest.fixture(autouse=True)
@@ -140,6 +239,8 @@ def clear_session_overrides() -> Iterator[None]:
 def client() -> Iterator[TestClient]:
     if get_session_service is not None:
         app.dependency_overrides[get_session_service] = lambda: FakeSessionService()
+    if get_auth_service is not None:
+        app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
 
     with TestClient(app) as test_client:
         yield test_client
@@ -149,6 +250,7 @@ def test_start_session_returns_created_session(client: TestClient) -> None:
     response = client.post(
         "/api/v1/sessions",
         json={"media_id": "med_123"},
+        headers={"Authorization": "Bearer valid-access-token"},
     )
 
     assert response.status_code == 200
@@ -157,17 +259,62 @@ def test_start_session_returns_created_session(client: TestClient) -> None:
     assert body["data"]["session_id"] == "sess_created"
     assert body["data"]["media_id"] == "med_123"
     assert body["data"]["scene"] == "coffee_shop"
+    assert body["data"]["visual_anchors"] == ["counter", "menu board"]
+    assert body["data"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["messages"][0]["message_id"] == "msg_created_1"
 
 
+def test_start_session_returns_unsupported_scene_image_error(client: TestClient) -> None:
+    assert get_session_service is not None
+    app.dependency_overrides[get_session_service] = lambda: UnsupportedSessionService()
+
+    response = client.post(
+        "/api/v1/sessions",
+        json={"media_id": "med_black"},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "code": 1007,
+        "message": "Unsupported scene image",
+        "data": {
+            "reason": "image_too_uniform",
+            "retryable": False,
+        },
+    }
+
+
+def test_start_session_returns_scene_analysis_unavailable_error(client: TestClient) -> None:
+    assert get_session_service is not None
+    app.dependency_overrides[get_session_service] = lambda: UnavailableSceneSessionService()
+
+    response = client.post(
+        "/api/v1/sessions",
+        json={"media_id": "med_busy"},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": 1008,
+        "message": "图片分析暂时不可用，请稍后重试。",
+    }
+
+
 def test_get_session_returns_session_snapshot(client: TestClient) -> None:
-    response = client.get("/api/v1/sessions/sess_123")
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
     assert body["data"]["session_id"] == "sess_123"
     assert body["data"]["role"] == "barista"
+    assert body["data"]["visual_anchors"] == ["counter", "menu board"]
+    assert body["data"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["messages"][0]["text"] == "Hi there, what can I get started for you today?"
 
 
@@ -175,6 +322,7 @@ def test_reply_to_session_returns_updated_messages_and_feedback(client: TestClie
     response = client.post(
         "/api/v1/sessions/sess_123/reply",
         json={"learner_message": "Could I get an iced latte, please?"},
+        headers={"Authorization": "Bearer valid-access-token"},
     )
 
     assert response.status_code == 200
@@ -193,6 +341,7 @@ def test_reply_to_session_rejects_blank_message(client: TestClient) -> None:
     response = client.post(
         "/api/v1/sessions/sess_123/reply",
         json={"learner_message": "   "},
+        headers={"Authorization": "Bearer valid-access-token"},
     )
 
     assert response.status_code == 400
@@ -201,7 +350,10 @@ def test_reply_to_session_rejects_blank_message(client: TestClient) -> None:
 
 
 def test_get_session_review_returns_review_snapshot(client: TestClient) -> None:
-    response = client.get("/api/v1/sessions/sess_123/review")
+    response = client.get(
+        "/api/v1/sessions/sess_123/review",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -212,32 +364,103 @@ def test_get_session_review_returns_review_snapshot(client: TestClient) -> None:
     assert body["data"]["feedback"]["useful_words"]["words"] == ["latte", "size", "iced"]
 
 
+def test_bootstrap_voice_session_returns_deepgram_configuration(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/bootstrap",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    assert body["data"]["session_id"] == "sess_123"
+    assert body["data"]["deepgram_access_token"] == "dg-token"
+    assert body["data"]["deepgram_ws_url"] == "wss://api.deepgram.com/v1/agent/converse"
+    assert body["data"]["agent_settings"]["type"] == "Settings"
+    assert body["data"]["session"]["session_id"] == "sess_123"
+
+
+def test_bootstrap_voice_session_returns_voice_token_error(client: TestClient) -> None:
+    assert get_session_service is not None
+    app.dependency_overrides[get_session_service] = lambda: VoiceBootstrapFailureSessionService()
+
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/bootstrap",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "code": 1302,
+        "message": "Deepgram token 获取失败",
+    }
+
+
+def test_complete_voice_session_persists_transcript_and_returns_review(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": [
+                {"role": "assistant", "content": "Hi there, what can I get started for you today?"},
+                {"role": "user", "content": "Could I get an iced latte, please?"},
+                {"role": "assistant", "content": "Of course. What size would you like?"},
+            ],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    assert body["data"]["session"]["session_id"] == "sess_123"
+    assert [message["text"] for message in body["data"]["session"]["messages"]] == [
+        "Hi there, what can I get started for you today?",
+        "Could I get an iced latte, please?",
+        "Of course. What size would you like?",
+    ]
+    assert body["data"]["review"]["title"] == "本轮回响"
+
+
 def test_list_history_sessions_returns_real_history_entries(client: TestClient) -> None:
-    response = client.get("/api/v1/history/sessions")
+    response = client.get(
+        "/api/v1/history/sessions",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
     assert len(body["data"]) == 1
     assert body["data"][0]["id"] == "sess_123"
+    assert [entry["id"] for entry in body["data"]] == ["sess_123"]
     assert body["data"][0]["scene_title"] == "咖啡店柜台点单"
+    assert body["data"][0]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"][0]["review_title"] == "本轮回响"
     assert body["data"][0]["review_summary"] == "下一轮先说主需求，再补一条口味或杯型细节。"
 
 
 def test_get_history_session_returns_session_and_review(client: TestClient) -> None:
-    response = client.get("/api/v1/history/sessions/sess_123")
+    response = client.get(
+        "/api/v1/history/sessions/sess_123",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
     assert body["data"]["entry"]["id"] == "sess_123"
+    assert body["data"]["entry"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["session"]["session_id"] == "sess_123"
+    assert body["data"]["session"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["review"]["title"] == "本轮回响"
 
 
 def test_get_session_returns_not_found_error(client: TestClient) -> None:
-    response = client.get("/api/v1/sessions/sess_missing")
+    response = client.get(
+        "/api/v1/sessions/sess_missing",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
 
     assert response.status_code == 404
     assert response.json() == {

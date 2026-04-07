@@ -62,6 +62,7 @@ export function PracticeSessionPage() {
       await completeVoiceSession(sessionId, {
         conversation: result.conversation,
         terminationReason: result.terminationReason,
+        clientDiagnostics: result.clientDiagnostics,
       });
       setConversationStarted(false);
       navigate(`/session/${sessionId}/review`);

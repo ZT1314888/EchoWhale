@@ -4,12 +4,16 @@ import pytest
 
 from api.common.enums import MediaUploadStatus
 from api.common.exceptions import EchoWhaleError
+from api.common.exceptions import NotFoundError
+from api.common.exceptions import SceneAnalysisUnavailableError
+from api.common.exceptions import UnsupportedSceneImageError
 from api.models.media_model import Media
 from api.models.message_model import Message
 from api.models.session_model import Session
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.session_engine.agent import SessionEngineAgent
 from api.modules.session_engine.schema import ReplyInput, StartSessionInput
+from api.modules.session_engine.schema import VoiceCompleteInput, VoiceConversationTurn
 from api.modules.session_engine.service import SessionEngineService
 
 
@@ -103,8 +107,22 @@ class FakeSceneEngine:
             scene="coffee_shop",
             role="barista",
             opener="Hi there, what can I get started for you today?",
-            labels=["coffee"],
+            visual_anchors=["counter", "menu board"],
+            vocab_candidates=["latte", "order"],
             confidence=0.83,
+        )
+
+
+class FailingSceneEngine:
+    def analyze(self, filename: str, media_url: str) -> SceneAnalysisResult:
+        raise EchoWhaleError("vision provider unavailable")
+
+
+class UnsupportedSceneEngine:
+    def analyze(self, filename: str, media_url: str) -> SceneAnalysisResult:
+        raise UnsupportedSceneImageError(
+            "Unsupported scene image",
+            data={"reason": "image_too_uniform", "retryable": False},
         )
 
 
@@ -139,20 +157,133 @@ def test_start_session_uses_signed_media_url_for_scene_analysis(
     ]
 
 
+def test_start_session_propagates_scene_engine_failure_without_creating_fallback_session(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    media = Media(
+        id="med_uploaded",
+        user_id="demo-user",
+        filename="mystery-upload.png",
+        content_type="image/png",
+        file_size=128,
+        storage_key="media/demo-user/2026/04/01/med_uploaded-mystery-upload.png",
+        upload_status=MediaUploadStatus.uploaded,
+    )
+    signer = FakeReadUrlSigner()
+    agent = SessionEngineAgent(
+        media_lookup=FakeMediaLookup(media),
+        session_repository=fake_session_repository,
+        read_url_signer=signer,
+    )
+    agent.scene_engine = FailingSceneEngine()
+
+    with pytest.raises(SceneAnalysisUnavailableError, match="图片分析暂时不可用，请稍后重试。"):
+        agent.start(StartSessionInput(user_id="demo-user", media_id=media.id))
+
+    assert fake_session_repository.sessions == {}
+
+
+def test_start_session_propagates_unsupported_scene_image_without_creating_session(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    media = Media(
+        id="med_uploaded",
+        user_id="demo-user",
+        filename="black.png",
+        content_type="image/png",
+        file_size=128,
+        storage_key="media/demo-user/2026/04/01/med_uploaded-black.png",
+        upload_status=MediaUploadStatus.uploaded,
+    )
+    signer = FakeReadUrlSigner()
+    agent = SessionEngineAgent(
+        media_lookup=FakeMediaLookup(media),
+        session_repository=fake_session_repository,
+        read_url_signer=signer,
+    )
+    agent.scene_engine = UnsupportedSceneEngine()
+
+    with pytest.raises(UnsupportedSceneImageError) as exc_info:
+        agent.start(StartSessionInput(user_id="demo-user", media_id=media.id))
+
+    assert exc_info.value.data == {
+        "reason": "image_too_uniform",
+        "retryable": False,
+    }
+    assert fake_session_repository.sessions == {}
+
+
 class FailingCoachEngine:
     def respond(self, scene: str, role: str, learner_message: str):
         raise RuntimeError("coach provider unavailable")
 
 
 class FakeFeedbackEngine:
-    def review(self, learner_message: str, scene: str):
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, list[str]]] = []
+
+    def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
         from api.modules.feedback_engine.schema import FeedbackResult
+
+        self.calls.append((learner_message, scene, vocab_candidates))
 
         return FeedbackResult(
             grammar="Your meaning is clear.",
             more_natural="Could I get an iced latte, please?",
-            useful_words=["latte", "size", "iced"],
+            useful_words=vocab_candidates or ["latte", "size", "iced"],
         )
+
+
+class RecordingCoachEngine:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str, list[str], list[str], list[Message]]] = []
+
+    def respond(
+        self,
+        scene: str,
+        role: str,
+        learner_message: str,
+        visual_anchors: list[str],
+        vocab_candidates: list[str],
+        recent_messages: list[Message],
+    ):
+        self.calls.append(
+            (
+                scene,
+                role,
+                learner_message,
+                visual_anchors,
+                vocab_candidates,
+                recent_messages,
+            )
+        )
+        from api.modules.coach_engine.schema import CoachReplyResult
+
+        return CoachReplyResult(text=f"Let's keep practicing with {visual_anchors[0]}.")
+
+
+class FakeVoiceTokenIssuer:
+    def __init__(self) -> None:
+        self.calls: list[int] = []
+
+    def issue_token(self, ttl_seconds: int) -> tuple[str, float]:
+        self.calls.append(ttl_seconds)
+        return ("dg-token", float(ttl_seconds))
+
+
+class FakeVoiceSettingsBuilder:
+    def __init__(self) -> None:
+        self.calls: list[Session] = []
+
+    def build(self, session: Session) -> dict[str, object]:
+        self.calls.append(session)
+        return {
+            "type": "Settings",
+            "agent": {
+                "language": "en",
+                "greeting": session.opener,
+            },
+        }
 
 
 def test_reply_does_not_persist_partial_turn_when_generation_fails(
@@ -165,7 +296,8 @@ def test_reply_does_not_persist_partial_turn_when_generation_fails(
         scene="coffee_shop",
         role="barista",
         opener="Hi there, what can I get started for you today?",
-        labels=["coffee"],
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "order"],
         messages=[
             Message(
                 id="msg_1",
@@ -184,3 +316,194 @@ def test_reply_does_not_persist_partial_turn_when_generation_fails(
 
     stored = fake_session_repository.get_session("sess_123")
     assert [message.id for message in stored.messages] == ["msg_1"]
+
+
+def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_labels",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    fake_session_repository.save_session(session)
+    feedback_engine = FakeFeedbackEngine()
+    coach_engine = RecordingCoachEngine()
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = feedback_engine
+    agent.coach_engine = coach_engine
+
+    updated = agent.reply(
+        ReplyInput(session_id="sess_labels", learner_message="I would like a latte")
+    )
+
+    assert feedback_engine.calls == [
+        ("I would like a latte", "coffee_shop", ["latte", "menu"])
+    ]
+    assert coach_engine.calls[0][3] == ["counter", "menu board"]
+    assert coach_engine.calls[0][4] == ["latte", "menu"]
+    assert [message.text for message in coach_engine.calls[0][5]] == [
+        "Hi there, what can I get started for you today?"
+    ]
+    assert updated.messages[-1].feedback == {
+        "grammar": "Your meaning is clear.",
+        "more_natural": "Could I get an iced latte, please?",
+        "useful_words": ["latte", "menu"],
+    }
+
+
+def test_bootstrap_voice_session_returns_deepgram_token_and_settings(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_voice",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    fake_session_repository.save_session(session)
+    token_issuer = FakeVoiceTokenIssuer()
+    settings_builder = FakeVoiceSettingsBuilder()
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.voice_token_issuer = token_issuer
+    agent.voice_settings_builder = settings_builder
+
+    bootstrap = agent.bootstrap_voice_session("sess_voice")
+
+    assert bootstrap.session_id == "sess_voice"
+    assert bootstrap.deepgram_access_token == "dg-token"
+    assert bootstrap.expires_in > 0
+    assert bootstrap.agent_settings["type"] == "Settings"
+    assert bootstrap.session.messages[0].text == "Hi there, what can I get started for you today?"
+    assert token_issuer.calls
+    assert settings_builder.calls == [session]
+
+
+def test_complete_voice_session_persists_transcript_and_generates_review(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_voice_complete",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            ),
+            Message(
+                id="msg_existing_1",
+                role="user",
+                text="Can you recommend something warm?",
+            ),
+            Message(
+                id="msg_existing_2",
+                role="assistant",
+                text="Sure. Our hot latte is popular today.",
+            ),
+        ],
+    )
+    fake_session_repository.save_session(session)
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+
+    completed = agent.complete_voice_session(
+        VoiceCompleteInput(
+            session_id="sess_voice_complete",
+            conversation=[
+                VoiceConversationTurn(role="assistant", content="Hi there, what can I get started for you today?"),
+                VoiceConversationTurn(role="user", content="Could I get an iced latte, please?"),
+                VoiceConversationTurn(role="assistant", content="Of course. What size would you like?"),
+            ],
+            termination_reason="user_ended",
+        )
+    )
+
+    assert [message.role for message in completed.session.messages] == [
+        "assistant",
+        "user",
+        "assistant",
+        "user",
+        "assistant",
+    ]
+    assert [message.text for message in completed.session.messages] == [
+        "Hi there, what can I get started for you today?",
+        "Can you recommend something warm?",
+        "Sure. Our hot latte is popular today.",
+        "Could I get an iced latte, please?",
+        "Of course. What size would you like?",
+    ]
+    assert completed.review.session_id == "sess_voice_complete"
+    assert fake_session_repository.reviews["sess_voice_complete"].feedback.grammar.body == "Your meaning is clear."
+
+
+def test_get_session_rejects_owner_mismatch(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_owned",
+        user_id="user:user_123",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
+        messages=[],
+    )
+    fake_session_repository.save_session(session)
+    service = SessionEngineService(session_repository=fake_session_repository)
+
+    with pytest.raises(NotFoundError, match="Session sess_owned not found"):
+        service.get_session("sess_owned", owner_id="user:user_999")
+
+
+def test_get_history_detail_rejects_owner_mismatch(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_history",
+        user_id="user:user_123",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
+        messages=[],
+    )
+    fake_session_repository.save_session(session)
+    fake_session_repository.reviews["sess_history"] = object()
+    service = SessionEngineService(session_repository=fake_session_repository)
+
+    with pytest.raises(NotFoundError, match="Session sess_history not found"):
+        service.get_history_session_detail("user:user_999", "sess_history")

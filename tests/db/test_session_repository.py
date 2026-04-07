@@ -34,7 +34,8 @@ def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_path) -
         scene="coffee_shop",
         role="barista",
         opener="Hi there, what can I get started for you today?",
-        labels=["coffee"],
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
         messages=[
             Message(
                 id="msg_1",
@@ -58,7 +59,9 @@ def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_path) -
 
     assert loaded.id == session.id
     assert loaded.media_id == session.media_id
-    assert loaded.labels == ["coffee"]
+    assert loaded.visual_anchors == ["counter"]
+    assert loaded.vocab_candidates == ["coffee"]
+    assert loaded.labels == ["counter", "coffee"]
     assert [message.id for message in loaded.messages] == ["msg_1"]
     assert [message.text for message in updated.messages] == [
         "Hi there, what can I get started for you today?",
@@ -85,7 +88,8 @@ def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path) -> No
         scene="coffee_shop",
         role="barista",
         opener="Hi there, what can I get started for you today?",
-        labels=["coffee"],
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
         messages=[
             Message(
                 id="msg_1",
@@ -141,7 +145,8 @@ def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_path) -> 
         scene="coffee_shop",
         role="barista",
         opener="Hi there, what can I get started for you today?",
-        labels=["coffee"],
+        visual_anchors=["counter"],
+        vocab_candidates=["coffee"],
         messages=[],
         created_at=datetime.now(timezone.utc) - timedelta(hours=1),
         updated_at=datetime.now(timezone.utc) - timedelta(hours=1),
@@ -153,7 +158,8 @@ def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_path) -> 
         scene="office",
         role="coworker",
         opener="How is the feature going?",
-        labels=["office"],
+        visual_anchors=["glass wall"],
+        vocab_candidates=["office"],
         messages=[],
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -165,3 +171,29 @@ def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_path) -> 
     listed = repository.list_user_sessions("demo-user")
 
     assert [session.id for session in listed] == ["sess_late", "sess_early"]
+
+
+def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_labels(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'session-legacy.db'}"
+    engine = create_database_engine(database_url)
+    create_all_tables(engine)
+    repository = SqlAlchemySessionRepository(create_session_factory(engine))
+
+    session = Session(
+        id="sess_legacy",
+        user_id="demo-user",
+        media_id="med_legacy",
+        scene="office",
+        role="coworker",
+        opener="Can we review the timeline?",
+        labels=["meeting", "deadline"],
+        messages=[],
+    )
+
+    repository.save_session(session)
+
+    loaded = repository.get_session("sess_legacy")
+
+    assert loaded.visual_anchors == []
+    assert loaded.vocab_candidates == ["meeting", "deadline"]
+    assert loaded.labels == ["meeting", "deadline"]

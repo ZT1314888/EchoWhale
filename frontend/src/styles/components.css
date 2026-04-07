@@ -798,31 +798,16 @@
   display: block;
   height: 144px;
   border-radius: 14px;
-  background-size: cover;
-  background-position: center;
+  overflow: hidden;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
 }
 
-.sample-scene--coffee {
-  background:
-    linear-gradient(180deg, rgba(11, 27, 39, 0.12), transparent 34%),
-    linear-gradient(0deg, rgba(60, 39, 18, 0.58), rgba(60, 39, 18, 0.58)),
-    radial-gradient(circle at 16% 20%, rgba(242, 234, 220, 0.95) 0 10%, transparent 11%),
-    linear-gradient(90deg, #6e4d33 0 18%, #c79a70 18% 37%, #e9d2b7 37% 54%, #8d6443 54% 71%, #5d3d28 71% 100%);
-}
-
-.sample-scene--office {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 30%),
-    radial-gradient(circle at 18% 20%, rgba(113, 157, 121, 0.92) 0 11%, transparent 12%),
-    linear-gradient(135deg, rgba(250, 250, 250, 0.96) 0 28%, rgba(229, 235, 240, 0.92) 28% 54%, rgba(168, 179, 190, 0.92) 54% 75%, rgba(124, 136, 148, 0.96) 75% 100%);
-}
-
-.sample-scene--street {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(86, 98, 111, 0.04) 0 48%, rgba(86, 98, 111, 0.44) 48% 100%),
-    linear-gradient(90deg, rgba(206, 214, 220, 0.94) 0 16%, rgba(133, 141, 149, 0.94) 16% 30%, rgba(219, 225, 229, 0.94) 30% 49%, rgba(96, 103, 111, 0.94) 49% 64%, rgba(180, 186, 191, 0.94) 64% 79%, rgba(120, 128, 135, 0.94) 79% 100%);
+.sample-scene-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
 }
 
 .home-sample-grid .sample-scene-card {

@@ -6,6 +6,15 @@ class FeedbackEngineService:
     def __init__(self) -> None:
         self.agent = FeedbackEngineAgent()
 
-    def review(self, learner_message: str, scene: str) -> FeedbackResult:
-        payload = FeedbackInput(learner_message=learner_message, scene=scene)
+    def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+    ) -> FeedbackResult:
+        payload = FeedbackInput(
+            learner_message=learner_message,
+            scene=scene,
+            vocab_candidates=vocab_candidates,
+        )
         return self.agent.run(payload)

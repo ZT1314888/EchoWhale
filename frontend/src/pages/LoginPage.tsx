@@ -31,10 +31,23 @@ export function LoginPage() {
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    const normalizedEmail = email.trim();
+    const normalizedPassword = password.trim();
+
+    if (!normalizedEmail) {
+      setError("邮箱不能为空");
+      return;
+    }
+
+    if (!normalizedPassword) {
+      setError("密码不能为空");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      await auth.login({ email, password });
+      await auth.login({ email: normalizedEmail, password: normalizedPassword });
       setLoginSucceeded(true);
     } catch (reason) {
       const typed = reason as { message?: string };
@@ -69,13 +82,6 @@ export function LoginPage() {
               <p className="muted-text">轻量登录后，继续你刚才停下来的那一轮场景口语练习。</p>
             </div>
 
-            <button className="social-button" type="button">
-              使用 Google 继续（暂未开放）
-            </button>
-            <button className="social-button social-button--dark" type="button">
-              使用 GitHub 继续（暂未开放）
-            </button>
-
             <form className="auth-form" onSubmit={onSubmit}>
               <label className="field-label" htmlFor="login-email">
                 邮箱
@@ -102,6 +108,13 @@ export function LoginPage() {
               </button>
             </form>
 
+            <button
+              className="link-button"
+              type="button"
+              onClick={() => navigate("/forgot-password", { state: { prefillEmail: email } })}
+            >
+              忘记密码？
+            </button>
             <p className="muted-text">第一次来到这里？一步创建账号，把每次练习的回响都保存下来。</p>
             <button className="link-button" type="button" onClick={() => navigate("/register")}>
               去注册

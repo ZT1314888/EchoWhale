@@ -8,11 +8,13 @@
 - `module`: `frontend_app`
 - `cross_module`: `yes`
 - `owner`: `codex`
-- `updated_at`: `2026-03-31`
+- `updated_at`: `2026-04-01`
 
 ## 背景
 
 EchoWhale 目前已经有后端模块骨架，但前端仍停留在空目录状态，设计资产也没有固定真源。继续直接写前端页面会导致页面结构、组件命名和视觉约定不断漂移，后续既难以复用，也难以把页面回写成可持续维护的原型。
+
+当前这条 feature 已进一步收敛：设计真源不再是英文草稿或中文 demo，而是 `designs/echowhale-mvp.pen` 的中文六屏定稿；前端目标也从“先做 demo 演示态”切换为“按定稿逐屏复刻”。
 
 ## 用户故事
 
@@ -52,19 +54,25 @@ EchoWhale 目前已经有后端模块骨架，但前端仍停留在空目录状�
 - `[x]` `docs/control/` 中存在 Pencil 工作流规范
 - `[x]` `docs/modules/frontend_app/` 中存在设计到代码映射文档
 - `[x]` `frontend/` 已初始化 React + Tailwind + Vitest 工程骨架
-- `[ ]` 首个页面壳层已对齐上传、练习、反馈、历史四类核心信息
+- `[x]` `.pen` 已完成新的上传、启动、会话、练后反馈、登录、注册六屏原型流
+- `[x]` `.pen` 六个核心 screen 已完成中文化并成为当前真源
+- `[x]` React 页面已按中文 `.pen` 六屏逐屏回贴，旧 demo 壳层已移除
 
 ## 测试记录
 
-- `feature_test_passed` 的证据：尚未满足；当前只完成了 Pencil 页面截图检查与布局体检
+- `feature_test_passed` 的证据：已满足基础前端验证门槛；`frontend/` 下 `npm test` 与 `npm run build` 已通过，Pencil 六屏也已完成截图检查与布局体检
 - 主要测试命令：`npm test`、`npm run build`、Pencil `snapshot_layout`
 - 已完成验证：
-  - `designs/echowhale-mvp.pen` 已生成并包含 `Screen/Home`、`Screen/PracticeSession`、`Screen/HistoryReview` 和组件库
-  - 对三个页面执行了 Pencil 截图检查
-  - 对三个页面执行了 `snapshot_layout(..., problemsOnly=true)`，结果均为 `No layout problems.`
+  - `designs/echowhale-mvp.pen` 已重构为 `Screen/HomeUpload`、`Screen/PracticeLaunch`、`Screen/PracticeSession`、`Screen/PostPracticeReview`、`Screen/Login`、`Screen/Register`
+  - 对首页、启动页、会话页、练后反馈页、登录页、注册页执行了 Pencil 截图检查
+  - 对设计文件执行了 `snapshot_layout(..., problemsOnly=true)`，结果为 `No layout problems.`
+- 本轮新增事实：
+  - `designs/echowhale-mvp.pen` 已把六个核心 screen 的标题、按钮、字段和说明文案切成简体中文
+  - `frontend/src/App.tsx` 与 `frontend/src/styles.css` 已移除旧 demo 信息架构，改为按中文定稿六屏复刻
+  - `frontend/` 已完成 `npm test` 与 `npm run build`，当前六屏复刻原型具备可运行、可验证的前端交付形态
 - 已知缺口：
   - 当前后端 API 路由未补齐，前端只能验证契约占位和结构映射
-  - 前端测试和构建尚未形成可引用的最终通过证据
+  - 逐屏“前端页面 vs `.pen` 截图”的人工对照说明仍需在后续评审中继续细化
 
 ## 合并与关闭
 
