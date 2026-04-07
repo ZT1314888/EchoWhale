@@ -87,8 +87,34 @@ class FakeSessionService:
             )
         }
 
-    def start_session(self, user_id: str, media_id: str) -> Session:
+    def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
         assert user_id == "user:user_123"
+        if sample_scene_id is not None:
+            session = Session(
+                id="sess_sample_created",
+                user_id=user_id,
+                media_id=None,
+                scene="coffee_shop",
+                role="friendly barista",
+                opener="Hello! What would you like to order today?",
+                visual_anchors=["counter", "pastry case"],
+                vocab_candidates=["latte", "size"],
+                messages=[
+                    Message(
+                        id="msg_sample_1",
+                        role="assistant",
+                        text="Hello! What would you like to order today?",
+                    )
+                ],
+            )
+            self.sessions[session.id] = session
+            return session
+
         session = Session(
             id="sess_created",
             user_id=user_id,
@@ -211,7 +237,12 @@ class FakeAuthService:
 
 
 class UnsupportedSessionService:
-    def start_session(self, user_id: str, media_id: str) -> Session:
+    def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
         raise UnsupportedSceneImageError(
             "Unsupported scene image",
             data={"reason": "image_too_uniform", "retryable": False},
@@ -219,7 +250,12 @@ class UnsupportedSessionService:
 
 
 class UnavailableSceneSessionService:
-    def start_session(self, user_id: str, media_id: str) -> Session:
+    def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
         raise SceneAnalysisUnavailableError()
 
 
@@ -262,6 +298,35 @@ def test_start_session_returns_created_session(client: TestClient) -> None:
     assert body["data"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["messages"][0]["message_id"] == "msg_created_1"
+
+
+def test_start_sample_session_returns_created_session(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions",
+        json={"sample_scene_id": "coffee"},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    assert body["data"]["session_id"] == "sess_sample_created"
+    assert body["data"]["media_id"] is None
+    assert body["data"]["scene"] == "coffee_shop"
+    assert body["data"]["role"] == "friendly barista"
+    assert body["data"]["messages"][0]["text"] == "Hello! What would you like to order today?"
+
+
+def test_start_session_rejects_payload_with_both_media_and_sample(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions",
+        json={"media_id": "med_123", "sample_scene_id": "coffee"},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
 
 
 def test_start_session_returns_unsupported_scene_image_error(client: TestClient) -> None:

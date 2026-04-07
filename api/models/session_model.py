@@ -9,7 +9,7 @@ from api.models.message_model import Message
 class Session(BaseModel):
     id: str
     user_id: str
-    media_id: str
+    media_id: str | None
     scene: str
     role: str
     opener: str

@@ -42,7 +42,7 @@ class SessionRecord(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
-    media_id: Mapped[str] = mapped_column(String(64), index=True)
+    media_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     scene: Mapped[str] = mapped_column(String(128))
     role: Mapped[str] = mapped_column(String(128))
     opener: Mapped[str] = mapped_column(Text)

@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/frontend_app`
 - `owner`: `codex`
-- `updated_at`: `2026-04-06`
+- `updated_at`: `2026-04-07`
 
 ## 模块目标
 
@@ -19,6 +19,7 @@
 - 已完成边界：首页 `index` 已改为独立品牌顶栏 + 上传主卡 + 三列示例场景区，并回到与 `.pen` 设计稿一致的轻量首屏结构
 - 已完成边界：`StartupLoading` 已升级为独立动态分析页，包含中心品牌 logo、扩散圆环、阶段型进度 pill 和完成后才激活的练习入口
 - 已完成边界：首页本地图片选择后，会在 `StartupLoading` 页发起真实 `POST /api/v1/media/upload`，上传成功后再调用真实 `POST /api/v1/sessions` 进入练习页
+- 已完成边界：首页示例场景不再创建 mock `session-*`；现在会调用真实 `POST /api/v1/sessions` with `sample_scene_id`，进入真实 `sess_*` 练习页并可继续使用语音、review 与 history
 - 已完成边界：首页上传链路已适配统一响应壳，媒体上传成功从 `data` 解包、失败从 `message` 读取错误信息
 - 已完成边界：`PostPracticeReview` 与 `History` 已切到真实 review/history API，不再依赖 mock 数据
 - 已完成边界：练后反馈页失败态已在前端收口，不再透传后端英文 `Session review ... not found`
@@ -57,6 +58,7 @@
 - `[x]` 将首页从共享应用壳层收口为设计稿 `index` 的独立首屏布局
 - `[x]` 将启动分析页从静态加载卡重构为独立动态分析舞台
 - `[x]` 接入真实 `media/upload` API，形成“选图 -> loading 上传 -> 进入练习”的前端主路径
+- `[x]` 将首页示例场景切到真实 session start API，示例练习流不再依赖 mock session id
 - `[x]` 将练习页切到真实 session `start/get/reply` API，上传后的练习流不再依赖 mock session
 - `[x]` 将练后反馈页切到真实 review API
 - `[x]` 将历史页切到真实 history 列表与详情 API
@@ -107,6 +109,7 @@
 - `2026-04-06`：loading 页新增 session 创建失败处理；unsupported scene image 会停留当前页并提示用户返回首页换图
 - `2026-04-06`：将 `PracticeSession` 从双栏文本补充页重构为沉浸式单栏语音页，移除文本输入框并新增浏览器语音转写、`Talk To Your Agent / End Conversation` 入口与结束后 review 跳转
 - `2026-04-06`：将 `PracticeSession` 从浏览器 `Web Speech API` 切到 Deepgram Voice Agent，新增 `voice/bootstrap` / `voice/complete` API 消费与 `useDeepgramVoiceAgent` 实时会话 hook
+- `2026-04-07`：新增 `createSamplePracticeSession`，并将首页示例场景从 mock `session-*` 切到真实 `sess_*` 会话创建；sample 练习页现在可继续走真实 voice/review/history
 
 
 

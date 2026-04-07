@@ -16,6 +16,7 @@
 
 - 现有实现：`api/modules/session_engine/`、`api/db/session_db.py`、`api/routes/v1/sessions.py`
 - 已完成边界：`start/get/reply/review` 主链路已落地，session/message/review 已切到数据库持久化，前端上传成功后会创建真实 session 并进入真实练习页
+- 已完成边界：首页示例场景现在也会调用真实 `POST /api/v1/sessions` 创建 `sess_*` 会话；sample session 允许 `media_id = null`，后续继续复用同一套 `get/reply/voice/review/history` 链路
 - 已完成边界：session 创建前仍会校验媒体必须为 `uploaded`，场景分析继续通过签名 URL 读取媒体对象
 - 已完成边界：history 列表与详情读取接口已落地，前端 `PostPracticeReview` / `History` 已切到真实后端读取
 - 已完成边界：已修复 session 初始 opener 持久化时的父子写入顺序问题，`POST /api/v1/sessions` 不再因 `session_messages_session_id_fkey` 在严格 FK 数据库下报错
@@ -74,4 +75,5 @@
 - `2026-04-06`：补齐 Voice Agent `agent.think.provider` / `endpoint` schema，并新增 `/api/v1/deepgram/think/chat/completions` 代理国内 OpenAI-compatible think 网关
 - `2026-04-07`：为国内无 VPN 场景移除实时 `agent.think.endpoint` 依赖，改回原生 `provider + prompt`，并在前端补初始化/思考超时保护
 - `2026-04-07`：补齐低延迟音频热路径，前端改为低延迟采集 + 连续播放排程，后端下发 Flux turn-taking 参数和 output sample rate 配置
+- `2026-04-07`：新增 sample scene session 契约；`POST /api/v1/sessions` 支持 `sample_scene_id`，session repository 允许 `media_id` 为空，首页示例场景改为真实后端会话启动
 

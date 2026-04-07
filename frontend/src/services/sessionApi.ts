@@ -36,7 +36,7 @@ type BackendSessionMessage = {
 
 type BackendSession = {
   session_id: string;
-  media_id: string;
+  media_id: string | null;
   scene: string;
   role: string;
   opener: string;
@@ -192,13 +192,25 @@ function toReviewSummary(review: BackendReview): ReviewSummary {
 }
 
 export async function createPracticeSession(mediaId: string): Promise<{ sessionId: string }> {
+  return createSession({ media_id: mediaId });
+}
+
+export async function createSamplePracticeSession(
+  sampleSceneId: "coffee" | "office" | "street",
+): Promise<{ sessionId: string }> {
+  return createSession({ sample_scene_id: sampleSceneId });
+}
+
+async function createSession(
+  payloadBody: { media_id: string } | { sample_scene_id: "coffee" | "office" | "street" },
+): Promise<{ sessionId: string }> {
   let response: Response;
 
   try {
     response = await apiFetch("/api/v1/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ media_id: mediaId }),
+      body: JSON.stringify(payloadBody),
     });
   } catch {
     throw toError("创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");

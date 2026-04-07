@@ -176,6 +176,10 @@ describe("App", () => {
   it("navigates from upload to loading to the session route", async () => {
     vi.useFakeTimers();
     installSpeechRecognitionMock();
+    vi.spyOn(sessionApi, "createSamplePracticeSession").mockResolvedValue({
+      sessionId: "sess_real",
+    });
+    vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
     await renderApp();
 
     fireEvent.click(screen.getByRole("button", { name: /使用示例场景/i }));
@@ -193,6 +197,8 @@ describe("App", () => {
     vi.useRealTimers();
     fireEvent.click(enterButton);
     expect(await screen.findByRole("button", { name: /talk to your agent/i })).toBeInTheDocument();
+    expect(sessionApi.createSamplePracticeSession).toHaveBeenCalledWith("coffee");
+    expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
     expect(screen.getByText(/咖啡店柜台点单/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /发送回答/i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/文本补充/i)).not.toBeInTheDocument();

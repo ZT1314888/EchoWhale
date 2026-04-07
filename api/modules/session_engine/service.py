@@ -29,8 +29,17 @@ class SessionEngineService:
             read_url_signer=read_url_signer,
         )
 
-    def start_session(self, user_id: str, media_id: str) -> Session:
-        payload = StartSessionInput(user_id=user_id, media_id=media_id)
+    def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
+        payload = StartSessionInput(
+            user_id=user_id,
+            media_id=media_id,
+            sample_scene_id=sample_scene_id,
+        )
         return self.agent.start(payload)
 
     def get_session(self, session_id: str, owner_id: str | None = None) -> Session:

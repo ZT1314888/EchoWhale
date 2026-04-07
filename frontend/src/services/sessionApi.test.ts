@@ -4,6 +4,7 @@ import {
   bootstrapVoiceSession,
   completeVoiceSession,
   createPracticeSession,
+  createSamplePracticeSession,
   getPracticeSession,
   submitPracticeTurn,
 } from "./sessionApi";
@@ -38,6 +39,39 @@ describe("sessionApi", () => {
     const result = await createPracticeSession("med_123");
 
     expect(result).toEqual({ sessionId: "sess_123" });
+  });
+
+  it("starts a sample practice session from a sample scene id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        message: "Success",
+        data: {
+          session_id: "sess_sample",
+          media_id: null,
+          scene: "coffee_shop",
+          role: "friendly barista",
+          opener: "Hello! What would you like to order today?",
+          status: "active",
+          visual_anchors: ["counter", "pastry case"],
+          vocab_candidates: ["latte", "size"],
+          messages: [],
+        },
+      }),
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await createSamplePracticeSession("coffee");
+
+    expect(result).toEqual({ sessionId: "sess_sample" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ sample_scene_id: "coffee" }),
+      }),
+    );
   });
 
   it("maps unsupported scene images to a localized frontend error", async () => {

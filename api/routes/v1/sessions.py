@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
 from api.common.responses import ApiResponse
@@ -15,14 +15,27 @@ from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
 from api.modules.session_engine.service import SessionEngineService
-from api.modules.session_engine.schema import LearnerMessagePayload, VoiceConversationTurn
+from api.modules.session_engine.schema import (
+    LearnerMessagePayload,
+    SampleSceneId,
+    VoiceConversationTurn,
+)
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 class StartSessionRequest(BaseModel):
-    media_id: str
+    media_id: str | None = None
+    sample_scene_id: SampleSceneId | None = None
+
+    @model_validator(mode="after")
+    def validate_start_source(self) -> "StartSessionRequest":
+        has_media = self.media_id is not None
+        has_sample = self.sample_scene_id is not None
+        if has_media == has_sample:
+            raise ValueError("Exactly one of media_id or sample_scene_id is required")
+        return self
 
 
 class SessionReplyRequest(LearnerMessagePayload):
@@ -53,7 +66,7 @@ class SessionMessageResponse(BaseModel):
 
 class SessionResponse(BaseModel):
     session_id: str
-    media_id: str
+    media_id: str | None
     scene: str
     role: str
     opener: str
@@ -182,6 +195,7 @@ def start_session(
     session = session_service.start_session(
         user_id=owner.owner_id,
         media_id=payload.media_id,
+        sample_scene_id=payload.sample_scene_id,
     )
     response = ApiResponse.success(data=SessionResponse.from_session(session))
     apply_visitor_cookie(response=response, owner=owner)

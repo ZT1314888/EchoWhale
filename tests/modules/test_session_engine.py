@@ -26,6 +26,11 @@ class FakeMediaLookup:
         return self.media
 
 
+class ExplodingMediaLookup:
+    def get_media(self, media_id: str) -> Media:
+        raise AssertionError("sample preset startup must not read media records")
+
+
 class FakeSessionRepository:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
@@ -126,6 +131,11 @@ class UnsupportedSceneEngine:
         )
 
 
+class ExplodingSceneEngine:
+    def analyze(self, filename: str, media_url: str) -> SceneAnalysisResult:
+        raise AssertionError("sample preset startup must not call scene_engine.analyze")
+
+
 def test_start_session_uses_signed_media_url_for_scene_analysis(
     fake_session_repository: FakeSessionRepository,
 ) -> None:
@@ -211,6 +221,26 @@ def test_start_session_propagates_unsupported_scene_image_without_creating_sessi
         "retryable": False,
     }
     assert fake_session_repository.sessions == {}
+
+
+def test_start_session_from_sample_preset_bypasses_media_lookup_and_scene_engine(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    agent = SessionEngineAgent(
+        media_lookup=ExplodingMediaLookup(),
+        session_repository=fake_session_repository,
+    )
+    agent.scene_engine = ExplodingSceneEngine()
+
+    session = agent.start(StartSessionInput(user_id="demo-user", sample_scene_id="coffee"))
+
+    assert session.user_id == "demo-user"
+    assert session.media_id is None
+    assert session.scene == "coffee_shop"
+    assert session.role
+    assert session.vocab_candidates
+    assert [message.text for message in session.messages] == [session.opener]
+    assert fake_session_repository.get_session(session.id).scene == "coffee_shop"
 
 
 class FailingCoachEngine:

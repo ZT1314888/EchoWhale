@@ -18,6 +18,7 @@ from api.modules.coach_engine.service import CoachEngineService
 from api.modules.feedback_engine.service import FeedbackEngineService
 from api.modules.scene_engine.service import SceneEngineService
 from api.modules.session_engine.review_builder import build_session_review
+from api.modules.session_engine.sample_presets import get_sample_session_preset
 from api.modules.session_engine.schema import (
     ReplyInput,
     StartSessionInput,
@@ -44,6 +45,22 @@ class SessionEngineAgent:
         self.voice_settings_builder = DeepgramSettingsBuilder()
 
     def start(self, payload: StartSessionInput) -> Session:
+        if payload.sample_scene_id is not None:
+            preset = get_sample_session_preset(payload.sample_scene_id)
+            session = Session(
+                id=f"sess_{uuid4().hex[:12]}",
+                user_id=payload.user_id,
+                media_id=None,
+                scene=preset.scene,
+                role=preset.role,
+                opener=preset.opener,
+                visual_anchors=list(preset.visual_anchors),
+                vocab_candidates=list(preset.vocab_candidates),
+                messages=[Message(role="assistant", text=preset.opener)],
+            )
+            return self.session_repository.save_session(session)
+
+        assert payload.media_id is not None
         media = self.media_lookup.get_media(payload.media_id)
         if media.upload_status != MediaUploadStatus.uploaded:
             raise InvalidStateError(f"Media {media.id} is not uploaded")

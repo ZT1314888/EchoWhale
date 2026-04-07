@@ -19,7 +19,14 @@ export async function createPracticeSession(draft: UploadDraft): Promise<{ sessi
     return sessionApi.createPracticeSession(mediaId);
   }
 
-  return mockApi.createPracticeSession(draft);
+  const sampleSceneId = draft.sampleSceneId;
+  if (!sampleSceneId) {
+    throw {
+      code: "SESSION_START_FAILED",
+      message: "示例场景缺失，请返回首页重新选择。",
+    };
+  }
+  return sessionApi.createSamplePracticeSession(sampleSceneId);
 }
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {

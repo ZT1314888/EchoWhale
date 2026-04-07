@@ -1,14 +1,26 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
 
 
+SampleSceneId = Literal["coffee", "office", "street"]
+
+
 class StartSessionInput(BaseModel):
     user_id: str
-    media_id: str
+    media_id: str | None = None
+    sample_scene_id: SampleSceneId | None = None
+
+    @model_validator(mode="after")
+    def validate_start_source(self) -> "StartSessionInput":
+        has_media = self.media_id is not None
+        has_sample = self.sample_scene_id is not None
+        if has_media == has_sample:
+            raise ValueError("Exactly one of media_id or sample_scene_id is required")
+        return self
 
 
 class LearnerMessagePayload(BaseModel):

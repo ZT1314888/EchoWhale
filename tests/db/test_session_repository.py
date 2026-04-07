@@ -197,3 +197,36 @@ def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_la
     assert loaded.visual_anchors == []
     assert loaded.vocab_candidates == ["meeting", "deadline"]
     assert loaded.labels == ["meeting", "deadline"]
+
+
+def test_sqlalchemy_session_repository_persists_sample_sessions_without_media_id(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'session-sample.db'}"
+    engine = create_database_engine(database_url)
+    create_all_tables(engine)
+    repository = SqlAlchemySessionRepository(create_session_factory(engine))
+
+    session = Session(
+        id="sess_sample",
+        user_id="demo-user",
+        media_id=None,
+        scene="coffee_shop",
+        role="friendly barista",
+        opener="Hello! What would you like to order today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["latte"],
+        messages=[
+            Message(
+                id="msg_sample_1",
+                role="assistant",
+                text="Hello! What would you like to order today?",
+            )
+        ],
+    )
+
+    repository.save_session(session)
+
+    loaded = repository.get_session("sess_sample")
+
+    assert loaded.media_id is None
+    assert loaded.scene == "coffee_shop"
+    assert loaded.messages[0].text == "Hello! What would you like to order today?"
