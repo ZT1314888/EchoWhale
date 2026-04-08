@@ -440,4 +440,22 @@ describe("authApi", () => {
       }),
     });
   });
+
+  it("maps invalid password reset links to a localized message", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        mockJsonErrorResponse(400, "Password reset link is invalid or expired"),
+      ) as typeof fetch;
+
+    await expect(
+      authApi.resetPassword({
+        token: "expired-token",
+        password: "renew1234",
+      }),
+    ).rejects.toMatchObject({
+      code: "AUTH_API_FAILED",
+      message: "重置链接已失效或已过期，请重新申请。",
+    });
+  });
 });

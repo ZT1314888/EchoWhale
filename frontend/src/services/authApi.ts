@@ -78,6 +78,7 @@ function translateAuthMessage(
   const exactTranslations: Record<string, string> = {
     "Invalid email or password": "邮箱/密码错误",
     "Please verify your email before logging in": "请先完成邮箱验证后再登录",
+    "Password reset link is invalid or expired": "重置链接已失效或已过期，请重新申请。",
     "Email already registered": "该邮箱已被注册",
     "Too many login attempts. Please try again later.": "登录尝试次数过多，请稍后再试",
     "Too many registration attempts. Please try again later.": "注册尝试次数过多，请稍后再试",
