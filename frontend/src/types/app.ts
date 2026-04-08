@@ -66,6 +66,7 @@ export type SessionSummary = {
   voiceTitle: string;
   voiceBody: string;
   messages: PracticeMessage[];
+  totalMessages?: number;
 };
 
 export type ReviewSummary = {
@@ -92,6 +93,21 @@ export type HistoryDetail = {
   entry: HistoryEntry;
   session: SessionSummary;
   review: ReviewSummary;
+};
+
+export type CursorPage = {
+  hasMore: boolean;
+  nextCursor: string | null;
+};
+
+export type HistoryEntriesPage = {
+  items: HistoryEntry[];
+  page: CursorPage;
+};
+
+export type HistoryReplayPage = {
+  items: PracticeMessage[];
+  page: CursorPage;
 };
 
 export type PracticeTurnInput = {
@@ -139,6 +155,11 @@ export type RegisterPayload = AuthCredentials & {
 
 export type EmailPayload = {
   email: string;
+};
+
+export type VerifyEmailPayload = {
+  email: string;
+  code: string;
 };
 
 export type TokenPayload = {

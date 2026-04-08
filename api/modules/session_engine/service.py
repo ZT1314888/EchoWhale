@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from pydantic import ValidationError as PydanticValidationError
+
 from api.common.exceptions import NotFoundError
+from api.common.exceptions import ValidationError
+from api.models.message_model import Message
 from api.models.session_model import Session
 from api.db.media_db import MediaLookup
 from api.db.session_db import SessionRepository
@@ -63,6 +67,47 @@ class SessionEngineService:
     def list_history_sessions(self, user_id: str) -> list[Session]:
         return self.agent.list_history_sessions(user_id)
 
+    def list_history_sessions_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Session], bool, str | None]:
+        return self.agent.list_history_sessions_page(
+            user_id,
+            limit=limit,
+            cursor=cursor,
+        )
+
+    def list_history_reviews(self, session_ids: list[str]) -> dict[str, SessionReview]:
+        return self.agent.list_history_reviews(session_ids)
+
+    def get_history_session_overview(
+        self,
+        user_id: str,
+        session_id: str,
+    ) -> tuple[Session, SessionReview, int]:
+        session, review, total_messages = self.agent.get_history_session_overview(session_id)
+        self._ensure_owner(session, user_id)
+        return (session, review, total_messages)
+
+    def list_history_session_messages(
+        self,
+        user_id: str,
+        session_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Message], bool, str | None]:
+        session = self.agent.get_session_head(session_id)
+        self._ensure_owner(session, user_id)
+        return self.agent.list_history_session_messages_page(
+            session_id,
+            limit=limit,
+            cursor=cursor,
+        )
+
     def get_history_session_detail(self, user_id: str, session_id: str) -> tuple[Session, SessionReview]:
         session = self._ensure_owner(self.agent.get(session_id), user_id)
         return (session, self.agent.get_review(session_id))
@@ -84,12 +129,15 @@ class SessionEngineService:
         owner_id: str | None = None,
     ) -> VoiceCompleteResult:
         self._ensure_owner(self.agent.get(session_id), owner_id)
-        payload = VoiceCompleteInput(
-            session_id=session_id,
-            conversation=conversation,
-            termination_reason=termination_reason,
-            client_diagnostics=client_diagnostics or {},
-        )
+        try:
+            payload = VoiceCompleteInput(
+                session_id=session_id,
+                conversation=conversation,
+                termination_reason=termination_reason,
+                client_diagnostics=client_diagnostics or {},
+            )
+        except PydanticValidationError as exc:
+            raise ValidationError("Validation error") from exc
         return self.agent.complete_voice_session(payload)
 
     def _ensure_owner(self, session: Session, owner_id: str | None) -> Session:

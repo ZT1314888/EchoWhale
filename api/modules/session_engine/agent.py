@@ -1,4 +1,5 @@
 import inspect
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from api.common.enums import MediaUploadStatus
@@ -6,6 +7,7 @@ from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import InvalidStateError
 from api.common.exceptions import SceneAnalysisUnavailableError
 from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
 from api.db.media_db import MediaLookup, build_media_repository
 from api.db.session_db import SessionRepository, build_session_repository
@@ -13,6 +15,9 @@ from api.integrations.deepgram import DeepgramSettingsBuilder
 from api.integrations.deepgram import DeepgramTokenIssuer
 from api.integrations.storage.r2 import R2StorageService
 from api.models.message_model import Message
+from api.models.review_model import SessionReview
+from api.models.runtime_model import SessionEvent
+from api.models.runtime_model import VoiceSessionFact
 from api.models.session_model import Session
 from api.modules.coach_engine.service import CoachEngineService
 from api.modules.feedback_engine.service import FeedbackEngineService
@@ -91,6 +96,9 @@ class SessionEngineAgent:
     def get(self, session_id: str) -> Session:
         return self.session_repository.get_session(session_id)
 
+    def get_session_head(self, session_id: str) -> Session:
+        return self.session_repository.get_session_head(session_id)
+
     def reply(self, payload: ReplyInput) -> Session:
         session = self.session_repository.get_session(payload.session_id)
         feedback = self._review_with_context(
@@ -130,12 +138,52 @@ class SessionEngineAgent:
     def list_history_sessions(self, user_id: str) -> list[Session]:
         return self.session_repository.list_user_sessions(user_id)
 
+    def list_history_sessions_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Session], bool, str | None]:
+        cursor_value = _decode_history_cursor(cursor)
+        sessions, has_more, next_cursor_value = self.session_repository.list_user_sessions_page(
+            user_id,
+            limit=limit,
+            cursor=cursor_value,
+        )
+        next_cursor = _encode_history_cursor(next_cursor_value) if next_cursor_value else None
+        return (sessions, has_more, next_cursor)
+
+    def list_history_reviews(self, session_ids: list[str]) -> dict[str, SessionReview]:
+        if not session_ids:
+            return {}
+        return self.session_repository.list_session_reviews_by_ids(session_ids)
+
+    def get_history_session_overview(self, session_id: str) -> tuple[Session, SessionReview, int]:
+        session = self.get_session_head(session_id)
+        review = self.get_review(session_id)
+        total_messages = self.session_repository.count_session_messages(session_id)
+        return (session, review, total_messages)
+
+    def list_history_session_messages_page(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Message], bool, str | None]:
+        return self.session_repository.list_session_messages_page(
+            session_id,
+            limit=limit,
+            cursor=cursor,
+        )
+
     def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
         session = self.session_repository.get_session(session_id)
         token, expires_in = self.voice_token_issuer.issue_token(
             settings.deepgram_agent_token_ttl_seconds
         )
-        return VoiceBootstrapResult(
+        bootstrap = VoiceBootstrapResult(
             session_id=session.id,
             deepgram_access_token=token,
             expires_in=expires_in,
@@ -143,6 +191,25 @@ class SessionEngineAgent:
             agent_settings=self.voice_settings_builder.build(session),
             session=session,
         )
+        self.session_repository.save_voice_session_fact(
+            VoiceSessionFact(
+                session_id=session.id,
+                status="active",
+                transcript_turn_count=len(session.messages),
+            )
+        )
+        self.session_repository.save_session_event(
+            SessionEvent(
+                session_id=session.id,
+                event_type="voice_bootstrapped",
+                stage="voice_active",
+                payload={
+                    "expires_in": expires_in,
+                    "output_sample_rate": settings.deepgram_agent_output_sample_rate,
+                },
+            )
+        )
+        return bootstrap
 
     def complete_voice_session(self, payload: VoiceCompleteInput) -> VoiceCompleteResult:
         session = self.session_repository.get_session(payload.session_id)
@@ -152,15 +219,56 @@ class SessionEngineAgent:
                 "messages": messages,
             }
         )
-        stored_session = self.session_repository.save_session(updated_session)
         last_learner_message = _find_latest_user_content(payload)
+        if last_learner_message is None:
+            raise AppValidationError("Validation error")
         feedback = self._review_with_context(
             learner_message=last_learner_message,
-            scene=stored_session.scene,
-            vocab_candidates=stored_session.vocab_candidates,
+            scene=updated_session.scene,
+            vocab_candidates=updated_session.vocab_candidates,
         )
-        review = build_session_review(stored_session, feedback)
-        stored_review = self.session_repository.save_session_review(review)
+        review = build_session_review(updated_session, feedback)
+        existing_voice_fact = self.session_repository.get_latest_voice_session_fact(payload.session_id)
+        voice_fact = VoiceSessionFact(
+            session_id=payload.session_id,
+            status="completed",
+            termination_reason=payload.termination_reason,
+            transcript_turn_count=len(payload.conversation),
+            client_diagnostics=dict(payload.client_diagnostics),
+            started_at=(
+                existing_voice_fact.started_at
+                if existing_voice_fact is not None
+                else updated_session.created_at
+            ),
+            completed_at=review.updated_at,
+            updated_at=review.updated_at,
+        )
+        events = [
+            SessionEvent(
+                session_id=payload.session_id,
+                event_type="voice_finalized",
+                stage="review_ready",
+                payload={
+                    "termination_reason": payload.termination_reason,
+                    "conversation_turn_count": len(payload.conversation),
+                    "client_diagnostics": dict(payload.client_diagnostics),
+                },
+                created_at=review.updated_at,
+            ),
+            SessionEvent(
+                session_id=payload.session_id,
+                event_type="review_built",
+                stage="review_ready",
+                payload={"review_title": review.title},
+                created_at=review.updated_at,
+            ),
+        ]
+        stored_session, stored_review = self.session_repository.finalize_voice_session(
+            session=updated_session,
+            review=review,
+            voice_fact=voice_fact,
+            events=events,
+        )
         return VoiceCompleteResult(session=stored_session, review=stored_review)
 
     def _review_with_context(
@@ -246,11 +354,11 @@ def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list
     return [*session.messages, *remainder[overlap:]]
 
 
-def _find_latest_user_content(payload: VoiceCompleteInput) -> str:
+def _find_latest_user_content(payload: VoiceCompleteInput) -> str | None:
     for turn in reversed(payload.conversation):
         if turn.role == "user":
             return turn.content
-    return payload.conversation[-1].content
+    return None
 
 
 def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> int:
@@ -268,3 +376,24 @@ def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> i
 
 def _message_signature(message: Message) -> tuple[str, str]:
     return (message.role, message.text)
+
+
+def _encode_history_cursor(value: tuple[datetime, str]) -> str:
+    updated_at, session_id = value
+    normalized = updated_at.astimezone(timezone.utc)
+    return f"{normalized.isoformat()}|{session_id}"
+
+
+def _decode_history_cursor(cursor: str | None) -> tuple[datetime, str] | None:
+    if cursor is None:
+        return None
+    timestamp, _, session_id = cursor.partition("|")
+    if not timestamp or not session_id:
+        raise AppValidationError("Validation error")
+    try:
+        parsed = datetime.fromisoformat(timestamp)
+    except ValueError as exc:
+        raise AppValidationError("Validation error") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return (parsed, session_id)

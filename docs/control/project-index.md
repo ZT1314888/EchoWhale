@@ -10,9 +10,9 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/deepgram_voice_agent/feature.md`
-- 本轮结论：语音练习页已从浏览器本地转写切到 Deepgram Voice Agent；后端已新增 `voice/bootstrap` 与 `voice/complete` 链路用于下发 token/settings 与回写 transcript/review
-- 当前主要阻塞：真实 Deepgram token / 麦克风 / 浏览器播放联调仍需补 smoke；scene live 输出仍需补更多真实样本评估
+- 最新归档：`docs/features/auth_email_code_verification/feature.md`
+- 本轮结论：auth 注册验证已从邮件链接切到 6 位邮箱验证码；后端新增 Redis 验证码存储与邮箱/IP 发送频控，前端验证页改为手动输入验证码，SMTP mailer 已开放真实配置入口
+- 当前主要阻塞：真实 Redis / 阿里云 SMTP 联调仍需补 smoke；Deepgram token / 麦克风 / 浏览器播放联调也仍需补系统级样本验证
 
 ## 状态词
 
@@ -41,14 +41,14 @@
 | Area | Docs Path | Current Status | Exit Gate | Merge Target | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `platform_foundation` | `docs/modules/platform_foundation/status.md` | `building` | `module_test_passed` | `integration/system` | `ApiResponse` 与全局异常处理已落地，`/api/v1/*` 统一响应壳已形成，`/health` 保持裸探针 |
-| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、待验证注册、验证/找回闭环、refresh cookie、运行时自动续期和 `/history` 登录守卫已落地；当前剩余 OAuth 与匿名数据绑定策略 |
+| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、待验证注册、验证码激活、Redis 频控、refresh cookie、运行时自动续期和 `/history` 登录守卫已落地；当前剩余 OAuth、真实 Redis/SMTP smoke 与匿名数据绑定策略 |
 | `media_upload` | `docs/modules/media_upload/status.md` | `building` | `module_test_passed` | `integration/system` | 上传/查询/access-url 接口、PG 持久化、统一响应壳与前端 loading 真上传桥接已落地；当前功能剩余真实私有 R2 联调、签名 URL 访问确认与密钥轮换 |
 | `scene_engine` | `docs/modules/scene_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/scene_engine/` 已存在 |
 | `coach_engine` | `docs/modules/coach_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/coach_engine/` 已存在 |
 | `feedback_engine` | `docs/modules/feedback_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/feedback_engine/` 已存在 |
 | `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | start/get/reply/review 与 voice bootstrap/complete API 已落地；当前剩余系统级联调 |
-| `history_review` | `docs/modules/history_review/status.md` | `building` | `module_test_passed` | `integration/system` | history 列表/详情与练后 review 读取已落地，并已切到真实登录用户范围；当前剩余分页和 richer review 策略 |
-| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层已落地，首页选图会走真实 upload + session + review/history；登录注册、refresh 恢复、昵称菜单与 history 守卫已切真；练习页已改成沉浸式单栏语音入口并接入 Deepgram Voice Agent |
+| `history_review` | `docs/modules/history_review/status.md` | `building` | `module_test_passed` | `integration/system` | history 列表 cursor 分页、详情元信息与消息回放分页已落地，并已切到真实登录用户范围；当前剩余筛选和 richer review 策略 |
+| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层已落地，首页选图会走真实 upload + session + review/history；登录注册、refresh 恢复、昵称菜单与 history 守卫已切真；练习页已改成左侧鲸鱼 logo 主舞台 + 右侧实时对话的双栏语音入口并接入 Deepgram Voice Agent |
 | `infra_delivery` | `docs/modules/infra_delivery/status.md` | `planned` | `module_test_passed` | `integration/system` | `infra/` 仍以预留结构为主 |
 
 ## 模块清单

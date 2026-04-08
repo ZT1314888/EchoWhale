@@ -10,32 +10,38 @@ afterEach(() => {
 });
 
 describe("historyApi", () => {
-  it("maps backend history list items into frontend history entries", async () => {
+  it("maps backend history list payload into a paged result", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         code: 200,
         message: "Success",
-        data: [
-          {
-            id: "sess_123",
-            practiced_at: "2026-04-04 15:20",
-            status: "已完成 1 轮",
-            scene_title: "咖啡店柜台点单",
-            role_label: "店员对话",
-            preview: "你已经说清楚主要需求。",
-            tags: ["coffee", "menu"],
-            review_title: "本轮回响",
-            review_summary: "下一轮再补一条细节。",
+        data: {
+          items: [
+            {
+              id: "sess_123",
+              practiced_at: "2026-04-04 15:20",
+              status: "已完成 1 轮",
+              scene_title: "咖啡店柜台点单",
+              role_label: "店员对话",
+              preview: "你已经说清楚主要需求。",
+              tags: ["coffee", "menu"],
+              review_title: "本轮回响",
+              review_summary: "下一轮再补一条细节。",
+            },
+          ],
+          page: {
+            has_more: true,
+            next_cursor: "cursor_123",
           },
-        ],
+        },
       }),
     }) as typeof fetch;
 
-    const entries = await historyApi.listHistorySessions();
+    const result = await historyApi.listHistorySessions({ limit: 20 });
 
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toEqual({
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toEqual({
       id: "sess_123",
       practicedAt: "2026-04-04 15:20",
       status: "已完成 1 轮",
@@ -46,9 +52,11 @@ describe("historyApi", () => {
       reviewTitle: "本轮回响",
       reviewSummary: "下一轮再补一条细节。",
     });
+    expect(result.page.hasMore).toBe(true);
+    expect(result.page.nextCursor).toBe("cursor_123");
   });
 
-  it("maps backend history detail into frontend detail data", async () => {
+  it("maps backend history detail into overview data without replay messages", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -73,14 +81,9 @@ describe("historyApi", () => {
             role: "barista",
             opener: "Hi there, what can I get started for you today?",
             status: "active",
-            labels: ["coffee", "menu"],
-            messages: [
-              {
-                message_id: "msg_1",
-                role: "assistant",
-                text: "Hi there, what can I get started for you today?",
-              },
-            ],
+            visual_anchors: ["counter", "menu board"],
+            vocab_candidates: ["coffee", "menu"],
+            total_messages: 12,
           },
           review: {
             session_id: "sess_123",
@@ -112,6 +115,54 @@ describe("historyApi", () => {
 
     expect(detail.entry.reviewTitle).toBe("本轮回响");
     expect(detail.session.id).toBe("sess_123");
+    expect(detail.session.totalMessages).toBe(12);
     expect(detail.review.feedback.moreNatural.body).toBe("Could I get an iced latte, please?");
+  });
+
+  it("maps backend replay messages into paged playback data", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        message: "Success",
+        data: {
+          items: [
+            {
+              message_id: "msg_2",
+              role: "user",
+              text: "Could I get an iced latte, please?",
+            },
+            {
+              message_id: "msg_3",
+              role: "assistant",
+              text: "Of course. What size would you like?",
+            },
+          ],
+          page: {
+            has_more: true,
+            next_cursor: "msg_2",
+          },
+        },
+      }),
+    }) as typeof fetch;
+
+    const replay = await historyApi.getHistorySessionMessages("sess_123", { limit: 20 });
+
+    expect(replay.items).toEqual([
+      {
+        id: "msg_2",
+        role: "learner",
+        label: "你 · 本轮回答",
+        content: "Could I get an iced latte, please?",
+      },
+      {
+        id: "msg_3",
+        role: "coach",
+        label: "教练 · 追问",
+        content: "Of course. What size would you like?",
+      },
+    ]);
+    expect(replay.page.hasMore).toBe(true);
+    expect(replay.page.nextCursor).toBe("msg_2");
   });
 });

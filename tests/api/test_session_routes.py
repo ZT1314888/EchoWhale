@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -26,6 +27,8 @@ except ImportError:  # pragma: no cover - expected during red phase
 
 class FakeSessionService:
     def __init__(self) -> None:
+        earlier = datetime(2026, 4, 4, 15, 20, tzinfo=timezone.utc)
+        later = earlier + timedelta(hours=2)
         self.sessions = {
             "sess_123": Session(
                 id="sess_123",
@@ -43,6 +46,37 @@ class FakeSessionService:
                         text="Hi there, what can I get started for you today?",
                     )
                 ],
+                created_at=earlier,
+                updated_at=earlier,
+            ),
+            "sess_456": Session(
+                id="sess_456",
+                user_id="user:user_123",
+                media_id="med_789",
+                scene="office",
+                role="teammate",
+                opener="Can you give me a quick status update?",
+                visual_anchors=["glass wall", "meeting room"],
+                vocab_candidates=["update", "timeline"],
+                messages=[
+                    Message(
+                        id="msg_10",
+                        role="assistant",
+                        text="Can you give me a quick status update?",
+                    ),
+                    Message(
+                        id="msg_11",
+                        role="user",
+                        text="We shipped authentication, and upload is in progress.",
+                    ),
+                    Message(
+                        id="msg_12",
+                        role="assistant",
+                        text="Nice. Can you share expected completion date?",
+                    ),
+                ],
+                created_at=later,
+                updated_at=later,
             ),
             "sess_no_review": Session(
                 id="sess_no_review",
@@ -60,6 +94,8 @@ class FakeSessionService:
                         text="Can you give me a quick status update?",
                     )
                 ],
+                created_at=later + timedelta(minutes=5),
+                updated_at=later + timedelta(minutes=5),
             ),
         }
         self.reviews = {
@@ -84,7 +120,29 @@ class FakeSessionService:
                         body="下一轮试着在一句主回应后再补一句细节。",
                     ),
                 ),
-            )
+            ),
+            "sess_456": SimpleNamespace(
+                session_id="sess_456",
+                title="本轮复盘",
+                highlight="你先说结果再补进度，结构更清楚。",
+                next_try="下一轮补一句风险或阻塞，会更完整。",
+                feedback=SimpleNamespace(
+                    grammar=SimpleNamespace(title="Grammar", body="Tense usage is clear."),
+                    more_natural=SimpleNamespace(
+                        title="More Natural",
+                        body="We have finished auth and upload is still in progress.",
+                    ),
+                    useful_words=SimpleNamespace(
+                        title="Useful Words",
+                        words=["progress", "timeline", "blocker"],
+                        body="把这些词带进状态汇报会更专业。",
+                    ),
+                    next_step=SimpleNamespace(
+                        title="Next Step",
+                        body="下一轮试着加入一句风险说明。",
+                    ),
+                ),
+            ),
         }
 
     def start_session(
@@ -181,6 +239,61 @@ class FakeSessionService:
     def list_history_sessions(self, user_id: str) -> list[Session]:
         assert user_id == "user:user_123"
         return list(self.sessions.values())
+
+    def list_history_sessions_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Session], str | None, bool]:
+        assert user_id == "user:user_123"
+        ordered = [
+            self.sessions["sess_456"],
+            self.sessions["sess_123"],
+        ]
+        start = 0
+        if cursor is not None:
+            ids = [session.id for session in ordered]
+            start = ids.index(cursor) + 1 if cursor in ids else len(ordered)
+        page = ordered[start : start + limit]
+        has_more = (start + limit) < len(ordered)
+        next_cursor = page[-1].id if has_more and page else None
+        return (page, has_more, next_cursor)
+
+    def list_history_reviews(self, session_ids: list[str]):
+        return {
+            session_id: review
+            for session_id, review in self.reviews.items()
+            if session_id in session_ids
+        }
+
+    def get_history_session_overview(self, user_id: str, session_id: str):
+        assert user_id == "user:user_123"
+        session = self.get_session(session_id)
+        review = self.get_session_review(session_id)
+        return (session, review, len(session.messages))
+
+    def list_history_session_messages(
+        self,
+        user_id: str,
+        session_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Message], bool, str | None]:
+        assert user_id == "user:user_123"
+        session = self.get_session(session_id)
+        messages = list(session.messages)
+        if cursor is not None:
+            ids = [message.id for message in messages]
+            cutoff = ids.index(cursor) if cursor in ids else 0
+            messages = messages[:cutoff]
+        start = max(len(messages) - limit, 0)
+        page = messages[start:]
+        has_more = start > 0
+        next_before = page[0].id if has_more and page else None
+        return (page, has_more, next_before)
 
     def get_history_session_detail(self, user_id: str, session_id: str):
         assert user_id == "user:user_123"
@@ -487,25 +600,68 @@ def test_complete_voice_session_persists_transcript_and_returns_review(client: T
     assert body["data"]["review"]["title"] == "本轮回响"
 
 
-def test_list_history_sessions_returns_real_history_entries(client: TestClient) -> None:
+def test_complete_voice_session_rejects_empty_conversation_payload(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": [],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_complete_voice_session_rejects_payload_without_user_turn(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": [
+                {"role": "assistant", "content": "Hi there, what can I get started for you today?"}
+            ],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_list_history_sessions_returns_paginated_history_entries(client: TestClient) -> None:
     response = client.get(
-        "/api/v1/history/sessions",
+        "/api/v1/history/sessions?limit=1",
         headers={"Authorization": "Bearer valid-access-token"},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["code"] == 200
-    assert len(body["data"]) == 1
-    assert body["data"][0]["id"] == "sess_123"
-    assert [entry["id"] for entry in body["data"]] == ["sess_123"]
-    assert body["data"][0]["scene_title"] == "咖啡店柜台点单"
-    assert body["data"][0]["vocab_candidates"] == ["coffee", "order"]
-    assert body["data"][0]["review_title"] == "本轮回响"
-    assert body["data"][0]["review_summary"] == "下一轮先说主需求，再补一条口味或杯型细节。"
+    assert len(body["data"]["items"]) == 1
+    assert body["data"]["items"][0]["id"] == "sess_456"
+    assert body["data"]["page"]["has_more"] is True
+    assert body["data"]["page"]["next_cursor"] is not None
+
+    next_cursor = body["data"]["page"]["next_cursor"]
+    second_response = client.get(
+        f"/api/v1/history/sessions?limit=1&cursor={next_cursor}",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+    second_body = second_response.json()
+    assert second_response.status_code == 200
+    assert [entry["id"] for entry in second_body["data"]["items"]] == ["sess_123"]
+    assert second_body["data"]["items"][0]["scene_title"] == "咖啡店柜台点单"
+    assert second_body["data"]["items"][0]["vocab_candidates"] == ["coffee", "order"]
+    assert second_body["data"]["items"][0]["review_title"] == "本轮回响"
+    assert second_body["data"]["items"][0]["review_summary"] == "下一轮先说主需求，再补一条口味或杯型细节。"
+    assert second_body["data"]["page"]["has_more"] is False
 
 
-def test_get_history_session_returns_session_and_review(client: TestClient) -> None:
+def test_get_history_session_returns_overview_and_review(client: TestClient) -> None:
     response = client.get(
         "/api/v1/history/sessions/sess_123",
         headers={"Authorization": "Bearer valid-access-token"},
@@ -518,7 +674,31 @@ def test_get_history_session_returns_session_and_review(client: TestClient) -> N
     assert body["data"]["entry"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["session"]["session_id"] == "sess_123"
     assert body["data"]["session"]["visual_anchors"] == ["counter", "menu board"]
+    assert body["data"]["session"]["total_messages"] == 1
     assert body["data"]["review"]["title"] == "本轮回响"
+
+
+def test_get_history_session_messages_returns_paginated_replay(client: TestClient) -> None:
+    response = client.get(
+        "/api/v1/history/sessions/sess_456/messages?limit=2",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    assert [item["message_id"] for item in body["data"]["items"]] == ["msg_11", "msg_12"]
+    assert body["data"]["page"]["has_more"] is True
+    assert body["data"]["page"]["next_cursor"] == "msg_11"
+
+    second_response = client.get(
+        "/api/v1/history/sessions/sess_456/messages?limit=2&cursor=msg_11",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+    second_body = second_response.json()
+    assert second_response.status_code == 200
+    assert [item["message_id"] for item in second_body["data"]["items"]] == ["msg_10"]
+    assert second_body["data"]["page"]["has_more"] is False
 
 
 def test_get_session_returns_not_found_error(client: TestClient) -> None:

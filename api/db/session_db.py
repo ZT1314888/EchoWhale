@@ -4,13 +4,27 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, delete, func, select
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import SessionStatus
 from api.common.exceptions import NotFoundError
 from api.db.database import Base, SessionFactory, get_session_factory
 from api.models.message_model import Message
+from api.models.runtime_model import SessionEvent
+from api.models.runtime_model import VoiceSessionFact
 from api.models.review_model import PracticeFeedback, SessionReview
 from api.models.session_model import Session
 
@@ -30,11 +44,50 @@ class SessionRepository(Protocol):
         review: SessionReview,
     ) -> Session: ...
 
+    def finalize_voice_session(
+        self,
+        *,
+        session: Session,
+        review: SessionReview,
+        voice_fact: VoiceSessionFact,
+        events: list[SessionEvent],
+    ) -> tuple[Session, SessionReview]: ...
+
     def save_session_review(self, review: SessionReview) -> SessionReview: ...
 
     def get_session_review(self, session_id: str) -> SessionReview: ...
 
     def list_user_sessions(self, user_id: str) -> list[Session]: ...
+
+    def list_user_sessions_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: tuple[datetime, str] | None,
+    ) -> tuple[list[Session], bool, tuple[datetime, str] | None]: ...
+
+    def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]: ...
+
+    def get_session_head(self, session_id: str) -> Session: ...
+
+    def count_session_messages(self, session_id: str) -> int: ...
+
+    def list_session_messages_page(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Message], bool, str | None]: ...
+
+    def save_session_event(self, event: SessionEvent) -> SessionEvent: ...
+
+    def list_session_events(self, session_id: str) -> list[SessionEvent]: ...
+
+    def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact: ...
+
+    def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None: ...
 
 
 class SessionRecord(Base):
@@ -84,6 +137,38 @@ class SessionReviewRecord(Base):
     feedback: Mapped[dict[str, object]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class SessionEventRecord(Base):
+    __tablename__ = "session_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), index=True)
+    stage: Mapped[str] = mapped_column(String(64), index=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class VoiceSessionFactRecord(Base):
+    __tablename__ = "voice_session_facts"
+
+    session_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    termination_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    transcript_turn_count: Mapped[int] = mapped_column(Integer, default=0)
+    client_diagnostics: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class SqlAlchemySessionRepository:
@@ -160,6 +245,44 @@ class SqlAlchemySessionRepository:
             db_session.commit()
         return self.get_session(session_id)
 
+    def finalize_voice_session(
+        self,
+        *,
+        session: Session,
+        review: SessionReview,
+        voice_fact: VoiceSessionFact,
+        events: list[SessionEvent],
+    ) -> tuple[Session, SessionReview]:
+        with self._session_factory() as db_session:
+            record = db_session.get(SessionRecord, session.id)
+            if record is None:
+                raise NotFoundError(f"Session {session.id} not found")
+
+            self._upsert_session_record(db_session, session)
+            db_session.flush()
+            db_session.execute(
+                delete(MessageRecord).where(MessageRecord.session_id == session.id)
+            )
+            for position, message in enumerate(session.messages):
+                db_session.add(self._to_message_record(session.id, position, message))
+
+            self._upsert_review_record(db_session, review)
+            record.updated_at = review.updated_at
+            self._upsert_voice_session_fact_record(db_session, voice_fact)
+            for event in events:
+                db_session.add(
+                    SessionEventRecord(
+                        session_id=event.session_id,
+                        event_type=event.event_type,
+                        stage=event.stage,
+                        payload=dict(event.payload),
+                        created_at=event.created_at,
+                    )
+                )
+            db_session.commit()
+
+        return (self.get_session(session.id), self.get_session_review(review.session_id))
+
     def save_session_review(self, review: SessionReview) -> SessionReview:
         with self._session_factory() as db_session:
             record = db_session.get(SessionRecord, review.session_id)
@@ -189,8 +312,141 @@ class SqlAlchemySessionRepository:
                 for record in records
             ]
 
+    def list_user_sessions_page(
+        self,
+        user_id: str,
+        *,
+        limit: int,
+        cursor: tuple[datetime, str] | None,
+    ) -> tuple[list[Session], bool, tuple[datetime, str] | None]:
+        with self._session_factory() as db_session:
+            statement = (
+                select(SessionRecord)
+                .join(
+                    SessionReviewRecord,
+                    SessionReviewRecord.session_id == SessionRecord.id,
+                )
+                .where(SessionRecord.user_id == user_id)
+            )
+            if cursor is not None:
+                cursor_time, cursor_id = cursor
+                statement = statement.where(
+                    or_(
+                        SessionRecord.updated_at < cursor_time,
+                        and_(
+                            SessionRecord.updated_at == cursor_time,
+                            SessionRecord.id < cursor_id,
+                        ),
+                    )
+                )
+            records = db_session.scalars(
+                statement
+                .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
+                .limit(limit + 1)
+            ).all()
+            has_more = len(records) > limit
+            page_records = records[:limit]
+            next_cursor = None
+            if has_more and page_records:
+                last = page_records[-1]
+                next_cursor = (last.updated_at, last.id)
+            sessions = [_to_session_head(record) for record in page_records]
+            return (sessions, has_more, next_cursor)
+
+    def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]:
+        if not session_ids:
+            return {}
+        with self._session_factory() as db_session:
+            records = db_session.scalars(
+                select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
+            ).all()
+            return {record.session_id: _to_review(record) for record in records}
+
+    def get_session_head(self, session_id: str) -> Session:
+        with self._session_factory() as db_session:
+            record = db_session.get(SessionRecord, session_id)
+            if record is None:
+                raise NotFoundError(f"Session {session_id} not found")
+            return _to_session_head(record)
+
+    def count_session_messages(self, session_id: str) -> int:
+        with self._session_factory() as db_session:
+            self._ensure_session_exists(db_session, session_id)
+            value = db_session.scalar(
+                select(func.count(MessageRecord.id)).where(MessageRecord.session_id == session_id)
+            )
+            return int(value or 0)
+
+    def list_session_messages_page(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+        cursor: str | None,
+    ) -> tuple[list[Message], bool, str | None]:
+        with self._session_factory() as db_session:
+            self._ensure_session_exists(db_session, session_id)
+            statement = select(MessageRecord).where(MessageRecord.session_id == session_id)
+            if cursor is not None:
+                cursor_position = db_session.scalar(
+                    select(MessageRecord.position).where(
+                        MessageRecord.session_id == session_id,
+                        MessageRecord.id == cursor,
+                    )
+                )
+                if cursor_position is None:
+                    raise NotFoundError(f"Message {cursor} not found")
+                statement = statement.where(MessageRecord.position < int(cursor_position))
+
+            records_desc = db_session.scalars(
+                statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
+            ).all()
+            has_more = len(records_desc) > limit
+            page_desc = records_desc[:limit]
+            page = list(reversed(page_desc))
+            next_cursor = page[0].id if has_more and page else None
+            return ([self._to_message(item) for item in page], has_more, next_cursor)
+
+    def save_session_event(self, event: SessionEvent) -> SessionEvent:
+        with self._session_factory() as db_session:
+            record = SessionEventRecord(
+                session_id=event.session_id,
+                event_type=event.event_type,
+                stage=event.stage,
+                payload=dict(event.payload),
+                created_at=event.created_at,
+            )
+            db_session.add(record)
+            db_session.commit()
+        return event
+
+    def list_session_events(self, session_id: str) -> list[SessionEvent]:
+        with self._session_factory() as db_session:
+            records = db_session.scalars(
+                select(SessionEventRecord)
+                .where(SessionEventRecord.session_id == session_id)
+                .order_by(SessionEventRecord.id.asc())
+            ).all()
+            return [_to_session_event(record) for record in records]
+
+    def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact:
+        with self._session_factory() as db_session:
+            self._upsert_voice_session_fact_record(db_session, fact)
+            db_session.commit()
+        loaded = self.get_latest_voice_session_fact(fact.session_id)
+        return loaded if loaded is not None else fact
+
+    def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None:
+        with self._session_factory() as db_session:
+            record = db_session.get(VoiceSessionFactRecord, session_id)
+            if record is None:
+                return None
+            return _to_voice_session_fact(record)
+
     def reset(self) -> None:
         with self._session_factory() as db_session:
+            db_session.execute(delete(VoiceSessionFactRecord))
+            db_session.execute(delete(SessionEventRecord))
             db_session.execute(delete(SessionReviewRecord))
             db_session.execute(delete(MessageRecord))
             db_session.execute(delete(SessionRecord))
@@ -202,6 +458,20 @@ class SqlAlchemySessionRepository:
             .where(MessageRecord.session_id == session_id)
             .order_by(MessageRecord.position.asc())
         ).all()
+
+    def _ensure_session_exists(self, db_session, session_id: str) -> None:
+        record = db_session.get(SessionRecord, session_id)
+        if record is None:
+            raise NotFoundError(f"Session {session_id} not found")
+
+    def _to_message(self, message: MessageRecord) -> Message:
+        return Message(
+            id=message.id,
+            role=message.role,
+            text=message.text,
+            feedback=message.feedback,
+            created_at=message.created_at,
+        )
 
     def _upsert_session_record(self, db_session, session: Session) -> SessionRecord:
         record = db_session.get(SessionRecord, session.id)
@@ -257,6 +527,31 @@ class SqlAlchemySessionRepository:
         record.next_try = review.next_try
         record.feedback = review.feedback.model_dump()
         record.updated_at = review.updated_at
+
+    def _upsert_voice_session_fact_record(self, db_session, fact: VoiceSessionFact) -> None:
+        record = db_session.get(VoiceSessionFactRecord, fact.session_id)
+        if record is None:
+            db_session.add(
+                VoiceSessionFactRecord(
+                    session_id=fact.session_id,
+                    status=fact.status,
+                    termination_reason=fact.termination_reason,
+                    transcript_turn_count=fact.transcript_turn_count,
+                    client_diagnostics=dict(fact.client_diagnostics),
+                    started_at=fact.started_at,
+                    completed_at=fact.completed_at,
+                    updated_at=fact.updated_at,
+                )
+            )
+            return
+
+        record.status = fact.status
+        record.termination_reason = fact.termination_reason
+        record.transcript_turn_count = fact.transcript_turn_count
+        record.client_diagnostics = dict(fact.client_diagnostics)
+        record.started_at = fact.started_at
+        record.completed_at = fact.completed_at
+        record.updated_at = fact.updated_at
 
     def _to_message_record(
         self,
@@ -331,6 +626,29 @@ def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Ses
     )
 
 
+def _to_session_head(record: SessionRecord) -> Session:
+    visual_anchors = list(getattr(record, "visual_anchors", []) or [])
+    vocab_candidates = list(getattr(record, "vocab_candidates", []) or [])
+    if not visual_anchors and not vocab_candidates and record.labels:
+        vocab_candidates = list(record.labels or [])
+
+    return Session(
+        id=record.id,
+        user_id=record.user_id,
+        media_id=record.media_id,
+        scene=record.scene,
+        role=record.role,
+        opener=record.opener,
+        status=SessionStatus(record.status),
+        visual_anchors=visual_anchors,
+        vocab_candidates=vocab_candidates,
+        labels=list(record.labels or []),
+        messages=[],
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
 def _to_review(record: SessionReviewRecord) -> SessionReview:
     return SessionReview(
         session_id=record.session_id,
@@ -339,5 +657,28 @@ def _to_review(record: SessionReviewRecord) -> SessionReview:
         next_try=record.next_try,
         feedback=PracticeFeedback.model_validate(record.feedback),
         created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _to_session_event(record: SessionEventRecord) -> SessionEvent:
+    return SessionEvent(
+        session_id=record.session_id,
+        event_type=record.event_type,
+        stage=record.stage,
+        payload=dict(record.payload or {}),
+        created_at=record.created_at,
+    )
+
+
+def _to_voice_session_fact(record: VoiceSessionFactRecord) -> VoiceSessionFact:
+    return VoiceSessionFact(
+        session_id=record.session_id,
+        status=record.status,
+        termination_reason=record.termination_reason,
+        transcript_turn_count=record.transcript_turn_count,
+        client_diagnostics=dict(record.client_diagnostics or {}),
+        started_at=record.started_at,
+        completed_at=record.completed_at,
         updated_at=record.updated_at,
     )

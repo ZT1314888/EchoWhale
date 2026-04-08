@@ -196,7 +196,7 @@ describe("App", () => {
 
     vi.useRealTimers();
     fireEvent.click(enterButton);
-    expect(await screen.findByRole("button", { name: /talk to your agent/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
     expect(sessionApi.createSamplePracticeSession).toHaveBeenCalledWith("coffee");
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
     expect(screen.getByText(/咖啡店柜台点单/i)).toBeInTheDocument();
@@ -240,7 +240,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(sessionApi.createPracticeSession).toHaveBeenCalledWith("med_upload");
     });
-    expect(await screen.findByRole("button", { name: /talk to your agent/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
   });
 
@@ -293,10 +293,10 @@ describe("App", () => {
     await renderApp(["/session/sess_real"]);
 
     expect(await screen.findByText(/咖啡店柜台点单/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /talk to your agent/i }));
+    fireEvent.click(screen.getByRole("button", { name: /start voice practice/i }));
 
     expect(await screen.findByText(/Could I get an iced latte, please/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /end conversation/i }));
+    fireEvent.click(screen.getByRole("button", { name: /end voice practice/i }));
 
     await waitFor(() => {
       expect(sessionApi.bootstrapVoiceSession).toHaveBeenCalledWith("sess_real");
@@ -417,19 +417,25 @@ describe("App", () => {
         nickname: "Echo Learner",
       },
     });
-    vi.spyOn(historyApi, "listHistorySessions").mockResolvedValue([
-      {
-        id: "sess_real",
-        practicedAt: "2026-04-04 15:20",
-        status: "已完成 1 轮",
-        sceneTitle: "咖啡店柜台点单",
-        roleLabel: "店员对话",
-        preview: "你已经说清楚主要需求。",
-        tags: ["coffee", "menu"],
-        reviewTitle: "本轮回响",
-        reviewSummary: "下一轮再补一条细节。",
+    vi.spyOn(historyApi, "listHistorySessions").mockResolvedValue({
+      items: [
+        {
+          id: "sess_real",
+          practicedAt: "2026-04-04 15:20",
+          status: "已完成 1 轮",
+          sceneTitle: "咖啡店柜台点单",
+          roleLabel: "店员对话",
+          preview: "你已经说清楚主要需求。",
+          tags: ["coffee", "menu"],
+          reviewTitle: "本轮回响",
+          reviewSummary: "下一轮再补一条细节。",
+        },
+      ],
+      page: {
+        hasMore: false,
+        nextCursor: null,
       },
-    ]);
+    });
     vi.spyOn(historyApi, "getHistorySession").mockResolvedValue({
       entry: {
         id: "sess_real",
@@ -442,8 +448,19 @@ describe("App", () => {
         reviewTitle: "本轮回响",
         reviewSummary: "下一轮再补一条细节。",
       },
-      session: realSession,
+      session: {
+        ...realSession,
+        messages: [],
+        totalMessages: realSession.messages.length,
+      },
       review: realReview,
+    });
+    vi.spyOn(historyApi, "getHistorySessionMessages").mockResolvedValue({
+      items: realSession.messages,
+      page: {
+        hasMore: false,
+        nextCursor: null,
+      },
     });
 
     await renderApp(["/history"]);
@@ -455,6 +472,7 @@ describe("App", () => {
       expect(authApi.refresh).toHaveBeenCalledTimes(1);
       expect(historyApi.listHistorySessions).toHaveBeenCalledTimes(1);
       expect(historyApi.getHistorySession).toHaveBeenCalledWith("sess_real");
+      expect(historyApi.getHistorySessionMessages).toHaveBeenCalledWith("sess_real", { limit: 20 });
     });
   });
 
@@ -635,7 +653,7 @@ describe("App", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
-    expect(await screen.findByRole("heading", { name: /查收你的验证邮件/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /查收你的验证码/i })).toBeInTheDocument();
     expect(screen.getByText(/learner@example.com/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /创建你的开口通道/i })).not.toBeInTheDocument();
   });
@@ -854,15 +872,63 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /创建账号/i })).toBeInTheDocument();
   });
 
-  it("verifies email tokens from the verification route", async () => {
+  it("submits email verification codes from the verification route", async () => {
     vi.spyOn(authApi, "verifyEmail").mockResolvedValue(undefined);
 
-    await renderApp(["/verify-email?token=verify-token"]);
+    await renderApp(["/verify-email?email=learner%40example.com"]);
+
+    expect(screen.getByText(/learner@example.com/i)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/验证码/i), {
+      target: { value: "123456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /完成验证/i }));
 
     expect(await screen.findByRole("heading", { name: /邮箱验证完成/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(authApi.verifyEmail).toHaveBeenCalledWith("verify-token");
+    expect(authApi.verifyEmail).toHaveBeenCalledWith({
+      email: "learner@example.com",
+      code: "123456",
     });
+  });
+
+  it("keeps invalid reset links on the reset page and shows a retry action", async () => {
+    vi.spyOn(authApi, "resetPassword").mockRejectedValue({
+      code: "AUTH_API_FAILED",
+      message: "重置链接已失效或已过期，请重新申请。",
+    });
+
+    await renderApp(["/reset-password?token=expired-token"]);
+
+    fireEvent.change(screen.getByLabelText(/新密码/i), {
+      target: { value: "renew1234" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /确认重置密码/i }));
+
+    expect(await screen.findByText("重置链接已失效或已过期，请重新申请。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /重新申请重置邮件/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /重置密码/i })).toBeInTheDocument();
+  });
+
+  it("shows success feedback and redirects to login after a successful password reset", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(authApi, "resetPassword").mockResolvedValue(undefined);
+
+    await renderApp(["/reset-password?token=valid-token"]);
+
+    fireEvent.change(screen.getByLabelText(/新密码/i), {
+      target: { value: "renew1234" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /确认重置密码/i }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/密码已更新/i)).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+    expect(screen.getByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
   });
 });
 
