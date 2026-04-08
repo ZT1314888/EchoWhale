@@ -7,9 +7,12 @@ from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import NotFoundError
 from api.common.exceptions import SceneAnalysisUnavailableError
 from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ValidationError as AppValidationError
 from api.models.media_model import Media
 from api.models.message_model import Message
+from api.models.runtime_model import SessionEvent
 from api.models.session_model import Session
+from api.models.runtime_model import VoiceSessionFact
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.session_engine.agent import SessionEngineAgent
 from api.modules.session_engine.schema import ReplyInput, StartSessionInput
@@ -35,6 +38,8 @@ class FakeSessionRepository:
     def __init__(self) -> None:
         self.sessions: dict[str, Session] = {}
         self.reviews: dict[str, object] = {}
+        self.events: dict[str, list[SessionEvent]] = {}
+        self.voice_facts: dict[str, VoiceSessionFact] = {}
 
     def save_session(self, session: Session) -> Session:
         self.sessions[session.id] = session
@@ -56,6 +61,20 @@ class FakeSessionRepository:
         self.reviews[session_id] = review
         return session
 
+    def finalize_voice_session(
+        self,
+        *,
+        session: Session,
+        review,
+        voice_fact: VoiceSessionFact,
+        events: list[SessionEvent],
+    ) -> tuple[Session, object]:
+        self.sessions[session.id] = session
+        self.reviews[review.session_id] = review
+        self.voice_facts[voice_fact.session_id] = voice_fact
+        self.events.setdefault(session.id, []).extend(events)
+        return (session, review)
+
     def save_session_review(self, review) -> object:
         self.reviews[review.session_id] = review
         return review
@@ -65,6 +84,20 @@ class FakeSessionRepository:
 
     def list_user_sessions(self, user_id: str) -> list[Session]:
         return [session for session in self.sessions.values() if session.user_id == user_id]
+
+    def save_session_event(self, event: SessionEvent) -> SessionEvent:
+        self.events.setdefault(event.session_id, []).append(event)
+        return event
+
+    def list_session_events(self, session_id: str) -> list[SessionEvent]:
+        return list(self.events.get(session_id, []))
+
+    def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact:
+        self.voice_facts[fact.session_id] = fact
+        return fact
+
+    def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None:
+        return self.voice_facts.get(session_id)
 
 
 @pytest.fixture
@@ -264,6 +297,11 @@ class FakeFeedbackEngine:
         )
 
 
+class FailingFeedbackEngine:
+    def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
+        raise RuntimeError("feedback provider unavailable")
+
+
 class RecordingCoachEngine:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str, list[str], list[str], list[Message]]] = []
@@ -430,6 +468,18 @@ def test_bootstrap_voice_session_returns_deepgram_token_and_settings(
     assert bootstrap.session.messages[0].text == "Hi there, what can I get started for you today?"
     assert token_issuer.calls
     assert settings_builder.calls == [session]
+    saved_events = fake_session_repository.list_session_events("sess_voice")
+    assert [event.event_type for event in saved_events] == ["voice_bootstrapped"]
+    assert saved_events[0].stage == "voice_active"
+    assert saved_events[0].payload == {
+        "expires_in": float(token_issuer.calls[0]),
+        "output_sample_rate": 24000,
+    }
+    saved_voice_fact = fake_session_repository.get_latest_voice_session_fact("sess_voice")
+    assert saved_voice_fact is not None
+    assert saved_voice_fact.status == "active"
+    assert saved_voice_fact.termination_reason is None
+    assert saved_voice_fact.transcript_turn_count == 1
 
 
 def test_complete_voice_session_persists_transcript_and_generates_review(
@@ -465,6 +515,13 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
     fake_session_repository.save_session(session)
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
+    fake_session_repository.save_voice_session_fact(
+        VoiceSessionFact(
+            session_id="sess_voice_complete",
+            status="active",
+            transcript_turn_count=3,
+        )
+    )
 
     completed = agent.complete_voice_session(
         VoiceCompleteInput(
@@ -475,6 +532,11 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
                 VoiceConversationTurn(role="assistant", content="Of course. What size would you like?"),
             ],
             termination_reason="user_ended",
+            client_diagnostics={
+                "processor_buffer_size": 2048,
+                "track_sample_rate": 48000,
+                "playback_gap_resets": 1,
+            },
         )
     )
 
@@ -494,6 +556,129 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
     ]
     assert completed.review.session_id == "sess_voice_complete"
     assert fake_session_repository.reviews["sess_voice_complete"].feedback.grammar.body == "Your meaning is clear."
+    saved_events = fake_session_repository.list_session_events("sess_voice_complete")
+    assert [event.event_type for event in saved_events] == ["voice_finalized", "review_built"]
+    assert saved_events[0].payload == {
+        "termination_reason": "user_ended",
+        "conversation_turn_count": 3,
+        "client_diagnostics": {
+            "processor_buffer_size": 2048,
+            "track_sample_rate": 48000,
+            "playback_gap_resets": 1,
+        },
+    }
+    saved_voice_fact = fake_session_repository.get_latest_voice_session_fact("sess_voice_complete")
+    assert saved_voice_fact is not None
+    assert saved_voice_fact.status == "completed"
+    assert saved_voice_fact.termination_reason == "user_ended"
+    assert saved_voice_fact.transcript_turn_count == 3
+    assert saved_voice_fact.client_diagnostics == {
+        "processor_buffer_size": 2048,
+        "track_sample_rate": 48000,
+        "playback_gap_resets": 1,
+    }
+
+
+def test_complete_voice_session_does_not_persist_transcript_when_feedback_generation_fails(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_voice_feedback_fail",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    fake_session_repository.save_session(session)
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FailingFeedbackEngine()
+
+    with pytest.raises(RuntimeError, match="feedback provider unavailable"):
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_feedback_fail",
+                conversation=[
+                    VoiceConversationTurn(role="assistant", content="Hi there, what can I get started for you today?"),
+                    VoiceConversationTurn(role="user", content="Could I get an iced latte, please?"),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+
+    stored = fake_session_repository.get_session("sess_voice_feedback_fail")
+    assert [message.text for message in stored.messages] == [
+        "Hi there, what can I get started for you today?"
+    ]
+    assert fake_session_repository.reviews == {}
+    assert fake_session_repository.list_session_events("sess_voice_feedback_fail") == []
+    assert fake_session_repository.get_latest_voice_session_fact("sess_voice_feedback_fail") is None
+
+
+def test_complete_voice_session_rejects_empty_conversation_with_validation_error(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_voice_empty",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["latte"],
+        messages=[],
+    )
+    fake_session_repository.save_session(session)
+    service = SessionEngineService(session_repository=fake_session_repository)
+
+    with pytest.raises(AppValidationError, match="Validation error"):
+        service.complete_voice_session(
+            session_id="sess_voice_empty",
+            conversation=[],
+            termination_reason="user_ended",
+            owner_id="demo-user",
+        )
+
+
+def test_complete_voice_session_rejects_conversation_without_user_turn(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    session = Session(
+        id="sess_voice_no_user",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["latte"],
+        messages=[],
+    )
+    fake_session_repository.save_session(session)
+    service = SessionEngineService(session_repository=fake_session_repository)
+
+    with pytest.raises(AppValidationError, match="Validation error"):
+        service.complete_voice_session(
+            session_id="sess_voice_no_user",
+            conversation=[
+                VoiceConversationTurn(
+                    role="assistant",
+                    content="Hi there, what can I get started for you today?",
+                )
+            ],
+            termination_reason="user_ended",
+            owner_id="demo-user",
+        )
 
 
 def test_get_session_rejects_owner_mismatch(

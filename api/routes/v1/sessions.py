@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
 from api.common.responses import ApiResponse
@@ -45,7 +45,15 @@ class SessionReplyRequest(LearnerMessagePayload):
 class VoiceCompleteRequest(BaseModel):
     conversation: list[VoiceConversationTurn]
     termination_reason: str = "user_ended"
-    client_diagnostics: dict[str, object] = {}
+    client_diagnostics: dict[str, object] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_voice_conversation(self) -> "VoiceCompleteRequest":
+        if not self.conversation:
+            raise ValueError("Conversation cannot be empty")
+        if not any(turn.role == "user" for turn in self.conversation):
+            raise ValueError("Conversation must include at least one user turn")
+        return self
 
 
 class SessionMessageResponse(BaseModel):

@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/session_orchestration`
 - `owner`: `codex`
-- `updated_at`: `2026-04-07`
+- `updated_at`: `2026-04-08`
 
 ## 模块目标
 
@@ -27,6 +27,9 @@
 - 已完成边界：前端语音 hook 已补初始化超时与 `AgentThinking` 超时保护，卡顿时会退出等待态并回写 `init_phase / thinking_stall_ms`
 - 已完成边界：前端语音 hook 已切到低延迟采集与连续播放排程，当前默认使用 `AudioContext({ latencyHint: 'interactive' })`、`ScriptProcessor(1024)` 优先、单声道 `ideal 16kHz` 采集和 `nextPlayTime` 连续调度
 - 已完成边界：Deepgram voice settings 已补 Flux `eot_threshold / eager_eot_threshold / eot_timeout_ms` 与可配置 `output_sample_rate`，并把更多音频侧 diagnostics 带回 `voice/complete`
+- 已完成边界：`voice/bootstrap` / `voice/complete` 已把 `session_events` 与 `voice_session_facts` 落库，语音会话从仅有 session/review 结果提升为带运行事实层的可追踪链路
+- 已完成边界：Deepgram think proxy 已补请求 payload 校验和 model guardrail；当请求 model 不匹配当前允许的 think model 时会在代理入口直接拒绝
+- 已完成边界：`voice/complete` 已补可靠性收口：输入层要求 transcript 非空且包含至少一条 user turn，持久化层改为 `finalize_voice_session` 原子写入，不再先落 transcript 再补 review/events/facts
 - 仍然缺失：跨模块更完整的系统级联调
 
 ## 输入输出契约
@@ -55,7 +58,7 @@
 ## 测试门
 
 - `module_test_passed` 的标准：会话启动、快照读取、回复推进、review/history 读取可稳定验证
-- 已覆盖：session repository 持久化、session API start/get/reply/review、voice bootstrap/complete、history 列表与详情、媒体状态保护、session 签名 URL 消费、reply 原子更新、严格 FK 模式下的 session 初始 message 持久化回归
+- 已覆盖：session repository 持久化、session API start/get/reply/review、voice bootstrap/complete、voice runtime facts 持久化、think proxy model guardrail、history 列表与详情、媒体状态保护、session 签名 URL 消费、reply 原子更新、严格 FK 模式下的 session 初始 message 持久化回归
 - 还没覆盖的风险：跨模块系统级联调、真实 Deepgram token + 国内网络实机 smoke、匿名 visitor 到正式账号的升级绑定
 
 ## 阻塞项
@@ -76,4 +79,6 @@
 - `2026-04-07`：为国内无 VPN 场景移除实时 `agent.think.endpoint` 依赖，改回原生 `provider + prompt`，并在前端补初始化/思考超时保护
 - `2026-04-07`：补齐低延迟音频热路径，前端改为低延迟采集 + 连续播放排程，后端下发 Flux turn-taking 参数和 output sample rate 配置
 - `2026-04-07`：新增 sample scene session 契约；`POST /api/v1/sessions` 支持 `sample_scene_id`，session repository 允许 `media_id` 为空，首页示例场景改为真实后端会话启动
+- `2026-04-08`：新增 `session_events` / `voice_session_facts` 运行事实持久化，`voice/bootstrap` / `voice/complete` 会写入语音链路事实；Deepgram think proxy 新增 payload 校验和 model guardrail
+- `2026-04-08`：`voice/complete` 新增入口与 service 双层校验（非空 transcript + 至少一条 user turn），并将 session/review/events/facts 收口为单仓储事务提交，避免半完成状态
 

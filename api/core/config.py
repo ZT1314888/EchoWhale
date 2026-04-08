@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, ClassVar
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
@@ -8,6 +8,7 @@ from api.common.exceptions import ConfigurationError
 
 
 class Settings(BaseSettings):
+    default_frontend_public_base_url: ClassVar[str] = "http://localhost:5173"
     app_name: str = "EchoWhale API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
@@ -22,6 +23,20 @@ class Settings(BaseSettings):
     auth_refresh_cookie_name: str = "echowhale_refresh_token"
     auth_visitor_cookie_name: str = "echowhale_visitor_id"
     auth_cookie_secure: bool = False
+    frontend_public_base_url: str = default_frontend_public_base_url
+    redis_url: str = ""
+    auth_email_code_ttl_seconds: int = 600
+    auth_email_send_cooldown_seconds: int = 60
+    auth_email_send_daily_limit: int = 5
+    auth_email_verify_max_attempts: int = 5
+    auth_smtp_host: str = ""
+    auth_smtp_port: int = 465
+    auth_smtp_username: str = ""
+    auth_smtp_password: str = ""
+    auth_smtp_from_email: str = ""
+    auth_smtp_from_name: str = "EchoWhale"
+    auth_smtp_use_ssl: bool = True
+    auth_smtp_use_starttls: bool = False
     r2_bucket: str = "echo-whale-media"
     r2_account_id: str = ""
     r2_access_key_id: str = ""
@@ -90,6 +105,7 @@ class Settings(BaseSettings):
 
     def validate_runtime(self) -> None:
         self._validate_model_runtime()
+        self._validate_smtp_settings()
 
         if self.app_env.lower() != "production":
             return
@@ -101,12 +117,41 @@ class Settings(BaseSettings):
             errors.append("AUTH_COOKIE_SECURE must be true in production")
         if not self.allowed_origins:
             errors.append("ALLOWED_ORIGINS must not be empty in production")
+        if self.frontend_public_base_url.rstrip("/") == self.default_frontend_public_base_url:
+            errors.append("FRONTEND_PUBLIC_BASE_URL must be explicitly set in production")
         if not self.deepgram_api_key.strip():
             errors.append("DEEPGRAM_API_KEY must be set in production")
         if not self.deepgram_agent_base_url.strip():
             errors.append("DEEPGRAM_AGENT_BASE_URL must be set in production")
         if not self.deepgram_agent_think_model.strip():
             errors.append("DEEPGRAM_AGENT_THINK_MODEL must be set in production")
+
+        if errors:
+            raise ConfigurationError("; ".join(errors))
+
+    def _validate_smtp_settings(self) -> None:
+        smtp_enabled = any(
+            (
+                self.auth_smtp_host.strip(),
+                self.auth_smtp_username.strip(),
+                self.auth_smtp_password.strip(),
+                self.auth_smtp_from_email.strip(),
+            )
+        )
+        if not smtp_enabled:
+            return
+
+        errors: list[str] = []
+        if not self.auth_smtp_host.strip():
+            errors.append("AUTH_SMTP_HOST must be set when SMTP delivery is enabled")
+        if not self.auth_smtp_username.strip():
+            errors.append("AUTH_SMTP_USERNAME must be set when SMTP delivery is enabled")
+        if not self.auth_smtp_password.strip():
+            errors.append("AUTH_SMTP_PASSWORD must be set when SMTP delivery is enabled")
+        if not self.auth_smtp_from_email.strip():
+            errors.append("AUTH_SMTP_FROM_EMAIL must be set when SMTP delivery is enabled")
+        if self.auth_smtp_use_ssl and self.auth_smtp_use_starttls:
+            errors.append("AUTH_SMTP_USE_SSL and AUTH_SMTP_USE_STARTTLS cannot both be true")
 
         if errors:
             raise ConfigurationError("; ".join(errors))

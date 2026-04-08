@@ -43,7 +43,10 @@ export function PracticeSessionPage() {
   }, [sessionId]);
 
   useEffect(() => {
-    conversationEndRef.current?.scrollIntoView({ block: "end" });
+    const scrollIntoView = conversationEndRef.current?.scrollIntoView;
+    if (typeof scrollIntoView === "function") {
+      scrollIntoView.call(conversationEndRef.current, { block: "end" });
+    }
   }, [session?.messages.length, voice.transcript.length]);
 
   useEffect(() => {

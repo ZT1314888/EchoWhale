@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from api.common.exceptions import (
@@ -23,12 +24,15 @@ from api.core.security import (
 from api.db.auth_db import AuthRepository, build_auth_repository
 from api.models.auth_model import AuthSession
 from api.models.auth_token_model import (
-    AUTH_TOKEN_PURPOSE_EMAIL_VERIFICATION,
     AUTH_TOKEN_PURPOSE_PASSWORD_RESET,
     AuthActionTokenModel,
 )
 from api.models.user_model import RefreshTokenRecordModel, User
 from api.services.auth_mailer import AuthMailer, get_auth_mailer
+from api.services.email_verification_store import (
+    EmailVerificationStore,
+    get_email_verification_store,
+)
 from sqlalchemy.exc import IntegrityError
 
 
@@ -37,11 +41,13 @@ class AuthService:
         self,
         repository: AuthRepository | None = None,
         mailer: AuthMailer | None = None,
+        verification_store: EmailVerificationStore | None = None,
     ) -> None:
         self.repository = repository or build_auth_repository()
         self.mailer = mailer or get_auth_mailer()
+        self.verification_store = verification_store or get_email_verification_store()
 
-    def register(self, *, nickname: str, email: str, password: str) -> User:
+    def register(self, *, nickname: str, email: str, password: str, ip_address: str) -> User:
         normalized_email = self._normalize_email(email)
         self._validate_password(password)
         if self.repository.get_user_by_email(normalized_email) is not None:
@@ -57,7 +63,7 @@ class AuthService:
             self.repository.create_user(user=user, password_hash=hash_password(password))
         except IntegrityError as error:
             raise ValidationError("Email already registered") from error
-        self._issue_email_verification(user)
+        self._issue_email_verification(user, ip_address=ip_address)
         return user
 
     def login(self, *, email: str, password: str) -> AuthSession:
@@ -119,22 +125,23 @@ class AuthService:
             user=user,
         )
 
-    def resend_verification(self, *, email: str) -> None:
+    def resend_verification(self, *, email: str, ip_address: str) -> None:
         normalized_email = self._normalize_email(email)
         user = self.repository.get_user_by_email(normalized_email)
         if user is None or user.status != "pending_verification":
             return
-        self._issue_email_verification(user)
+        self._issue_email_verification(user, ip_address=ip_address)
 
-    def verify_email(self, *, token: str) -> User:
-        stored_token = self._consume_auth_action_token(
-            token=token,
-            purpose=AUTH_TOKEN_PURPOSE_EMAIL_VERIFICATION,
-            error_message="Verification link is invalid or expired",
-        )
-        user = self.repository.get_user_by_id(stored_token.user_id)
+    def verify_email(self, *, email: str, code: str) -> User:
+        normalized_email = self._normalize_email(email)
+        user = self.repository.get_user_by_email(normalized_email)
+        if user is None:
+            raise ValidationError("Verification code is invalid or expired")
         if user.status == "disabled":
             raise AuthenticationError("Authentication required")
+        if user.status != "pending_verification":
+            raise ValidationError("Verification code is invalid or expired")
+        self.verification_store.consume_code(email=normalized_email, code=code.strip())
         activated_at = datetime.now(timezone.utc)
         self.repository.update_user_status(user.id, "active", activated_at)
         user.status = "active"
@@ -239,21 +246,9 @@ class AuthService:
             raise ValidationError(error_message)
         return stored_token
 
-    def _issue_email_verification(self, user: User) -> None:
-        token = generate_action_token()
-        now = datetime.now(timezone.utc)
-        self.repository.replace_auth_action_token(
-            AuthActionTokenModel(
-                id=f"vat_{uuid4().hex[:12]}",
-                user_id=user.id,
-                purpose=AUTH_TOKEN_PURPOSE_EMAIL_VERIFICATION,
-                token_hash=hash_action_token(token),
-                expires_at=now + timedelta(hours=24),
-                created_at=now,
-            ),
-            superseded_at=now,
-        )
-        self.mailer.send_verification_email(user=user, token=token)
+    def _issue_email_verification(self, user: User, *, ip_address: str) -> None:
+        code = self.verification_store.issue_code(email=user.email, ip_address=ip_address)
+        self.mailer.send_verification_email(user=user, code=code)
 
     def _issue_password_reset(self, user: User) -> None:
         token = generate_action_token()
@@ -269,7 +264,14 @@ class AuthService:
             ),
             superseded_at=now,
         )
-        self.mailer.send_password_reset_email(user=user, token=token)
+        self.mailer.send_password_reset_email(
+            user=user,
+            reset_url=self._build_reset_password_url(token),
+        )
+
+    def _build_reset_password_url(self, token: str) -> str:
+        base_url = settings.frontend_public_base_url.strip().rstrip("/")
+        return f"{base_url}/reset-password?{urlencode({'token': token})}"
 
     def _as_utc(self, value: datetime) -> datetime:
         if value.tzinfo is None:

@@ -10,6 +10,9 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from fastapi.responses import StreamingResponse
 import httpx
+from pydantic import BaseModel
+from pydantic import ValidationError
+from pydantic import field_validator
 
 from api.common.exceptions import AuthenticationError
 from api.common.exceptions import ConfigurationError
@@ -21,6 +24,25 @@ from api.integrations.deepgram import validate_deepgram_think_upstream_settings
 
 router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 logger = logging.getLogger(__name__)
+
+
+class ProxyMessage(BaseModel):
+    role: str
+    content: str | list[dict[str, object]]
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"system", "user", "assistant", "tool"}:
+            raise ValueError("Invalid message role")
+        return normalized
+
+
+class ProxyChatCompletionRequest(BaseModel):
+    model: str
+    messages: list[ProxyMessage]
+    stream: bool = False
 
 
 @router.post("/think/chat/completions")
@@ -63,6 +85,19 @@ async def proxy_deepgram_think_chat_completions(
         return _error_response(
             status_code=400,
             message="Invalid proxy request payload",
+            error_type="invalid_request_error",
+        )
+
+    validation_error = _validate_proxy_payload(payload)
+    if validation_error is not None:
+        logger.warning(
+            "Deepgram think proxy rejected invalid request for session=%s error=%s",
+            session_id,
+            validation_error,
+        )
+        return _error_response(
+            status_code=400,
+            message=validation_error,
             error_type="invalid_request_error",
         )
 
@@ -219,6 +254,22 @@ def _build_upstream_headers() -> dict[str, str]:
 
 def _requests_streaming(payload: dict[str, Any]) -> bool:
     return payload.get("stream") is True
+
+
+def _validate_proxy_payload(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return "Invalid proxy request payload"
+
+    try:
+        request = ProxyChatCompletionRequest.model_validate(payload)
+    except ValidationError:
+        return "Invalid proxy request payload"
+
+    allowed_model = settings.deepgram_agent_think_model.strip()
+    if allowed_model and request.model != allowed_model:
+        return "Requested model is not allowed for this proxy"
+
+    return None
 
 
 def _is_sse_response(content_type: str) -> bool:

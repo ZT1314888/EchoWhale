@@ -90,29 +90,3 @@ def _should_use_live_feedback() -> bool:
             settings.text_fallback_provider,
         )
     )
-
-
-def _should_use_live_feedback() -> bool:
-    if settings.model_runtime_mode.lower() != "live":
-        return False
-
-    return any(
-        provider.strip().lower() not in {"", "mock"}
-        for provider in (
-            settings.text_primary_provider,
-            settings.text_fallback_provider,
-        )
-    )
-
-
-def _should_use_live_feedback() -> bool:
-    if settings.model_runtime_mode.lower() != "live":
-        return False
-
-    return any(
-        provider.strip().lower() not in {"", "mock"}
-        for provider in (
-            settings.text_primary_provider,
-            settings.text_fallback_provider,
-        )
-    )

@@ -101,6 +101,29 @@ def test_production_settings_require_non_empty_allowed_origins(tmp_path: Path) -
         settings.validate_runtime()
 
 
+def test_production_settings_require_explicit_frontend_public_base_url(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "APP_ENV=production",
+                "AUTH_JWT_SECRET=super-secret-for-prod",
+                "AUTH_COOKIE_SECURE=true",
+                "ALLOWED_ORIGINS=https://app.example.com",
+                "DEEPGRAM_API_KEY=dg_test_key",
+                "DEEPGRAM_AGENT_BASE_URL=wss://agent.deepgram.com/v1/agent/converse",
+                "DEEPGRAM_AGENT_THINK_MODEL=gpt-4o-mini",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    with pytest.raises(ConfigurationError, match="FRONTEND_PUBLIC_BASE_URL"):
+        settings.validate_runtime()
+
+
 def test_live_model_runtime_requires_configured_model_endpoints(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
@@ -174,6 +197,7 @@ def test_production_settings_do_not_require_deepgram_think_proxy_settings(tmp_pa
                 "AUTH_JWT_SECRET=super-secret-for-prod",
                 "AUTH_COOKIE_SECURE=true",
                 "ALLOWED_ORIGINS=https://app.example.com",
+                "FRONTEND_PUBLIC_BASE_URL=https://app.example.com",
                 "DEEPGRAM_API_KEY=dg_test_key",
                 "DEEPGRAM_AGENT_BASE_URL=wss://agent.deepgram.com/v1/agent/converse",
                 "DEEPGRAM_AGENT_THINK_MODEL=gpt-4o-mini",
@@ -221,3 +245,47 @@ def test_mock_model_runtime_does_not_require_live_model_endpoints(tmp_path: Path
     settings = Settings(_env_file=env_file)
 
     settings.validate_runtime()
+
+
+def test_smtp_settings_require_credentials_when_host_is_configured(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "AUTH_SMTP_HOST=smtpdm.aliyun.com",
+                "AUTH_SMTP_PORT=465",
+                "AUTH_SMTP_USERNAME=",
+                "AUTH_SMTP_PASSWORD=",
+                "AUTH_SMTP_FROM_EMAIL=",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    with pytest.raises(ConfigurationError, match="AUTH_SMTP_USERNAME"):
+        settings.validate_runtime()
+
+
+def test_smtp_settings_reject_enabling_ssl_and_starttls_together(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "AUTH_SMTP_HOST=smtpdm.aliyun.com",
+                "AUTH_SMTP_PORT=465",
+                "AUTH_SMTP_USERNAME=noreply@example.com",
+                "AUTH_SMTP_PASSWORD=app-password",
+                "AUTH_SMTP_FROM_EMAIL=noreply@example.com",
+                "AUTH_SMTP_USE_SSL=true",
+                "AUTH_SMTP_USE_STARTTLS=true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=env_file)
+
+    with pytest.raises(ConfigurationError, match="AUTH_SMTP_USE_SSL"):
+        settings.validate_runtime()

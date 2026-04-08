@@ -65,6 +65,12 @@ class VoiceCompleteInput(BaseModel):
             raise ValueError("Conversation cannot be empty")
         return value
 
+    @model_validator(mode="after")
+    def validate_conversation_has_user_turn(self) -> "VoiceCompleteInput":
+        if not any(turn.role == "user" for turn in self.conversation):
+            raise ValueError("Conversation must include at least one user turn")
+        return self
+
 
 class VoiceBootstrapResult(BaseModel):
     session_id: str

@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
@@ -15,6 +15,21 @@ export function ResetPasswordPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const invalidLinkMessage = "重置链接已失效或已过期，请重新申请。";
+
+  useEffect(() => {
+    if (!success) {
+      return;
+    }
+
+    const timerId = window.setTimeout(() => {
+      navigate("/login", { replace: true });
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timerId);
+    };
+  }, [navigate, success]);
 
   if (auth.status === "refreshing") {
     return (
@@ -48,6 +63,8 @@ export function ResetPasswordPage() {
     }
   }
 
+  const showRetryAction = !token || error === invalidLinkMessage;
+
   return (
     <div className="page-shell page-shell--auth">
       <div className="page-frame">
@@ -79,12 +96,17 @@ export function ResetPasswordPage() {
                 onChange={(event) => setPassword(event.target.value)}
               />
               {error ? <p className="form-error">{error}</p> : null}
-              {success ? <p className="muted-text">密码已更新，现在可以返回登录。</p> : null}
+              {success ? <p className="muted-text">密码已更新，即将返回登录页。</p> : null}
               <button className="primary-button" type="submit" disabled={submitting}>
                 {submitting ? "提交中…" : "确认重置密码"}
               </button>
             </form>
 
+            {showRetryAction ? (
+              <button className="link-button" type="button" onClick={() => navigate("/forgot-password")}>
+                重新申请重置邮件
+              </button>
+            ) : null}
             <button className="link-button" type="button" onClick={() => navigate("/login")}>
               返回登录
             </button>
