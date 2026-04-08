@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -36,6 +37,9 @@ from api.services.email_verification_store import (
 from sqlalchemy.exc import IntegrityError
 
 
+EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 class AuthService:
     def __init__(
         self,
@@ -49,18 +53,22 @@ class AuthService:
 
     def register(self, *, nickname: str, email: str, password: str, ip_address: str) -> User:
         normalized_email = self._normalize_email(email)
-        self._validate_password(password)
+        normalized_nickname = self._normalize_nickname(nickname)
+        normalized_password = self._normalize_password(password)
         if self.repository.get_user_by_email(normalized_email) is not None:
             raise ValidationError("Email already registered")
 
         user = User(
             id=f"user_{uuid4().hex[:12]}",
             email=normalized_email,
-            nickname=nickname.strip(),
+            nickname=normalized_nickname,
             status="pending_verification",
         )
         try:
-            self.repository.create_user(user=user, password_hash=hash_password(password))
+            self.repository.create_user(
+                user=user,
+                password_hash=hash_password(normalized_password),
+            )
         except IntegrityError as error:
             raise ValidationError("Email already registered") from error
         self._issue_email_verification(user, ip_address=ip_address)
@@ -156,7 +164,7 @@ class AuthService:
         self._issue_password_reset(user)
 
     def reset_password(self, *, token: str, password: str) -> None:
-        self._validate_password(password)
+        normalized_password = self._normalize_password(password)
         stored_token = self._consume_auth_action_token(
             token=token,
             purpose=AUTH_TOKEN_PURPOSE_PASSWORD_RESET,
@@ -167,7 +175,7 @@ class AuthService:
         updated_at = datetime.now(timezone.utc)
         self.repository.update_password_hash(
             user.id,
-            hash_password(password),
+            hash_password(normalized_password),
             updated_at,
         )
         self.repository.revoke_all_refresh_tokens(user.id, updated_at)
@@ -205,16 +213,27 @@ class AuthService:
         normalized = email.strip().lower()
         if not normalized:
             raise ValidationError("Email is required")
+        if not EMAIL_PATTERN.fullmatch(normalized):
+            raise ValidationError("Invalid email format")
         return normalized
 
-    def _validate_password(self, password: str) -> None:
+    def _normalize_nickname(self, nickname: str) -> str:
+        normalized = nickname.strip()
+        if not normalized:
+            raise ValidationError("Nickname is required")
+        return normalized
+
+    def _normalize_password(self, password: str) -> str:
         trimmed = password.strip()
+        if not trimmed:
+            raise ValidationError("Password is required")
         if len(trimmed) < 8:
             raise ValidationError("Password must be at least 8 characters")
         if not any(character.isalpha() for character in trimmed) or not any(
             character.isdigit() for character in trimmed
         ):
             raise ValidationError("Password must include letters and numbers")
+        return trimmed
 
     def _ensure_user_can_authenticate(self, user: User) -> None:
         if user.status == "active":

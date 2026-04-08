@@ -1,138 +1,29 @@
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, field_validator
 
 from api.common.deps import get_refresh_token, require_authenticated_user
 from api.common.responses import ApiResponse
+from api.contracts.auth import (
+    AuthSessionResponse,
+    AuthUserResponse,
+    EmailRequest,
+    LoginRequest,
+    RegisterRequest,
+    RegisterResponse,
+    ResetPasswordRequest,
+    VerifyEmailRequest,
+)
 from api.core.config import settings
 from api.core.security import hash_action_token, hash_refresh_token
-from api.models.auth_model import AuthSession
 from api.models.user_model import User
 from api.services.auth_rate_limit import AuthRateLimiter, get_auth_rate_limiter
 from api.services.auth_service import AuthService, get_auth_service
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
-def _normalize_email(value: str) -> str:
-    normalized = value.strip().lower()
-    if not EMAIL_PATTERN.fullmatch(normalized):
-        raise ValueError("Invalid email format")
-    return normalized
-
-
-def _normalize_nickname(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("Nickname is required")
-    return normalized
-
-
-def _normalize_password(value: str) -> str:
-    trimmed = value.strip()
-    if len(trimmed) < 8:
-        raise ValueError("Password must be at least 8 characters")
-    if not re.search(r"[A-Za-z]", trimmed) or not re.search(r"\d", trimmed):
-        raise ValueError("Password must include letters and numbers")
-    return trimmed
-
-
-def _normalize_login_password(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("Password is required")
-    return normalized
-
-
-def _normalize_token(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("Token is required")
-    return normalized
-
-
-class RegisterRequest(BaseModel):
-    nickname: str
-    email: str
-    password: str
-
-    _validate_nickname = field_validator("nickname")(_normalize_nickname)
-    _validate_email = field_validator("email")(_normalize_email)
-    _validate_password = field_validator("password")(_normalize_password)
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
-
-    _validate_email = field_validator("email")(_normalize_email)
-    _validate_password = field_validator("password")(_normalize_login_password)
-
-
-class EmailRequest(BaseModel):
-    email: str
-
-    _validate_email = field_validator("email")(_normalize_email)
-
-
-class VerifyEmailRequest(BaseModel):
-    token: str
-
-    _validate_token = field_validator("token")(_normalize_token)
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    password: str
-
-    _validate_token = field_validator("token")(_normalize_token)
-    _validate_password = field_validator("password")(_normalize_password)
-
-
-class AuthUserResponse(BaseModel):
-    user_id: str
-    email: str
-    nickname: str
-
-    @classmethod
-    def from_user(cls, user: User) -> "AuthUserResponse":
-        return cls(
-            user_id=user.id,
-            email=user.email,
-            nickname=user.nickname,
-        )
-
-
-class AuthSessionResponse(BaseModel):
-    access_token: str
-    user: AuthUserResponse
-
-    @classmethod
-    def from_session(cls, session: AuthSession) -> "AuthSessionResponse":
-        return cls(
-            access_token=session.access_token,
-            user=AuthUserResponse.from_user(session.user),
-        )
-
-
-class RegisterResponse(BaseModel):
-    user_id: str
-    email: str
-    nickname: str
-
-    @classmethod
-    def from_user(cls, user: User) -> "RegisterResponse":
-        return cls(
-            user_id=user.id,
-            email=user.email,
-            nickname=user.nickname,
-        )
 
 
 def _with_refresh_cookie(response, refresh_token: str):
@@ -182,6 +73,7 @@ def register(
         nickname=payload.nickname,
         email=payload.email,
         password=payload.password,
+        ip_address=request.client.host if request.client is not None else "unknown",
     )
     return ApiResponse.success(data=RegisterResponse.from_user(user))
 
@@ -240,7 +132,10 @@ def resend_verification(
         action="resend_verification",
         subject=payload.email,
     )
-    auth_service.resend_verification(email=payload.email)
+    auth_service.resend_verification(
+        email=payload.email,
+        ip_address=request.client.host if request.client is not None else "unknown",
+    )
     return ApiResponse.success_without_data()
 
 
@@ -255,9 +150,9 @@ def verify_email(
         request=request,
         limiter=rate_limiter,
         action="verify_email",
-        subject=hash_action_token(payload.token),
+        subject=payload.email,
     )
-    auth_service.verify_email(token=payload.token)
+    auth_service.verify_email(email=payload.email, code=payload.code)
     return ApiResponse.success_without_data()
 
 

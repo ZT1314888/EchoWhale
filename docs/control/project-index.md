@@ -6,7 +6,7 @@
 
 - `system`: `integrating`
 - 真实仓库状态：`api/` 后端 scaffold 已经成型，`frontend/` 和 `tests/` 仍以骨架为主
-- 当前策略：先用 feature 文档拆 backend-heavy 主链路，再逐步推进模块测试和系统集成
+- 当前策略：先用 feature 文档拆 backend-heavy 主链路，再逐步推进模块测试和系统集成；后端路由契约正在统一收口到 `api/contracts/`，已完成 `auth/sessions/media/history` 四个模块的 request/response DTO 抽离
 
 ## 最新进度快照
 
@@ -41,7 +41,7 @@
 | Area | Docs Path | Current Status | Exit Gate | Merge Target | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `platform_foundation` | `docs/modules/platform_foundation/status.md` | `building` | `module_test_passed` | `integration/system` | `ApiResponse` 与全局异常处理已落地，`/api/v1/*` 统一响应壳已形成，`/health` 保持裸探针 |
-| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、待验证注册、验证码激活、Redis 频控、refresh cookie、运行时自动续期和 `/history` 登录守卫已落地；当前剩余 OAuth、真实 Redis/SMTP smoke 与匿名数据绑定策略 |
+| `auth` | `docs/modules/auth/status.md` | `module_test_passed` | `module_test_passed` | `integration/system` | 邮箱密码登录、待验证注册、验证码激活、Redis 频控、refresh cookie、运行时自动续期和 `/history` 登录守卫已落地；auth HTTP contracts 已迁到 `api/contracts/auth.py`；当前剩余 OAuth、真实 Redis/SMTP smoke 与匿名数据绑定策略 |
 | `media_upload` | `docs/modules/media_upload/status.md` | `building` | `module_test_passed` | `integration/system` | 上传/查询/access-url 接口、PG 持久化、统一响应壳与前端 loading 真上传桥接已落地；当前功能剩余真实私有 R2 联调、签名 URL 访问确认与密钥轮换 |
 | `scene_engine` | `docs/modules/scene_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/scene_engine/` 已存在 |
 | `coach_engine` | `docs/modules/coach_engine/status.md` | `building` | `module_test_passed` | `integration/system` | `api/modules/coach_engine/` 已存在 |
