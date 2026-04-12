@@ -19,9 +19,9 @@ from api.models.media_model import Media, MediaAccessGrant, MediaUploadResult
 
 
 class StorageService(Protocol):
-    def upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None: ...
+    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None: ...
 
-    def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]: ...
+    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]: ...
 
 
 class MediaService:
@@ -44,7 +44,7 @@ class MediaService:
         self.signed_url_ttl_seconds = signed_url_ttl_seconds
         self.allowed_content_types = set(allowed_content_types)
 
-    def upload_media(
+    async def upload_media(
         self,
         *,
         user_id: str,
@@ -59,7 +59,7 @@ class MediaService:
         media_id = f"med_{uuid4().hex[:12]}"
         storage_key = self._build_storage_key(user_id=user_id, media_id=media_id, filename=filename)
 
-        self.storage.upload_bytes(
+        await self.storage.async_upload_bytes(
             key=storage_key,
             content=content,
             content_type=content_type,
@@ -74,8 +74,8 @@ class MediaService:
             storage_key=storage_key,
             upload_status=MediaUploadStatus.uploaded,
         )
-        saved_media = self.repository.save_media(media)
-        preview_url, expires_at = self.storage.create_signed_read_url(
+        saved_media = await self.repository.save_media(media)
+        preview_url, expires_at = await self.storage.async_create_signed_read_url(
             storage_key,
             expires_in=self.signed_url_ttl_seconds,
         )
@@ -85,15 +85,15 @@ class MediaService:
             preview_url_expires_at=expires_at,
         )
 
-    def get_media(self, media_id: str, *, owner_id: str | None = None) -> Media:
-        media = self.repository.get_media(media_id)
+    async def get_media(self, media_id: str, *, owner_id: str | None = None) -> Media:
+        media = await self.repository.get_media(media_id)
         self._ensure_owner(media, owner_id)
         return media
 
-    def create_media_access_url(self, media_id: str, *, owner_id: str | None = None) -> MediaAccessGrant:
-        media = self.repository.get_media(media_id)
+    async def create_media_access_url(self, media_id: str, *, owner_id: str | None = None) -> MediaAccessGrant:
+        media = await self.repository.get_media(media_id)
         self._ensure_owner(media, owner_id)
-        read_url, expires_at = self.storage.create_signed_read_url(
+        read_url, expires_at = await self.storage.async_create_signed_read_url(
             media.storage_key,
             expires_in=self.signed_url_ttl_seconds,
         )

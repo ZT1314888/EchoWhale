@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/scene_engine`
 - `owner`: `unassigned`
-- `updated_at`: `2026-04-06`
+- `updated_at`: `2026-04-09`
 
 ## 模块目标
 
@@ -16,6 +16,7 @@
 
 - 现有实现：`api/modules/scene_engine/` 已支持主模型 / 兜底模型 provider 选择与自动回退
 - 已完成边界：schema 归一化、双字段关键词契约、state、agent、service、mock vision provider、OpenAI-compatible vision provider、主备回退逻辑、低置信度与双字段空值质量门、`PNG/JPG/WebP` 质量门、session 显式失败语义
+- 已完成边界：live 模式下 provider 选择已收紧；当 primary/fallback 都未配置真实视觉 provider 时会显式报配置错误，不再静默回退到 mock vision provider
 - 当前输出已切到可选 live provider；实测表明主视觉模型可处理项目真实上传后的 R2 签名 URL
 - office 类场景提示已补充“接待区 / 等候区 / 访客”一类更贴近口语练习的语境选择，避免默认漂到内部会议语境
 
@@ -48,13 +49,14 @@
 - `module_test_passed` 的标准：
   - 合法输入时输出结构稳定
   - 主模型失败、低置信度或结构异常时能走兜底
-  - session 链路在 `scene_engine` 双重失败时仍可静态降级
+  - unsupported 图片会以 `422/1007` 显式失败；基础设施型 scene 失败会显式返回 `503`，不再静默创建通用 session
   - 纯黑/纯白或不可练习图片会以 `422/1007` 失败返回，不再创建 session
   - 已准备 live evaluation 入口，可基于真实签名 URL 做样本评估
 - 当前证据：
   - `tests/modules/test_scene_engine.py`
   - `tests/modules/test_scene_engine_evaluation.py`
   - `tests/modules/test_session_engine.py`
+  - live 配置门禁：`tests/modules/test_scene_engine.py::test_live_scene_engine_requires_real_provider_configuration`
 - 还没覆盖的风险：
   - 真实视觉模型在复杂图片上的 role/opener 质量波动
   - 视觉兜底模型当前不可用
@@ -77,6 +79,8 @@
 - `2026-04-06`：补 schema 归一化、低置信度/空标签质量门、session 显式失败语义与 live evaluation 骨架
 - `2026-04-06`：新增 unsupported image 契约、`PNG/JPG/WebP` 质量门、`422/1007` session 失败响应与前端 loading 拦截
 - `2026-04-05`：接入主备 provider 配置入口与 scene fallback 测试
+- `2026-04-09`：收紧 live provider 语义，避免真实运行模式在空配置下静默回退到 mock vision provider
 - `2026-03-30`：初始化模块状态文档
+
 
 

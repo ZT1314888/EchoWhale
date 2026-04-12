@@ -26,18 +26,18 @@ router = APIRouter(prefix="/history", tags=["history"])
 
 
 @router.get("/sessions", response_model=ApiResponse[HistoryListResponse])
-def list_history_sessions(
+async def list_history_sessions(
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     session_service: SessionEngineService = Depends(get_session_service),
     current_user: User = Depends(require_authenticated_user),
 ) -> Any:
-    sessions, has_more, next_cursor = session_service.list_history_sessions_page(
+    sessions, has_more, next_cursor = await session_service.list_history_sessions_page(
         build_user_owner(current_user.id),
         limit=limit,
         cursor=cursor,
     )
-    reviews = session_service.list_history_reviews([session.id for session in sessions])
+    reviews = await session_service.list_history_reviews([session.id for session in sessions])
     items = [
         HistoryEntryResponse.from_session(
             session,
@@ -55,12 +55,12 @@ def list_history_sessions(
 
 
 @router.get("/sessions/{session_id}", response_model=ApiResponse[HistoryDetailResponse])
-def get_history_session(
+async def get_history_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
     current_user: User = Depends(require_authenticated_user),
 ) -> Any:
-    session, review, total_messages = session_service.get_history_session_overview(
+    session, review, total_messages = await session_service.get_history_session_overview(
         build_user_owner(current_user.id),
         session_id,
     )
@@ -81,14 +81,14 @@ def get_history_session(
     "/sessions/{session_id}/messages",
     response_model=ApiResponse[HistoryReplayPageResponse],
 )
-def get_history_session_messages(
+async def get_history_session_messages(
     session_id: str,
     limit: int = Query(default=20, ge=1, le=100),
     cursor: str | None = Query(default=None),
     session_service: SessionEngineService = Depends(get_session_service),
     current_user: User = Depends(require_authenticated_user),
 ) -> Any:
-    messages, has_more, next_cursor = session_service.list_history_session_messages(
+    messages, has_more, next_cursor = await session_service.list_history_session_messages(
         build_user_owner(current_user.id),
         session_id,
         limit=limit,

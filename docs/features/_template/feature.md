@@ -9,6 +9,7 @@
 - `cross_module`: `yes` | `no`
 - `owner`: `<owner>`
 - `updated_at`: `<YYYY-MM-DD>`
+- `merge_target`: `module/<module-name>`
 
 ## 背景
 
@@ -51,6 +52,12 @@
 - `feature_test_passed` 的证据：
 - 主要测试命令：
 - 已知缺口：
+
+## 控制面同步
+
+- 若该 feature 会出现在 `docs/control/project-index.md`，先更新 `docs/control/agent-control-plane.json`
+- 同步后运行：`uv run python -m tools.agent_ops render`
+- 校验：`uv run python -m tools.agent_ops check`
 
 ## 合并与关闭
 

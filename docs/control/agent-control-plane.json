@@ -1,0 +1,226 @@
+{
+  "system": {
+    "status": "integrating",
+    "repo_summary": "`api/` 后端与 backend-heavy 测试已成型，`frontend/` 持续补齐，`infra/` 仍以预留结构为主。",
+    "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
+  },
+  "latest_snapshot": {
+    "latest_record": "docs/features/auth_email_code_verification/feature.md",
+    "summary": "auth 注册验证已切到 6 位邮箱验证码，Redis 验证码存储、邮箱/IP 频控和 SMTP 配置入口都已落地。",
+    "blockers": "真实 Redis / 阿里云 SMTP 仍需 smoke；Deepgram token、麦克风与浏览器播放联调也仍待系统级样本验证。",
+    "extra_progress": "`coach_engine`、`scene_engine`、`feedback_engine` 在 `MODEL_RUNTIME_MODE=live` 下都已收紧为至少存在一个真实 provider。"
+  },
+  "modules": [
+    {
+      "name": "platform_foundation",
+      "docs_path": "docs/modules/platform_foundation/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "应用入口、共享配置和控制面治理工具正在收口。",
+      "owner_files": [
+        "api/main.py",
+        "api/core/",
+        "api/common/",
+        "tools/agent_ops.py"
+      ],
+      "branch_hint": "module/platform_foundation",
+      "focus": "启动、配置、共享能力、agent 协作治理"
+    },
+    {
+      "name": "auth",
+      "docs_path": "docs/modules/auth/status.md",
+      "status": "module_test_passed",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "邮箱密码登录、验证码激活、Redis 频控和 refresh cookie 已落地。",
+      "owner_files": [
+        "api/routes/v1/auth.py",
+        "api/services/auth_service.py",
+        "api/db/auth_db.py"
+      ],
+      "branch_hint": "module/auth",
+      "focus": "认证、登录态恢复、身份边界"
+    },
+    {
+      "name": "media_upload",
+      "docs_path": "docs/modules/media_upload/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "上传/查询/access-url 和 PG 持久化已落地，剩余真实私有 R2 联调。",
+      "owner_files": [
+        "api/models/media_model.py",
+        "api/db/media_db.py",
+        "api/integrations/storage/"
+      ],
+      "branch_hint": "module/media_upload",
+      "focus": "图片上传、媒体元数据、对象存储 URL"
+    },
+    {
+      "name": "scene_engine",
+      "docs_path": "docs/modules/scene_engine/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "live provider 配置门禁已收紧，当前剩余真实样本评估与质量波动验证。",
+      "owner_files": [
+        "api/modules/scene_engine/"
+      ],
+      "branch_hint": "module/scene_engine",
+      "focus": "场景理解、角色设定、开场白"
+    },
+    {
+      "name": "coach_engine",
+      "docs_path": "docs/modules/coach_engine/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "文本 provider 主备逻辑已落地，live 模式要求至少一个真实 provider。",
+      "owner_files": [
+        "api/modules/coach_engine/"
+      ],
+      "branch_hint": "module/coach_engine",
+      "focus": "多轮追问、角色一致性、回复生成"
+    },
+    {
+      "name": "feedback_engine",
+      "docs_path": "docs/modules/feedback_engine/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "useful words 和 live client 选择逻辑已收口，仍需更多系统联调。",
+      "owner_files": [
+        "api/modules/feedback_engine/"
+      ],
+      "branch_hint": "module/feedback_engine",
+      "focus": "语法纠错、自然表达、词汇建议"
+    },
+    {
+      "name": "session_orchestration",
+      "docs_path": "docs/modules/session_orchestration/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "start/get/reply/review 与 voice bootstrap/complete 已落地，剩余完整系统级联调。",
+      "owner_files": [
+        "api/modules/session_engine/",
+        "api/services/",
+        "api/routes/"
+      ],
+      "branch_hint": "module/session_orchestration",
+      "focus": "会话编排、状态推进、模块串联"
+    },
+    {
+      "name": "history_review",
+      "docs_path": "docs/modules/history_review/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "history 列表、详情和消息回放分页已落地，剩余筛选和 richer review 策略。",
+      "owner_files": [
+        "api/models/session_model.py",
+        "api/db/session_db.py",
+        "api/routes/v1/history.py"
+      ],
+      "branch_hint": "module/history_review",
+      "focus": "历史查看、回放和复盘"
+    },
+    {
+      "name": "frontend_app",
+      "docs_path": "docs/modules/frontend_app/status.md",
+      "status": "building",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "七页路由壳层和真 upload/session/review/history 路径已落地。",
+      "owner_files": [
+        "frontend/"
+      ],
+      "branch_hint": "module/frontend_app",
+      "focus": "上传页、练习页、历史页与真接口桥接"
+    },
+    {
+      "name": "infra_delivery",
+      "docs_path": "docs/modules/infra_delivery/status.md",
+      "status": "planned",
+      "exit_gate": "module_test_passed",
+      "merge_target": "integration/system",
+      "notes": "`infra/` 仍以预留结构为主。",
+      "owner_files": [
+        "infra/"
+      ],
+      "branch_hint": "module/infra_delivery",
+      "focus": "部署、环境、交付流程"
+    }
+  ],
+  "features": [
+    {
+      "name": "图片上传",
+      "scope": "media_upload",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/media_upload"
+    },
+    {
+      "name": "场景理解",
+      "scope": "scene_engine",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/scene_engine"
+    },
+    {
+      "name": "对话教练",
+      "scope": "coach_engine",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/coach_engine"
+    },
+    {
+      "name": "学习反馈",
+      "scope": "feedback_engine",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/feedback_engine"
+    },
+    {
+      "name": "会话编排",
+      "scope": "session_orchestration",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "历史查看",
+      "scope": "history_review",
+      "status": "in_progress",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/history_review"
+    }
+  ],
+  "test_layers": [
+    {
+      "name": "smoke",
+      "what_to_prove": "应用能启动，`/health` 可用。",
+      "status": "planned",
+      "exit_criteria": "入口稳定，基础路由正常。"
+    },
+    {
+      "name": "module",
+      "what_to_prove": "每个 engine 和共享底座的输入输出契约稳定。",
+      "status": "building",
+      "exit_criteria": "模块级单测持续补齐并保持通过。"
+    },
+    {
+      "name": "integration",
+      "what_to_prove": "上传 -> 会话 -> 多轮对话 -> 反馈 -> 历史 的 backend-heavy 主链路可跑通。",
+      "status": "building",
+      "exit_criteria": "主链路和关键外部适配已完成系统联调。"
+    },
+    {
+      "name": "full_flow",
+      "what_to_prove": "前后端联通并可演示。",
+      "status": "planned",
+      "exit_criteria": "`system` 可切到 `releasable`。"
+    }
+  ]
+}

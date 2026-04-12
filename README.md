@@ -6,8 +6,9 @@ EchoWhale is an image-grounded English conversation coach. Users upload a real-w
 
 - `api/`: modular FastAPI backend with scene, coach, feedback, and session engines
 - `frontend/`: React + Vite demo client for upload, practice, and history
-- `docs/`: product and architecture documentation
-- `tests/`: backend test scaffolding
+- `docs/`: product, architecture, and governance documentation
+- `tests/`: backend-heavy regression and contract tests
+- `tools/`: repo-local governance and collaboration tools
 
 ## Quick start
 
@@ -31,15 +32,32 @@ If your backend runs elsewhere, set `VITE_API_PROXY_TARGET` before `npm run dev`
 
 ## Current scope
 
-This scaffold provides:
+This repository currently provides:
 
-- a versioned API entrypoint with `/health` and router scaffolding
-- in-memory persistence for uploads and sessions
-- mock storage and LLM integrations
-- modular engine boundaries for future model swaps
-- a lightweight React demo interface
+- a versioned API entrypoint with `/health` and shared response handling
+- PostgreSQL-backed auth, media, session, history, and voice-agent persistence paths
+- modular `scene / coach / feedback / session` engines with live-provider gates
+- a React demo client wired to real upload, session, review, and history flows
+- backend-heavy regression tests for contracts, repositories, services, and engine orchestration
 
-The next step is replacing mock providers with real model and Cloudflare adapters.
+The next step is continuing real-provider smoke coverage and system-level integration for the full `upload -> session -> voice -> review -> history` flow.
 
-cloudflared tunnel --url http://localhost:8001
-codex resume 019d636e-11c2-7ff3-94c1-8b2ed7df579e
+## Agent Collaboration
+
+EchoWhale uses a repo-local control plane for agent and human collaboration.
+
+### Control plane commands
+
+```bash
+uv run python -m tools.agent_ops check
+uv run python -m tools.agent_ops render
+uv run python -m tools.agent_ops bootstrap feature agent_governance_control_plane --module platform_foundation --owner codex
+```
+
+### Source of truth
+
+- `docs/control/agent-control-plane.json`: single source of truth for system/module/feature/test-layer index data
+- `docs/control/project-index.md`: human-readable control dashboard with a generated block
+- `.codex/README.md`: repo-local agent workspace entry
+
+When control-plane data changes, update the JSON first, then run `render`, then `check`.

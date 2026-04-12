@@ -385,20 +385,47 @@ describe("authApi", () => {
     });
   });
 
-  it("posts verify email tokens with credentials included", async () => {
+  it("posts verify email codes with credentials included", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       status: 204,
       headers: new Headers(),
     }) as typeof fetch;
 
-    await expect(authApi.verifyEmail("verify-token")).resolves.toBeUndefined();
+    await expect(
+      authApi.verifyEmail({
+        email: "learner@example.com",
+        code: "123456",
+      }),
+    ).resolves.toBeUndefined();
 
     expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/auth/verify-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ token: "verify-token" }),
+      body: JSON.stringify({ email: "learner@example.com", code: "123456" }),
+    });
+  });
+
+  it("maps verification code and resend frequency errors to localized messages", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonErrorResponse(400, "Verification code is invalid or expired"))
+      .mockResolvedValueOnce(mockJsonErrorResponse(429, "请求过于频繁")) as typeof fetch;
+
+    await expect(
+      authApi.verifyEmail({
+        email: "learner@example.com",
+        code: "999999",
+      }),
+    ).rejects.toMatchObject({
+      code: "AUTH_API_FAILED",
+      message: "验证码错误或已过期",
+    });
+
+    await expect(authApi.resendVerification({ email: "learner@example.com" })).rejects.toMatchObject({
+      code: "AUTH_API_FAILED",
+      message: "请求过于频繁",
     });
   });
 

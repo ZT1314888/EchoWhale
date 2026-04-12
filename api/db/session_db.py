@@ -21,7 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import SessionStatus
 from api.common.exceptions import NotFoundError
-from api.db.database import Base, SessionFactory, get_session_factory
+from api.db.database import Base, AsyncSessionFactory, get_async_session_factory
 from api.models.message_model import Message
 from api.models.runtime_model import SessionEvent
 from api.models.runtime_model import VoiceSessionFact
@@ -30,13 +30,13 @@ from api.models.session_model import Session
 
 
 class SessionRepository(Protocol):
-    def save_session(self, session: Session) -> Session: ...
+    async def save_session(self, session: Session) -> Session: ...
 
-    def get_session(self, session_id: str) -> Session: ...
+    async def get_session(self, session_id: str) -> Session: ...
 
-    def add_message(self, session_id: str, message: Message) -> Session: ...
+    async def add_message(self, session_id: str, message: Message) -> Session: ...
 
-    def save_reply_turn(
+    async def save_reply_turn(
         self,
         session_id: str,
         learner_message: Message,
@@ -44,7 +44,7 @@ class SessionRepository(Protocol):
         review: SessionReview,
     ) -> Session: ...
 
-    def finalize_voice_session(
+    async def finalize_voice_session(
         self,
         *,
         session: Session,
@@ -53,13 +53,13 @@ class SessionRepository(Protocol):
         events: list[SessionEvent],
     ) -> tuple[Session, SessionReview]: ...
 
-    def save_session_review(self, review: SessionReview) -> SessionReview: ...
+    async def save_session_review(self, review: SessionReview) -> SessionReview: ...
 
-    def get_session_review(self, session_id: str) -> SessionReview: ...
+    async def get_session_review(self, session_id: str) -> SessionReview: ...
 
-    def list_user_sessions(self, user_id: str) -> list[Session]: ...
+    async def list_user_sessions(self, user_id: str) -> list[Session]: ...
 
-    def list_user_sessions_page(
+    async def list_user_sessions_page(
         self,
         user_id: str,
         *,
@@ -67,13 +67,13 @@ class SessionRepository(Protocol):
         cursor: tuple[datetime, str] | None,
     ) -> tuple[list[Session], bool, tuple[datetime, str] | None]: ...
 
-    def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]: ...
+    async def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]: ...
 
-    def get_session_head(self, session_id: str) -> Session: ...
+    async def get_session_head(self, session_id: str) -> Session: ...
 
-    def count_session_messages(self, session_id: str) -> int: ...
+    async def count_session_messages(self, session_id: str) -> int: ...
 
-    def list_session_messages_page(
+    async def list_session_messages_page(
         self,
         session_id: str,
         *,
@@ -81,13 +81,13 @@ class SessionRepository(Protocol):
         cursor: str | None,
     ) -> tuple[list[Message], bool, str | None]: ...
 
-    def save_session_event(self, event: SessionEvent) -> SessionEvent: ...
+    async def save_session_event(self, event: SessionEvent) -> SessionEvent: ...
 
-    def list_session_events(self, session_id: str) -> list[SessionEvent]: ...
+    async def list_session_events(self, session_id: str) -> list[SessionEvent]: ...
 
-    def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact: ...
+    async def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact: ...
 
-    def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None: ...
+    async def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None: ...
 
 
 class SessionRecord(Base):
@@ -172,80 +172,80 @@ class VoiceSessionFactRecord(Base):
 
 
 class SqlAlchemySessionRepository:
-    def __init__(self, session_factory: SessionFactory | None = None) -> None:
-        self._session_factory = session_factory or get_session_factory()
+    def __init__(self, session_factory: AsyncSessionFactory | None = None) -> None:
+        self._session_factory = session_factory or get_async_session_factory()
 
-    def save_session(self, session: Session) -> Session:
-        with self._session_factory() as db_session:
-            self._upsert_session_record(db_session, session)
+    async def save_session(self, session: Session) -> Session:
+        async with self._session_factory() as db_session:
+            await self._upsert_session_record(db_session, session)
             # 强制先落父 session，避免在 FK 严格数据库中先写子 message。
-            db_session.flush()
-            db_session.execute(
+            await db_session.flush()
+            await db_session.execute(
                 delete(MessageRecord).where(MessageRecord.session_id == session.id)
             )
             for position, message in enumerate(session.messages):
-                db_session.add(self._to_message_record(session.id, position, message))
-            db_session.commit()
-        return self.get_session(session.id)
+                db_session.add(await self._to_message_record(session.id, position, message))
+            await db_session.commit()
+        return await self.get_session(session.id)
 
-    def get_session(self, session_id: str) -> Session:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, session_id)
+    async def get_session(self, session_id: str) -> Session:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, session_id)
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
-            messages = self._load_messages(db_session, session_id)
+            messages = await self._load_messages(db_session, session_id)
             return _to_session(record, messages)
 
-    def add_message(self, session_id: str, message: Message) -> Session:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, session_id)
+    async def add_message(self, session_id: str, message: Message) -> Session:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, session_id)
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = db_session.scalar(
+            current_position = await db_session.scalar(
                 select(func.coalesce(func.max(MessageRecord.position), -1)).where(
                     MessageRecord.session_id == session_id
                 )
             )
             db_session.add(
-                self._to_message_record(
+                await self._to_message_record(
                     session_id,
                     int(current_position) + 1,
                     message,
                 )
             )
             record.updated_at = message.created_at
-            db_session.commit()
-        return self.get_session(session_id)
+            await db_session.commit()
+        return await self.get_session(session_id)
 
-    def save_reply_turn(
+    async def save_reply_turn(
         self,
         session_id: str,
         learner_message: Message,
         assistant_message: Message,
         review: SessionReview,
     ) -> Session:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, session_id)
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, session_id)
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = db_session.scalar(
+            current_position = await db_session.scalar(
                 select(func.coalesce(func.max(MessageRecord.position), -1)).where(
                     MessageRecord.session_id == session_id
                 )
             )
             next_position = int(current_position) + 1
-            db_session.add(self._to_message_record(session_id, next_position, learner_message))
+            db_session.add(await self._to_message_record(session_id, next_position, learner_message))
             db_session.add(
-                self._to_message_record(session_id, next_position + 1, assistant_message)
+                await self._to_message_record(session_id, next_position + 1, assistant_message)
             )
-            self._upsert_review_record(db_session, review)
+            await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
-            db_session.commit()
-        return self.get_session(session_id)
+            await db_session.commit()
+        return await self.get_session(session_id)
 
-    def finalize_voice_session(
+    async def finalize_voice_session(
         self,
         *,
         session: Session,
@@ -253,22 +253,22 @@ class SqlAlchemySessionRepository:
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
     ) -> tuple[Session, SessionReview]:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, session.id)
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, session.id)
             if record is None:
                 raise NotFoundError(f"Session {session.id} not found")
 
-            self._upsert_session_record(db_session, session)
-            db_session.flush()
-            db_session.execute(
+            await self._upsert_session_record(db_session, session)
+            await db_session.flush()
+            await db_session.execute(
                 delete(MessageRecord).where(MessageRecord.session_id == session.id)
             )
             for position, message in enumerate(session.messages):
-                db_session.add(self._to_message_record(session.id, position, message))
+                db_session.add(await self._to_message_record(session.id, position, message))
 
-            self._upsert_review_record(db_session, review)
+            await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
-            self._upsert_voice_session_fact_record(db_session, voice_fact)
+            await self._upsert_voice_session_fact_record(db_session, voice_fact)
             for event in events:
                 db_session.add(
                     SessionEventRecord(
@@ -279,47 +279,47 @@ class SqlAlchemySessionRepository:
                         created_at=event.created_at,
                     )
                 )
-            db_session.commit()
+            await db_session.commit()
 
-        return (self.get_session(session.id), self.get_session_review(review.session_id))
+        return (await self.get_session(session.id), await self.get_session_review(review.session_id))
 
-    def save_session_review(self, review: SessionReview) -> SessionReview:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, review.session_id)
+    async def save_session_review(self, review: SessionReview) -> SessionReview:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, review.session_id)
             if record is None:
                 raise NotFoundError(f"Session {review.session_id} not found")
-            self._upsert_review_record(db_session, review)
+            await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
-            db_session.commit()
-        return self.get_session_review(review.session_id)
+            await db_session.commit()
+        return await self.get_session_review(review.session_id)
 
-    def get_session_review(self, session_id: str) -> SessionReview:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionReviewRecord, session_id)
+    async def get_session_review(self, session_id: str) -> SessionReview:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionReviewRecord, session_id)
             if record is None:
                 raise NotFoundError(f"Session review {session_id} not found")
             return _to_review(record)
 
-    def list_user_sessions(self, user_id: str) -> list[Session]:
-        with self._session_factory() as db_session:
-            records = db_session.scalars(
+    async def list_user_sessions(self, user_id: str) -> list[Session]:
+        async with self._session_factory() as db_session:
+            records = await db_session.scalars(
                 select(SessionRecord)
                 .where(SessionRecord.user_id == user_id)
                 .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
             ).all()
             return [
-                _to_session(record, self._load_messages(db_session, record.id))
+                _to_session(record, await self._load_messages(db_session, record.id))
                 for record in records
             ]
 
-    def list_user_sessions_page(
+    async def list_user_sessions_page(
         self,
         user_id: str,
         *,
         limit: int,
         cursor: tuple[datetime, str] | None,
     ) -> tuple[list[Session], bool, tuple[datetime, str] | None]:
-        with self._session_factory() as db_session:
+        async with self._session_factory() as db_session:
             statement = (
                 select(SessionRecord)
                 .join(
@@ -339,7 +339,7 @@ class SqlAlchemySessionRepository:
                         ),
                     )
                 )
-            records = db_session.scalars(
+            records = await db_session.scalars(
                 statement
                 .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
                 .limit(limit + 1)
@@ -353,42 +353,42 @@ class SqlAlchemySessionRepository:
             sessions = [_to_session_head(record) for record in page_records]
             return (sessions, has_more, next_cursor)
 
-    def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]:
+    async def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]:
         if not session_ids:
             return {}
-        with self._session_factory() as db_session:
-            records = db_session.scalars(
+        async with self._session_factory() as db_session:
+            records = await db_session.scalars(
                 select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
             ).all()
             return {record.session_id: _to_review(record) for record in records}
 
-    def get_session_head(self, session_id: str) -> Session:
-        with self._session_factory() as db_session:
-            record = db_session.get(SessionRecord, session_id)
+    async def get_session_head(self, session_id: str) -> Session:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(SessionRecord, session_id)
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
             return _to_session_head(record)
 
-    def count_session_messages(self, session_id: str) -> int:
-        with self._session_factory() as db_session:
-            self._ensure_session_exists(db_session, session_id)
-            value = db_session.scalar(
+    async def count_session_messages(self, session_id: str) -> int:
+        async with self._session_factory() as db_session:
+            await self._ensure_session_exists(db_session, session_id)
+            value = await db_session.scalar(
                 select(func.count(MessageRecord.id)).where(MessageRecord.session_id == session_id)
             )
             return int(value or 0)
 
-    def list_session_messages_page(
+    async def list_session_messages_page(
         self,
         session_id: str,
         *,
         limit: int,
         cursor: str | None,
     ) -> tuple[list[Message], bool, str | None]:
-        with self._session_factory() as db_session:
-            self._ensure_session_exists(db_session, session_id)
+        async with self._session_factory() as db_session:
+            await self._ensure_session_exists(db_session, session_id)
             statement = select(MessageRecord).where(MessageRecord.session_id == session_id)
             if cursor is not None:
-                cursor_position = db_session.scalar(
+                cursor_position = await db_session.scalar(
                     select(MessageRecord.position).where(
                         MessageRecord.session_id == session_id,
                         MessageRecord.id == cursor,
@@ -398,7 +398,7 @@ class SqlAlchemySessionRepository:
                     raise NotFoundError(f"Message {cursor} not found")
                 statement = statement.where(MessageRecord.position < int(cursor_position))
 
-            records_desc = db_session.scalars(
+            records_desc = await db_session.scalars(
                 statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
             ).all()
             has_more = len(records_desc) > limit
@@ -407,8 +407,8 @@ class SqlAlchemySessionRepository:
             next_cursor = page[0].id if has_more and page else None
             return ([self._to_message(item) for item in page], has_more, next_cursor)
 
-    def save_session_event(self, event: SessionEvent) -> SessionEvent:
-        with self._session_factory() as db_session:
+    async def save_session_event(self, event: SessionEvent) -> SessionEvent:
+        async with self._session_factory() as db_session:
             record = SessionEventRecord(
                 session_id=event.session_id,
                 event_type=event.event_type,
@@ -417,50 +417,50 @@ class SqlAlchemySessionRepository:
                 created_at=event.created_at,
             )
             db_session.add(record)
-            db_session.commit()
+            await db_session.commit()
         return event
 
-    def list_session_events(self, session_id: str) -> list[SessionEvent]:
-        with self._session_factory() as db_session:
-            records = db_session.scalars(
+    async def list_session_events(self, session_id: str) -> list[SessionEvent]:
+        async with self._session_factory() as db_session:
+            records = await db_session.scalars(
                 select(SessionEventRecord)
                 .where(SessionEventRecord.session_id == session_id)
                 .order_by(SessionEventRecord.id.asc())
             ).all()
             return [_to_session_event(record) for record in records]
 
-    def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact:
-        with self._session_factory() as db_session:
-            self._upsert_voice_session_fact_record(db_session, fact)
-            db_session.commit()
-        loaded = self.get_latest_voice_session_fact(fact.session_id)
+    async def save_voice_session_fact(self, fact: VoiceSessionFact) -> VoiceSessionFact:
+        async with self._session_factory() as db_session:
+            await self._upsert_voice_session_fact_record(db_session, fact)
+            await db_session.commit()
+        loaded = await self.get_latest_voice_session_fact(fact.session_id)
         return loaded if loaded is not None else fact
 
-    def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None:
-        with self._session_factory() as db_session:
-            record = db_session.get(VoiceSessionFactRecord, session_id)
+    async def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None:
+        async with self._session_factory() as db_session:
+            record = await db_session.get(VoiceSessionFactRecord, session_id)
             if record is None:
                 return None
             return _to_voice_session_fact(record)
 
-    def reset(self) -> None:
-        with self._session_factory() as db_session:
-            db_session.execute(delete(VoiceSessionFactRecord))
-            db_session.execute(delete(SessionEventRecord))
-            db_session.execute(delete(SessionReviewRecord))
-            db_session.execute(delete(MessageRecord))
-            db_session.execute(delete(SessionRecord))
-            db_session.commit()
+    async def reset(self) -> None:
+        async with self._session_factory() as db_session:
+            await db_session.execute(delete(VoiceSessionFactRecord))
+            await db_session.execute(delete(SessionEventRecord))
+            await db_session.execute(delete(SessionReviewRecord))
+            await db_session.execute(delete(MessageRecord))
+            await db_session.execute(delete(SessionRecord))
+            await db_session.commit()
 
-    def _load_messages(self, db_session, session_id: str) -> Sequence[MessageRecord]:
-        return db_session.scalars(
+    async def _load_messages(self, db_session, session_id: str) -> Sequence[MessageRecord]:
+        return await db_session.scalars(
             select(MessageRecord)
             .where(MessageRecord.session_id == session_id)
             .order_by(MessageRecord.position.asc())
         ).all()
 
-    def _ensure_session_exists(self, db_session, session_id: str) -> None:
-        record = db_session.get(SessionRecord, session_id)
+    async def _ensure_session_exists(self, db_session, session_id: str) -> None:
+        record = await db_session.get(SessionRecord, session_id)
         if record is None:
             raise NotFoundError(f"Session {session_id} not found")
 
@@ -473,8 +473,8 @@ class SqlAlchemySessionRepository:
             created_at=message.created_at,
         )
 
-    def _upsert_session_record(self, db_session, session: Session) -> SessionRecord:
-        record = db_session.get(SessionRecord, session.id)
+    async def _upsert_session_record(self, db_session, session: Session) -> SessionRecord:
+        record = await db_session.get(SessionRecord, session.id)
         if record is None:
             record = SessionRecord(
                 id=session.id,
@@ -506,8 +506,8 @@ class SqlAlchemySessionRepository:
         record.updated_at = session.updated_at
         return record
 
-    def _upsert_review_record(self, db_session, review: SessionReview) -> None:
-        record = db_session.get(SessionReviewRecord, review.session_id)
+    async def _upsert_review_record(self, db_session, review: SessionReview) -> None:
+        record = await db_session.get(SessionReviewRecord, review.session_id)
         if record is None:
             db_session.add(
                 SessionReviewRecord(
@@ -528,8 +528,8 @@ class SqlAlchemySessionRepository:
         record.feedback = review.feedback.model_dump()
         record.updated_at = review.updated_at
 
-    def _upsert_voice_session_fact_record(self, db_session, fact: VoiceSessionFact) -> None:
-        record = db_session.get(VoiceSessionFactRecord, fact.session_id)
+    async def _upsert_voice_session_fact_record(self, db_session, fact: VoiceSessionFact) -> None:
+        record = await db_session.get(VoiceSessionFactRecord, fact.session_id)
         if record is None:
             db_session.add(
                 VoiceSessionFactRecord(
@@ -570,27 +570,27 @@ class SqlAlchemySessionRepository:
         )
 
 
-def save_session(session: Session) -> Session:
-    return SqlAlchemySessionRepository().save_session(session)
+async def save_session(session: Session) -> Session:
+    return await SqlAlchemySessionRepository().save_session(session)
 
 
-def get_session(session_id: str) -> Session:
-    return SqlAlchemySessionRepository().get_session(session_id)
+async def get_session(session_id: str) -> Session:
+    return await SqlAlchemySessionRepository().get_session(session_id)
 
 
-def add_message(session_id: str, message: Message) -> Session:
-    return SqlAlchemySessionRepository().add_message(session_id, message)
+async def add_message(session_id: str, message: Message) -> Session:
+    return await SqlAlchemySessionRepository().add_message(session_id, message)
 
 
-def list_user_sessions(user_id: str) -> list[Session]:
-    return SqlAlchemySessionRepository().list_user_sessions(user_id)
+async def list_user_sessions(user_id: str) -> list[Session]:
+    return await SqlAlchemySessionRepository().list_user_sessions(user_id)
 
 
-def reset_session_store() -> None:
-    SqlAlchemySessionRepository().reset()
+async def reset_session_store() -> None:
+    await SqlAlchemySessionRepository().reset()
 
 
-def build_session_repository(session_factory: SessionFactory | None = None) -> SessionRepository:
+def build_session_repository(session_factory: AsyncSessionFactory | None = None) -> SessionRepository:
     return SqlAlchemySessionRepository(session_factory)
 
 

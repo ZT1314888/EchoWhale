@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/frontend_app`
 - `owner`: `codex`
-- `updated_at`: `2026-04-07`
+- `updated_at`: `2026-04-09`
 
 ## 模块目标
 
@@ -22,6 +22,7 @@
 - 已完成边界：首页示例场景不再创建 mock `session-*`；现在会调用真实 `POST /api/v1/sessions` with `sample_scene_id`，进入真实 `sess_*` 练习页并可继续使用语音、review 与 history
 - 已完成边界：首页上传链路已适配统一响应壳，媒体上传成功从 `data` 解包、失败从 `message` 读取错误信息
 - 已完成边界：`PostPracticeReview` 与 `History` 已切到真实 review/history API，不再依赖 mock 数据
+- 已完成边界：`PracticeSession` 与 `PostPracticeReview` 运行时已移除基于 `sessionId` 前缀的 mock 分流；前端主路径统一只消费真实 session/review API，`mockApi` 仅保留给测试夹具
 - 已完成边界：练后反馈页失败态已在前端收口，不再透传后端英文 `Session review ... not found`
 - 已完成边界：登录/注册、refresh 恢复和 `History` 路由守卫已切到真实 auth API，匿名主路径会自动携带 `visitor_id`
 - 已完成边界：注册成功后改为回到登录页，登录后右上角收口为昵称悬浮菜单并提供退出登录
@@ -113,6 +114,7 @@
 - `2026-04-06`：将 `PracticeSession` 从浏览器 `Web Speech API` 切到 Deepgram Voice Agent，新增 `voice/bootstrap` / `voice/complete` API 消费与 `useDeepgramVoiceAgent` 实时会话 hook
 - `2026-04-07`：新增 `createSamplePracticeSession`，并将首页示例场景从 mock `session-*` 切到真实 `sess_*` 会话创建；sample 练习页现在可继续走真实 voice/review/history
 - `2026-04-07`：将 `PracticeSession` 从沉浸式单栏语音页调整为桌面端双栏布局，左侧收口为单一鲸鱼 logo 按钮与 wifi 动效主舞台，右侧独立实时对话，并在新消息到来时自动滚动到最新位置
+- `2026-04-09`：移除 `practiceApi` 与 `PostPracticeReview` 中基于 `sessionId` 前缀的 runtime mock 分流，前端练习/反馈主路径统一收口到真实后端 API
 
 
 

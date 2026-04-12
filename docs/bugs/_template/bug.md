@@ -8,6 +8,7 @@
 - `owner`: `<owner>`
 - `reported_at`: `<YYYY-MM-DD>`
 - `affected_area`: `<module or feature>`
+- `merge_target`: `module/<module-name>`
 
 ## 现象
 
@@ -48,6 +49,12 @@
 - 测试命令：
 - 验证结果：
 - 仍需关注：
+
+## 控制面同步
+
+- 若该 bug 会影响控制台摘要、模块状态或测试层状态，先更新 `docs/control/agent-control-plane.json`
+- 同步后运行：`uv run python -m tools.agent_ops render`
+- 校验：`uv run python -m tools.agent_ops check`
 
 ## 关闭条件
 

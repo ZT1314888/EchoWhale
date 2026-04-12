@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from functools import lru_cache
 import logging
 from json import JSONDecodeError
 from typing import Any
-from typing import Iterator
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse
@@ -102,15 +103,14 @@ async def proxy_deepgram_think_chat_completions(
         )
 
     if _requests_streaming(payload):
-        return _stream_think_response(payload=payload, session_id=session_id)
+        return await _stream_think_response(payload=payload, session_id=session_id)
 
     try:
-        with httpx.Client(timeout=settings.deepgram_agent_think_timeout_seconds) as client:
-            response = client.post(
-                build_deepgram_think_upstream_url(),
-                headers=_build_upstream_headers(),
-                json=payload,
-            )
+        response = await _get_deepgram_async_client().post(
+            build_deepgram_think_upstream_url(),
+            headers=_build_upstream_headers(),
+            json=payload,
+        )
     except httpx.HTTPError:
         return _error_response(
             status_code=502,
@@ -144,12 +144,12 @@ async def proxy_deepgram_think_chat_completions(
     return JSONResponse(content=content, status_code=response.status_code)
 
 
-def _stream_think_response(
+async def _stream_think_response(
     *,
     payload: dict[str, Any],
     session_id: str,
 ) -> Response:
-    client = httpx.Client(timeout=settings.deepgram_agent_think_timeout_seconds)
+    client = _get_deepgram_async_client()
     try:
         upstream_request = client.build_request(
             "POST",
@@ -157,9 +157,8 @@ def _stream_think_response(
             headers=_build_upstream_headers(),
             json=payload,
         )
-        response = client.send(upstream_request, stream=True)
+        response = await client.send(upstream_request, stream=True)
     except httpx.HTTPError:
-        _close_client(client)
         return _error_response(
             status_code=502,
             message="Deepgram think upstream request failed",
@@ -169,17 +168,16 @@ def _stream_think_response(
     content_type = response.headers.get("content-type", "")
     if _is_sse_response(content_type):
         return StreamingResponse(
-            _iter_sse_bytes(response=response, client=client),
+            _iter_sse_bytes(response=response),
             status_code=response.status_code,
             headers=_build_sse_response_headers(response.headers),
             media_type="text/event-stream",
         )
 
     try:
-        body = response.read()
+        body = await response.aread()
     finally:
-        response.close()
-        _close_client(client)
+        await response.aclose()
 
     if _is_json_response(content_type):
         try:
@@ -280,12 +278,12 @@ def _is_json_response(content_type: str) -> bool:
     return content_type.split(";", 1)[0].strip().lower() == "application/json"
 
 
-def _iter_sse_bytes(*, response: httpx.Response, client: httpx.Client) -> Iterator[bytes]:
+async def _iter_sse_bytes(*, response: httpx.Response) -> AsyncIterator[bytes]:
     try:
-        yield from response.iter_bytes()
+        async for chunk in response.aiter_bytes():
+            yield chunk
     finally:
-        response.close()
-        _close_client(client)
+        await response.aclose()
 
 
 def _build_sse_response_headers(headers: httpx.Headers) -> dict[str, str]:
@@ -296,7 +294,10 @@ def _build_sse_response_headers(headers: httpx.Headers) -> dict[str, str]:
     return response_headers
 
 
-def _close_client(client: httpx.Client) -> None:
-    close = getattr(client, "close", None)
-    if callable(close):
-        close()
+@lru_cache(maxsize=4)
+def _build_deepgram_async_client(timeout_seconds: int) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=timeout_seconds)
+
+
+def _get_deepgram_async_client() -> httpx.AsyncClient:
+    return _build_deepgram_async_client(settings.deepgram_agent_think_timeout_seconds)

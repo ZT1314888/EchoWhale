@@ -29,7 +29,8 @@ from api.models.auth_token_model import (
     AuthActionTokenModel,
 )
 from api.models.user_model import RefreshTokenRecordModel, User
-from api.services.auth_mailer import AuthMailer, get_auth_mailer
+from api.services.auth_mail_queue import AuthMailQueuePublisher
+from api.services.auth_mail_queue import get_auth_mail_queue_publisher
 from api.services.email_verification_store import (
     EmailVerificationStore,
     get_email_verification_store,
@@ -44,11 +45,11 @@ class AuthService:
     def __init__(
         self,
         repository: AuthRepository | None = None,
-        mailer: AuthMailer | None = None,
+        mail_queue_publisher: AuthMailQueuePublisher | None = None,
         verification_store: EmailVerificationStore | None = None,
     ) -> None:
         self.repository = repository or build_auth_repository()
-        self.mailer = mailer or get_auth_mailer()
+        self.mail_queue_publisher = mail_queue_publisher or get_auth_mail_queue_publisher()
         self.verification_store = verification_store or get_email_verification_store()
 
     def register(self, *, nickname: str, email: str, password: str, ip_address: str) -> User:
@@ -267,7 +268,12 @@ class AuthService:
 
     def _issue_email_verification(self, user: User, *, ip_address: str) -> None:
         code = self.verification_store.issue_code(email=user.email, ip_address=ip_address)
-        self.mailer.send_verification_email(user=user, code=code)
+        self.mail_queue_publisher.enqueue_verification_email(
+            user_id=user.id,
+            email=user.email,
+            nickname=user.nickname,
+            code=code,
+        )
 
     def _issue_password_reset(self, user: User) -> None:
         token = generate_action_token()
@@ -283,8 +289,10 @@ class AuthService:
             ),
             superseded_at=now,
         )
-        self.mailer.send_password_reset_email(
-            user=user,
+        self.mail_queue_publisher.enqueue_password_reset_email(
+            user_id=user.id,
+            email=user.email,
+            nickname=user.nickname,
             reset_url=self._build_reset_password_url(token),
         )
 

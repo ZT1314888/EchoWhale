@@ -34,12 +34,12 @@ def get_session_service() -> SessionEngineService:
 
 
 @router.post("", response_model=ApiResponse[SessionResponse])
-def start_session(
+async def start_session(
     payload: StartSessionRequest,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    session = session_service.start_session(
+    session = await session_service.start_session(
         user_id=owner.owner_id,
         media_id=payload.media_id,
         sample_scene_id=payload.sample_scene_id,
@@ -50,25 +50,25 @@ def start_session(
 
 
 @router.get("/{session_id}", response_model=ApiResponse[SessionResponse])
-def get_session(
+async def get_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    session = session_service.get_session(session_id, owner_id=owner.owner_id)
+    session = await session_service.get_session(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=SessionResponse.from_session(session))
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
 
 @router.post("/{session_id}/reply", response_model=ApiResponse[SessionReplyResponse])
-def reply_to_session(
+async def reply_to_session(
     session_id: str,
     payload: SessionReplyRequest,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    session = session_service.reply_to_session(
+    session = await session_service.reply_to_session(
         session_id,
         payload.learner_message,
         owner_id=owner.owner_id,
@@ -79,24 +79,24 @@ def reply_to_session(
 
 
 @router.get("/{session_id}/review", response_model=ApiResponse[SessionReviewResponse])
-def get_session_review(
+async def get_session_review(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    review = session_service.get_session_review(session_id, owner_id=owner.owner_id)
+    review = await session_service.get_session_review(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=SessionReviewResponse.from_review(review))
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
 
 @router.post("/{session_id}/voice/bootstrap", response_model=ApiResponse[VoiceBootstrapResponse])
-def bootstrap_voice_session(
+async def bootstrap_voice_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    bootstrap = session_service.bootstrap_voice_session(session_id, owner_id=owner.owner_id)
+    bootstrap = await session_service.bootstrap_voice_session(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(
         data=VoiceBootstrapResponse(
             session_id=bootstrap["session_id"] if isinstance(bootstrap, dict) else bootstrap.session_id,
@@ -118,13 +118,13 @@ def bootstrap_voice_session(
 
 
 @router.post("/{session_id}/voice/complete", response_model=ApiResponse[VoiceCompleteResponse])
-def complete_voice_session(
+async def complete_voice_session(
     session_id: str,
     payload: VoiceCompleteRequest,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    result = session_service.complete_voice_session(
+    result = await session_service.complete_voice_session(
         session_id=session_id,
         conversation=payload.conversation,
         termination_reason=payload.termination_reason,

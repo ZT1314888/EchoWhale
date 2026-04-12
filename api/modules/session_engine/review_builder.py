@@ -38,6 +38,7 @@ SCENE_COPY = {
 
 
 def build_session_review(session: Session, feedback: FeedbackResult) -> SessionReview:
+    """把本轮会话和反馈结果整理成前端可直接展示的复盘卡片。"""
     scene_title = get_scene_title(session.scene)
     latest_learner_message = _find_latest_learner_message(session)
     highlight = f"你已经围绕“{scene_title}”把主要意思表达出来了。"
@@ -66,18 +67,22 @@ def build_session_review(session: Session, feedback: FeedbackResult) -> SessionR
 
 
 def get_scene_title(scene: str) -> str:
+    """把内部场景名映射成面向用户的中文标题。"""
     return SCENE_COPY.get(scene, {}).get("scene_title", scene.replace("_", " "))
 
 
 def get_role_label(scene: str, role: str) -> str:
+    """优先返回场景预设文案，缺省时再回退到原始角色名。"""
     return SCENE_COPY.get(scene, {}).get("role_label", f"角色 · {role}")
 
 
 def get_next_try(scene: str) -> str:
+    """给每个场景提供一条下一轮练习建议。"""
     return SCENE_COPY.get(scene, {}).get("next_try", "下一轮先把主需求说完整，再补一句细节。")
 
 
 def _find_latest_learner_message(session: Session):
+    """倒序查找最近一条学习者消息，供 highlight 摘要使用。"""
     for message in reversed(session.messages):
         if message.role == "user":
             return message
@@ -85,6 +90,7 @@ def _find_latest_learner_message(session: Session):
 
 
 def _truncate(value: str, limit: int = 48) -> str:
+    """把摘要文本裁到固定长度，避免复盘卡片过长。"""
     normalized = value.strip()
     if len(normalized) <= limit:
         return normalized

@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from fastapi.concurrency import run_in_threadpool
+
 from api.common.exceptions import StorageError
 from api.core.config import settings
 
@@ -23,6 +25,9 @@ class R2StorageService:
         except Exception as exc:  # pragma: no cover - network call
             raise StorageError("Failed to upload media to object storage") from exc
 
+    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
+        await run_in_threadpool(self.upload_bytes, key=key, content=content, content_type=content_type)
+
     def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
         try:
             client = self._get_client()
@@ -41,6 +46,9 @@ class R2StorageService:
         except Exception as exc:  # pragma: no cover - network call
             raise StorageError("Failed to create signed media access URL") from exc
 
+    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
+        return await run_in_threadpool(self.create_signed_read_url, key=key, expires_in=expires_in)
+
     def delete_object(self, key: str) -> None:
         try:
             client = self._get_client()
@@ -52,6 +60,9 @@ class R2StorageService:
             raise
         except Exception as exc:  # pragma: no cover - network call
             raise StorageError("Failed to delete media from object storage") from exc
+
+    async def async_delete_object(self, key: str) -> None:
+        await run_in_threadpool(self.delete_object, key=key)
 
     def _get_client(self) -> Any:
         if self._client is not None:

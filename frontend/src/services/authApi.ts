@@ -6,6 +6,7 @@ import type {
   EmailPayload,
   RegisterPayload,
   ResetPasswordPayload,
+  VerifyEmailPayload,
 } from "../types/app";
 
 type ApiResponse<T> = {
@@ -78,8 +79,10 @@ function translateAuthMessage(
   const exactTranslations: Record<string, string> = {
     "Invalid email or password": "邮箱/密码错误",
     "Please verify your email before logging in": "请先完成邮箱验证后再登录",
-    "Password reset link is invalid or expired": "重置链接已失效或已过期，请重新申请。",
     "Email already registered": "该邮箱已被注册",
+    "Verification code is invalid or expired": "验证码错误或已过期",
+    "Password reset link is invalid or expired": "重置链接已失效或已过期，请重新申请。",
+    "请求过于频繁": "请求过于频繁",
     "Too many login attempts. Please try again later.": "登录尝试次数过多，请稍后再试",
     "Too many registration attempts. Please try again later.": "注册尝试次数过多，请稍后再试",
   };
@@ -174,11 +177,11 @@ async function expectNoContent(
   }
 
   if (!response.ok) {
-    if (response.headers?.get("content-type")?.includes("application/json")) {
-      const payload = (await response.json()) as ApiResponse<unknown>;
-      throw toError(translateAuthMessage(payload.message ?? fallbackMessage));
-    }
-    throw toError(fallbackMessage);
+    let payload: ApiResponse<unknown> | null = null;
+    try {
+      payload = (await response.json()) as ApiResponse<unknown>;
+    } catch {}
+    throw toError(translateAuthMessage(payload?.message ?? fallbackMessage));
   }
 }
 
@@ -232,13 +235,13 @@ export async function resendVerification(payload: EmailPayload): Promise<void> {
   );
 }
 
-export async function verifyEmail(token: string): Promise<void> {
+export async function verifyEmail(payload: VerifyEmailPayload): Promise<void> {
   await expectNoContent(
     "/api/v1/auth/verify-email",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify(payload),
     },
     "邮箱验证失败，请稍后重试。",
   );

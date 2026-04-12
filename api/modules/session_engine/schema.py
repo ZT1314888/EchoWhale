@@ -16,6 +16,7 @@ class StartSessionInput(BaseModel):
 
     @model_validator(mode="after")
     def validate_start_source(self) -> "StartSessionInput":
+        """确保启动会话时只能二选一地传图片或样例场景。"""
         has_media = self.media_id is not None
         has_sample = self.sample_scene_id is not None
         if has_media == has_sample:
@@ -29,6 +30,7 @@ class LearnerMessagePayload(BaseModel):
     @field_validator("learner_message")
     @classmethod
     def normalize_learner_message(cls, value: str) -> str:
+        """去掉首尾空白，避免空消息进入对话链路。"""
         normalized = value.strip()
         if not normalized:
             raise ValueError("Learner message cannot be empty")
@@ -46,6 +48,7 @@ class VoiceConversationTurn(BaseModel):
     @field_validator("content")
     @classmethod
     def normalize_content(cls, value: str) -> str:
+        """清理转写内容空白，确保每个语音 turn 都有有效文本。"""
         normalized = value.strip()
         if not normalized:
             raise ValueError("Conversation content cannot be empty")
@@ -61,12 +64,14 @@ class VoiceCompleteInput(BaseModel):
     @field_validator("conversation")
     @classmethod
     def validate_conversation(cls, value: list[VoiceConversationTurn]) -> list[VoiceConversationTurn]:
+        """阻止空 transcript 进入语音收口流程。"""
         if not value:
             raise ValueError("Conversation cannot be empty")
         return value
 
     @model_validator(mode="after")
     def validate_conversation_has_user_turn(self) -> "VoiceCompleteInput":
+        """确保最终 transcript 至少包含一条学习者发言。"""
         if not any(turn.role == "user" for turn in self.conversation):
             raise ValueError("Conversation must include at least one user turn")
         return self

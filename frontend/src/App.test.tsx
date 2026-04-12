@@ -22,7 +22,6 @@ import { App } from "./App";
 import { useDeepgramVoiceAgent } from "./hooks/useDeepgramVoiceAgent";
 import * as authApi from "./services/authApi";
 import * as historyApi from "./services/historyApi";
-import * as mockApi from "./services/mockApi";
 import * as mediaApi from "./services/mediaApi";
 import * as reviewApi from "./services/reviewApi";
 import * as sessionApi from "./services/sessionApi";
@@ -848,8 +847,8 @@ describe("App", () => {
     expect(screen.queryByText(/暂时无法读取练后反馈/i)).not.toBeInTheDocument();
   });
 
-  it("keeps the mock review flow for sample session ids", async () => {
-    const reviewSpy = vi.spyOn(mockApi, "getPracticeReview");
+  it("loads review data through the real review api even when the session id does not use sess_ prefix", async () => {
+    const reviewSpy = vi.spyOn(reviewApi, "getPracticeReview").mockResolvedValue(realReview);
 
     await renderApp(["/session/session-coffee/review"]);
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from api.common.enums import MediaUploadStatus
@@ -24,9 +25,9 @@ def test_sqlalchemy_media_repository_persists_media_records(tmp_path: Path) -> N
         upload_status=MediaUploadStatus.uploaded,
     )
 
-    repository.save_media(media)
+    asyncio.run(repository.save_media(media))
 
-    loaded = repository.get_media("med_123")
+    loaded = asyncio.run(repository.get_media("med_123"))
 
     assert loaded.id == "med_123"
     assert loaded.storage_key == media.storage_key

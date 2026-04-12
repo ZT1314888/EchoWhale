@@ -12,11 +12,12 @@ from api.modules.coach_engine.tools.dialogue_tools import build_follow_up
 
 
 class ChatProvider(Protocol):
-    def reply(self, payload: CoachReplyInput) -> CoachReplyResult: ...
+    async def reply(self, payload: CoachReplyInput) -> CoachReplyResult: ...
 
 
 class MockChatProvider:
-    def reply(self, payload: CoachReplyInput) -> CoachReplyResult:
+    async def reply(self, payload: CoachReplyInput) -> CoachReplyResult:
+        """用场景线索拼出稳定回复，供本地开发和测试复用。"""
         learner = payload.learner_message.strip() or "that"
         follow_up = build_follow_up(payload.scene)
         anchor_hint = ", ".join(payload.visual_anchors[:2])
@@ -39,6 +40,7 @@ class OpenAICompatibleChatProvider:
         model: str,
         timeout_seconds: int,
     ) -> None:
+        """保存远端文本模型调用所需的客户端配置。"""
         self.client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
@@ -46,10 +48,11 @@ class OpenAICompatibleChatProvider:
             timeout_seconds=timeout_seconds,
         )
 
-    def reply(self, payload: CoachReplyInput) -> CoachReplyResult:
+    async def reply(self, payload: CoachReplyInput) -> CoachReplyResult:
+        """调用兼容 OpenAI 的文本模型生成教练回复。"""
         user_prompt = _build_coach_user_prompt(payload)
         try:
-            text = self.client.complete_text(
+            text = await self.client.async_complete_text(
                 system_prompt=COACH_SYSTEM_PROMPT,
                 user_prompt=user_prompt,
             )
@@ -59,6 +62,7 @@ class OpenAICompatibleChatProvider:
 
 
 def build_primary_chat_provider() -> ChatProvider:
+    """按主配置构造文本对话 provider。"""
     return _build_provider(
         provider=settings.text_primary_provider,
         base_url=settings.text_primary_base_url,
@@ -69,6 +73,7 @@ def build_primary_chat_provider() -> ChatProvider:
 
 
 def build_fallback_chat_provider() -> ChatProvider:
+    """按回退配置构造文本对话 provider。"""
     return _build_provider(
         provider=settings.text_fallback_provider,
         base_url=settings.text_fallback_base_url,
@@ -76,6 +81,11 @@ def build_fallback_chat_provider() -> ChatProvider:
         model=settings.text_fallback_model,
         timeout_seconds=settings.text_fallback_timeout_seconds,
     )
+
+
+def has_real_chat_provider(provider: str) -> bool:
+    """判断当前配置是否会走真实文本模型。"""
+    return provider.strip().lower() not in {"", "mock"}
 
 
 def _build_provider(
@@ -86,9 +96,12 @@ def _build_provider(
     model: str,
     timeout_seconds: int,
 ) -> ChatProvider:
+    """根据运行模式和 provider 名称选择 mock 或真实实现。"""
     normalized = provider.strip().lower()
-    if settings.model_runtime_mode.lower() == "mock" or normalized in {"", "mock"}:
+    if settings.model_runtime_mode.lower() != "live":
         return MockChatProvider()
+    if normalized in {"", "mock"}:
+        raise ConfigurationError("Live runtime requires at least one real text provider")
     if normalized == "openai_compatible":
         return OpenAICompatibleChatProvider(
             base_url=base_url,
@@ -100,6 +113,7 @@ def _build_provider(
 
 
 def _build_coach_user_prompt(payload: CoachReplyInput) -> str:
+    """把场景、上下文和最近消息整理成单个用户提示词。"""
     recent_messages = [
         f"{message.role}: {message.text}"
         for message in payload.recent_messages[-4:]

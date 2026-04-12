@@ -71,6 +71,7 @@ class SceneEvaluationResult(BaseModel):
 
 
 def build_scene_prompt_hash(prompt: str = SCENE_INFERENCE_PROMPT) -> str:
+    """为当前提示词生成短哈希，便于追踪评测结果来源。"""
     return hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:12]
 
 
@@ -84,6 +85,7 @@ def evaluate_scene_output(
     actual_outcome: Literal["analysis", "unsupported_image", "graceful_failure"] = "analysis",
     failure_reason: str = "",
 ) -> SceneEvaluationResult:
+    """把一次模型输出和期望样例折叠成统一的评测结果。"""
     if actual_outcome != "analysis":
         outcome_matches = actual_outcome == case.expected_outcome
         return SceneEvaluationResult(
@@ -165,6 +167,7 @@ def evaluate_scene_output(
 
 
 def load_scene_evaluation_cases(path: str | Path) -> list[SceneEvaluationCase]:
+    """从 JSON 文件载入场景评测样例。"""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     return [SceneEvaluationCase.model_validate(item) for item in data]
 
@@ -178,6 +181,7 @@ class SceneOutputJudge:
         model: str,
         timeout_seconds: int,
     ) -> None:
+        """保存用于二次裁判的文本模型客户端。"""
         self.client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
@@ -187,6 +191,7 @@ class SceneOutputJudge:
 
     @classmethod
     def from_env(cls) -> "SceneOutputJudge | None":
+        """从环境变量解析评测裁判模型，缺省时返回空。"""
         provider = (
             os.getenv("SCENE_EVAL_JUDGE_PROVIDER")
             or settings.text_primary_provider
@@ -211,6 +216,7 @@ class SceneOutputJudge:
         )
 
     def judge(self, *, case: SceneEvaluationCase, output: SceneAnalysisResult) -> SceneJudgeResult:
+        """用文本模型补充判断 role 与 opener 是否适合口语练习。"""
         raw = self.client.complete_text(
             system_prompt=(
                 "You judge whether a generated role and opener are suitable for English "
@@ -237,6 +243,7 @@ async def run_scene_evaluation(
     judge: SceneOutputJudge | None = None,
     max_concurrency: int = 5,
 ) -> list[SceneEvaluationResult]:
+    """并发跑完整批样例，并持续把中间结果写入输出文件。"""
     service = scene_service or SceneEngineService()
     output_file = Path(output_path)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -245,8 +252,10 @@ async def run_scene_evaluation(
     results: list[SceneEvaluationResult] = []
 
     async def evaluate_case(case: SceneEvaluationCase) -> SceneEvaluationResult:
+        """在并发限流下执行单个样例的分析与裁判流程。"""
         async with semaphore:
             try:
+                # 评测入口目前复用同步封装，因此用 to_thread 避免阻塞事件循环。
                 output = await asyncio.to_thread(service.analyze, case.filename, case.signed_url)
             except UnsupportedSceneImageError as exc:
                 return evaluate_scene_output(
@@ -296,6 +305,7 @@ async def run_scene_evaluation(
 
 
 def _get_hard_failure_reason(output: SceneAnalysisResult) -> str:
+    """执行不依赖裁判模型的硬规则校验。"""
     opener = output.opener.lower()
     if any(token in opener for token in META_OPENER_TOKENS):
         return "meta opener is not suitable for speaking practice"
@@ -309,6 +319,7 @@ def _get_hard_failure_reason(output: SceneAnalysisResult) -> str:
 def _normalize_judge_result(
     value: dict[str, Any] | SceneJudgeResult | None,
 ) -> SceneJudgeResult | None:
+    """把裁判结果统一成模型对象，方便后续序列化。"""
     if value is None:
         return None
     if isinstance(value, SceneJudgeResult):
@@ -317,6 +328,7 @@ def _normalize_judge_result(
 
 
 def _load_json(raw: str) -> dict[str, Any]:
+    """兼容 LLM 常见的 fenced JSON 输出格式。"""
     normalized = raw.strip()
     if normalized.startswith("```"):
         normalized = normalized.strip("`")

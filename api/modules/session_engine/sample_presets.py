@@ -39,4 +39,5 @@ SAMPLE_SESSION_PRESETS: dict[SampleSceneId, SampleSessionPreset] = {
 
 
 def get_sample_session_preset(sample_scene_id: SampleSceneId) -> SampleSessionPreset:
+    """按样例场景 ID 返回预设的启动会话配置。"""
     return SAMPLE_SESSION_PRESETS[sample_scene_id]

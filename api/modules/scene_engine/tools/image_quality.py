@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 from statistics import pstdev
 
@@ -22,12 +23,14 @@ class SceneImageQualityGate:
         timeout_seconds: int = 10,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
+        """记录图片筛查所需的超时和可选传输层配置。"""
         self.timeout_seconds = timeout_seconds
         self.transport = transport
 
-    def screen(self, payload: SceneAnalysisInput) -> None:
-        content, content_type = self._fetch_image(payload.media_url)
-        grayscale_data = _load_grayscale_pixels(content)
+    async def screen(self, payload: SceneAnalysisInput) -> None:
+        """在进入视觉模型前先拦截明显不可读或无训练价值的图片。"""
+        content, content_type = await self._fetch_image(payload.media_url)
+        grayscale_data = await asyncio.to_thread(_load_grayscale_pixels, content)
         if grayscale_data is None:
             if content_type.startswith("image/"):
                 raise UnsupportedSceneImageError(
@@ -39,14 +42,15 @@ class SceneImageQualityGate:
         grayscale_values, width, height = grayscale_data
         self._assert_image_quality(grayscale_values, width=width, height=height)
 
-    def _fetch_image(self, media_url: str) -> tuple[bytes, str]:
+    async def _fetch_image(self, media_url: str) -> tuple[bytes, str]:
+        """拉取图片原始内容，并在协议层就拒绝非图片响应。"""
         try:
-            with httpx.Client(
+            async with httpx.AsyncClient(
                 timeout=self.timeout_seconds,
                 follow_redirects=True,
                 transport=self.transport,
             ) as client:
-                response = client.get(media_url)
+                response = await client.get(media_url)
                 response.raise_for_status()
         except httpx.HTTPError as exc:
             raise ModelProviderError("Failed to fetch image for screening") from exc
@@ -63,6 +67,7 @@ class SceneImageQualityGate:
         width: int,
         height: int,
     ) -> None:
+        """用简单统计特征拦截纯色图、损坏图和细节极低的图片。"""
         if not grayscale_values:
             raise UnsupportedSceneImageError(
                 UNSUPPORTED_IMAGE_MESSAGE,
@@ -85,6 +90,7 @@ class SceneImageQualityGate:
 
 
 def _load_grayscale_pixels(content: bytes) -> tuple[list[int], int, int] | None:
+    """尽量把图片解码成灰度像素矩阵，失败时返回空供上层判定。"""
     try:
         with Image.open(BytesIO(content)) as image:
             normalized = image.convert("L")
@@ -108,6 +114,7 @@ def _mean_adjacent_difference(
     width: int,
     height: int,
 ) -> float:
+    """计算相邻像素平均差异，用于估计图像纹理强度。"""
     if len(grayscale_values) < 2:
         return 0.0
 

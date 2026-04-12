@@ -32,7 +32,7 @@ async def upload_media(
     media_service: MediaService = Depends(get_media_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    result = media_service.upload_media(
+    result = await media_service.upload_media(
         user_id=owner.owner_id,
         filename=file.filename or "upload",
         content_type=file.content_type or "",
@@ -44,24 +44,24 @@ async def upload_media(
 
 
 @router.get("/{media_id}", response_model=ApiResponse[MediaResponse])
-def get_media(
+async def get_media(
     media_id: str,
     media_service: MediaService = Depends(get_media_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    media = media_service.get_media(media_id, owner_id=owner.owner_id)
+    media = await media_service.get_media(media_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=MediaResponse.from_media(media))
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
 
 @router.get("/{media_id}/access-url", response_model=ApiResponse[MediaAccessResponse])
-def get_media_access_url(
+async def get_media_access_url(
     media_id: str,
     media_service: MediaService = Depends(get_media_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
 ) -> Any:
-    access = media_service.create_media_access_url(media_id, owner_id=owner.owner_id)
+    access = await media_service.create_media_access_url(media_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=MediaAccessResponse.from_access_grant(access))
     apply_visitor_cookie(response=response, owner=owner)
     return response

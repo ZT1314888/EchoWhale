@@ -1,8 +1,8 @@
-# Version: `v<major.minor.patch>`
+# Version: `<version_name>`
 
 ## 基本信息
 
-- `version`: `v<major.minor.patch>`
+- `version`: `<version_name>`
 - `status`: `idle` | `integrating` | `full_flow_test_passed` | `releasable`
 - `branch`: `integration/system` | `main`
 - `created_at`: `<YYYY-MM-DD>`
@@ -31,6 +31,12 @@
 - module：
 - integration：
 - full_flow：
+
+## 控制面同步
+
+- 若本版状态会影响系统总态，先更新 `docs/control/agent-control-plane.json`
+- 同步后运行：`uv run python -m tools.agent_ops render`
+- 校验：`uv run python -m tools.agent_ops check`
 
 ## 发布说明
 

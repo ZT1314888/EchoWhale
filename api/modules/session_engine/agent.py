@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -40,6 +41,7 @@ class SessionEngineAgent:
         session_repository: SessionRepository | None = None,
         read_url_signer: R2StorageService | None = None,
     ) -> None:
+        """装配会话编排依赖，包括媒体、存储、三段 agent 和语音组件。"""
         self.media_lookup = media_lookup or build_media_repository()
         self.session_repository = session_repository or build_session_repository()
         self.read_url_signer = read_url_signer or R2StorageService()
@@ -49,7 +51,8 @@ class SessionEngineAgent:
         self.voice_token_issuer = DeepgramTokenIssuer()
         self.voice_settings_builder = DeepgramSettingsBuilder()
 
-    def start(self, payload: StartSessionInput) -> Session:
+    async def start(self, payload: StartSessionInput) -> Session:
+        """从样例场景或图片分析结果创建一条新会话。"""
         if payload.sample_scene_id is not None:
             preset = get_sample_session_preset(payload.sample_scene_id)
             session = Session(
@@ -63,19 +66,19 @@ class SessionEngineAgent:
                 vocab_candidates=list(preset.vocab_candidates),
                 messages=[Message(role="assistant", text=preset.opener)],
             )
-            return self.session_repository.save_session(session)
+            return await self.session_repository.save_session(session)
 
         assert payload.media_id is not None
-        media = self.media_lookup.get_media(payload.media_id)
+        media = await self.media_lookup.get_media(payload.media_id)
         if media.upload_status != MediaUploadStatus.uploaded:
             raise InvalidStateError(f"Media {media.id} is not uploaded")
 
-        signed_read_url, _ = self.read_url_signer.create_signed_read_url(
+        signed_read_url, _ = await self.read_url_signer.async_create_signed_read_url(
             media.storage_key,
             expires_in=settings.r2_signed_url_ttl_seconds,
         )
         try:
-            analysis = self.scene_engine.analyze(media.filename, signed_read_url)
+            analysis = await self.scene_engine.analyze(media.filename, signed_read_url)
         except UnsupportedSceneImageError:
             raise
         except EchoWhaleError as exc:
@@ -91,29 +94,35 @@ class SessionEngineAgent:
             vocab_candidates=analysis.vocab_candidates,
             messages=[Message(role="assistant", text=analysis.opener)],
         )
-        return self.session_repository.save_session(session)
+        return await self.session_repository.save_session(session)
 
-    def get(self, session_id: str) -> Session:
-        return self.session_repository.get_session(session_id)
+    async def get(self, session_id: str) -> Session:
+        """读取完整会话。"""
+        return await self.session_repository.get_session(session_id)
 
-    def get_session_head(self, session_id: str) -> Session:
-        return self.session_repository.get_session_head(session_id)
+    async def get_session_head(self, session_id: str) -> Session:
+        """只读取会话头部信息，避免历史消息分页场景过载。"""
+        return await self.session_repository.get_session_head(session_id)
 
-    def reply(self, payload: ReplyInput) -> Session:
-        session = self.session_repository.get_session(payload.session_id)
-        feedback = self._review_with_context(
-            learner_message=payload.learner_message,
-            scene=session.scene,
-            vocab_candidates=session.vocab_candidates,
+    async def reply(self, payload: ReplyInput) -> Session:
+        """并发生成反馈与教练回复，再把这一轮消息原子化落库。"""
+        session = await self.session_repository.get_session(payload.session_id)
+        feedback, coach_reply = await asyncio.gather(
+            self._review_with_context(
+                learner_message=payload.learner_message,
+                scene=session.scene,
+                vocab_candidates=session.vocab_candidates,
+            ),
+            self._respond_with_context(
+                scene=session.scene,
+                role=session.role,
+                learner_message=payload.learner_message,
+                visual_anchors=session.visual_anchors,
+                vocab_candidates=session.vocab_candidates,
+                recent_messages=list(session.messages),
+            ),
         )
-        coach_reply = self._respond_with_context(
-            scene=session.scene,
-            role=session.role,
-            learner_message=payload.learner_message,
-            visual_anchors=session.visual_anchors,
-            vocab_candidates=session.vocab_candidates,
-            recent_messages=list(session.messages),
-        )
+        # 反馈和回复互不依赖，并发执行可以显著缩短单轮等待时间。
         learner_message = Message(role="user", text=payload.learner_message)
 
         assistant_message = Message(
@@ -125,28 +134,31 @@ class SessionEngineAgent:
             update={"messages": [*session.messages, learner_message, assistant_message]}
         )
         review = build_session_review(updated_session, feedback)
-        return self.session_repository.save_reply_turn(
+        return await self.session_repository.save_reply_turn(
             session.id,
             learner_message,
             assistant_message,
             review,
         )
 
-    def get_review(self, session_id: str):
-        return self.session_repository.get_session_review(session_id)
+    async def get_review(self, session_id: str):
+        """读取会话对应的复盘结果。"""
+        return await self.session_repository.get_session_review(session_id)
 
-    def list_history_sessions(self, user_id: str) -> list[Session]:
-        return self.session_repository.list_user_sessions(user_id)
+    async def list_history_sessions(self, user_id: str) -> list[Session]:
+        """列出用户全部历史会话。"""
+        return await self.session_repository.list_user_sessions(user_id)
 
-    def list_history_sessions_page(
+    async def list_history_sessions_page(
         self,
         user_id: str,
         *,
         limit: int,
         cursor: str | None,
     ) -> tuple[list[Session], bool, str | None]:
+        """把仓储层游标编码成可通过 API 透传的字符串。"""
         cursor_value = _decode_history_cursor(cursor)
-        sessions, has_more, next_cursor_value = self.session_repository.list_user_sessions_page(
+        sessions, has_more, next_cursor_value = await self.session_repository.list_user_sessions_page(
             user_id,
             limit=limit,
             cursor=cursor_value,
@@ -154,32 +166,38 @@ class SessionEngineAgent:
         next_cursor = _encode_history_cursor(next_cursor_value) if next_cursor_value else None
         return (sessions, has_more, next_cursor)
 
-    def list_history_reviews(self, session_ids: list[str]) -> dict[str, SessionReview]:
+    async def list_history_reviews(self, session_ids: list[str]) -> dict[str, SessionReview]:
+        """批量读取历史会话对应的复盘内容。"""
         if not session_ids:
             return {}
-        return self.session_repository.list_session_reviews_by_ids(session_ids)
+        return await self.session_repository.list_session_reviews_by_ids(session_ids)
 
-    def get_history_session_overview(self, session_id: str) -> tuple[Session, SessionReview, int]:
-        session = self.get_session_head(session_id)
-        review = self.get_review(session_id)
-        total_messages = self.session_repository.count_session_messages(session_id)
+    async def get_history_session_overview(self, session_id: str) -> tuple[Session, SessionReview, int]:
+        """并发聚合历史会话头信息、复盘和消息总数。"""
+        session, review, total_messages = await asyncio.gather(
+            self.get_session_head(session_id),
+            self.get_review(session_id),
+            self.session_repository.count_session_messages(session_id),
+        )
         return (session, review, total_messages)
 
-    def list_history_session_messages_page(
+    async def list_history_session_messages_page(
         self,
         session_id: str,
         *,
         limit: int,
         cursor: str | None,
     ) -> tuple[list[Message], bool, str | None]:
-        return self.session_repository.list_session_messages_page(
+        """分页读取单个会话的历史消息。"""
+        return await self.session_repository.list_session_messages_page(
             session_id,
             limit=limit,
             cursor=cursor,
         )
 
-    def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
-        session = self.session_repository.get_session(session_id)
+    async def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
+        """签发语音会话令牌，并记录语音链路已启动。"""
+        session = await self.session_repository.get_session(session_id)
         token, expires_in = self.voice_token_issuer.issue_token(
             settings.deepgram_agent_token_ttl_seconds
         )
@@ -191,14 +209,14 @@ class SessionEngineAgent:
             agent_settings=self.voice_settings_builder.build(session),
             session=session,
         )
-        self.session_repository.save_voice_session_fact(
+        await self.session_repository.save_voice_session_fact(
             VoiceSessionFact(
                 session_id=session.id,
                 status="active",
                 transcript_turn_count=len(session.messages),
             )
         )
-        self.session_repository.save_session_event(
+        await self.session_repository.save_session_event(
             SessionEvent(
                 session_id=session.id,
                 event_type="voice_bootstrapped",
@@ -211,8 +229,9 @@ class SessionEngineAgent:
         )
         return bootstrap
 
-    def complete_voice_session(self, payload: VoiceCompleteInput) -> VoiceCompleteResult:
-        session = self.session_repository.get_session(payload.session_id)
+    async def complete_voice_session(self, payload: VoiceCompleteInput) -> VoiceCompleteResult:
+        """把语音转写收束成文本会话，并补齐反馈、review 与运行时事件。"""
+        session = await self.session_repository.get_session(payload.session_id)
         messages = _build_voice_messages(session, payload)
         updated_session = session.model_copy(
             update={
@@ -222,13 +241,13 @@ class SessionEngineAgent:
         last_learner_message = _find_latest_user_content(payload)
         if last_learner_message is None:
             raise AppValidationError("Validation error")
-        feedback = self._review_with_context(
+        feedback = await self._review_with_context(
             learner_message=last_learner_message,
             scene=updated_session.scene,
             vocab_candidates=updated_session.vocab_candidates,
         )
         review = build_session_review(updated_session, feedback)
-        existing_voice_fact = self.session_repository.get_latest_voice_session_fact(payload.session_id)
+        existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(payload.session_id)
         voice_fact = VoiceSessionFact(
             session_id=payload.session_id,
             status="completed",
@@ -263,7 +282,7 @@ class SessionEngineAgent:
                 created_at=review.updated_at,
             ),
         ]
-        stored_session, stored_review = self.session_repository.finalize_voice_session(
+        stored_session, stored_review = await self.session_repository.finalize_voice_session(
             session=updated_session,
             review=review,
             voice_fact=voice_fact,
@@ -271,21 +290,22 @@ class SessionEngineAgent:
         )
         return VoiceCompleteResult(session=stored_session, review=stored_review)
 
-    def _review_with_context(
+    async def _review_with_context(
         self,
         *,
         learner_message: str,
         scene: str,
         vocab_candidates: list[str],
     ):
+        """兼容不同版本的反馈 service 签名，稳定透传上下文。"""
         parameters = inspect.signature(self.feedback_engine.review).parameters
         if "vocab_candidates" in parameters:
-            return self.feedback_engine.review(learner_message, scene, vocab_candidates)
+            return await self.feedback_engine.review(learner_message, scene, vocab_candidates)
         if "labels" in parameters:
-            return self.feedback_engine.review(learner_message, scene, vocab_candidates)
-        return self.feedback_engine.review(learner_message, scene)
+            return await self.feedback_engine.review(learner_message, scene, vocab_candidates)
+        return await self.feedback_engine.review(learner_message, scene)
 
-    def _respond_with_context(
+    async def _respond_with_context(
         self,
         *,
         scene: str,
@@ -295,9 +315,10 @@ class SessionEngineAgent:
         vocab_candidates: list[str],
         recent_messages: list[Message],
     ):
+        """兼容不同版本的教练 service 签名，优先传递更多上下文。"""
         parameters = inspect.signature(self.coach_engine.respond).parameters
         if "visual_anchors" in parameters and "vocab_candidates" in parameters:
-            return self.coach_engine.respond(
+            return await self.coach_engine.respond(
                 scene=scene,
                 role=role,
                 learner_message=learner_message,
@@ -306,7 +327,7 @@ class SessionEngineAgent:
                 recent_messages=recent_messages,
             )
         if "visual_anchors" in parameters:
-            return self.coach_engine.respond(
+            return await self.coach_engine.respond(
                 scene=scene,
                 role=role,
                 learner_message=learner_message,
@@ -314,17 +335,18 @@ class SessionEngineAgent:
                 recent_messages=recent_messages,
             )
         if "labels" in parameters or "recent_messages" in parameters:
-            return self.coach_engine.respond(
+            return await self.coach_engine.respond(
                 scene=scene,
                 role=role,
                 learner_message=learner_message,
                 labels=visual_anchors,
                 recent_messages=recent_messages,
             )
-        return self.coach_engine.respond(scene, role, learner_message)
+        return await self.coach_engine.respond(scene, role, learner_message)
 
 
 def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list[Message]:
+    """把语音转写拼回会话消息流，并去掉与已有消息重复的尾段。"""
     transcript: list[Message] = []
     for index, turn in enumerate(payload.conversation):
         if (
@@ -350,11 +372,13 @@ def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list
     if remainder and _message_signature(remainder[0]) == _message_signature(session.messages[0]):
         remainder = remainder[1:]
 
+    # 语音链路会回传整段 transcript，这里按尾部重叠去重，避免重复入库。
     overlap = _find_tail_overlap(existing=session.messages, incoming=remainder)
     return [*session.messages, *remainder[overlap:]]
 
 
 def _find_latest_user_content(payload: VoiceCompleteInput) -> str | None:
+    """提取最后一条学习者发言，供反馈引擎生成最终复盘。"""
     for turn in reversed(payload.conversation):
         if turn.role == "user":
             return turn.content
@@ -362,6 +386,7 @@ def _find_latest_user_content(payload: VoiceCompleteInput) -> str | None:
 
 
 def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> int:
+    """寻找旧消息尾部与新 transcript 头部的最大重叠长度。"""
     max_overlap = min(len(existing), len(incoming))
     for size in range(max_overlap, 0, -1):
         existing_tail = existing[-size:]
@@ -375,16 +400,19 @@ def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> i
 
 
 def _message_signature(message: Message) -> tuple[str, str]:
+    """提取消息去重时使用的稳定签名。"""
     return (message.role, message.text)
 
 
 def _encode_history_cursor(value: tuple[datetime, str]) -> str:
+    """把分页游标编码成带 UTC 时间戳的字符串。"""
     updated_at, session_id = value
     normalized = updated_at.astimezone(timezone.utc)
     return f"{normalized.isoformat()}|{session_id}"
 
 
 def _decode_history_cursor(cursor: str | None) -> tuple[datetime, str] | None:
+    """把 API 透传游标解回仓储层需要的时间戳和会话 ID。"""
     if cursor is None:
         return None
     timestamp, _, session_id = cursor.partition("|")

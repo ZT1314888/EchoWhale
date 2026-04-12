@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from api.db.database import create_all_tables, create_database_engine, create_session_factory
@@ -47,16 +48,18 @@ def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_path) -
         ],
     )
 
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
-    loaded = repository.get_session("sess_123")
-    updated = repository.add_message(
-        "sess_123",
-        Message(
-            id="msg_2",
-            role="user",
-            text="Could I get an iced latte, please?",
-        ),
+    loaded = asyncio.run(repository.get_session("sess_123"))
+    updated = asyncio.run(
+        repository.add_message(
+            "sess_123",
+            Message(
+                id="msg_2",
+                role="user",
+                text="Could I get an iced latte, please?",
+            ),
+        )
     )
 
     assert loaded.id == session.id
@@ -69,7 +72,7 @@ def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_path) -
         "Hi there, what can I get started for you today?",
         "Could I get an iced latte, please?",
     ]
-    assert [item.id for item in repository.list_user_sessions("demo-user")] == ["sess_123"]
+    assert [item.id for item in asyncio.run(repository.list_user_sessions("demo-user"))] == ["sess_123"]
 
 
 def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path) -> None:
@@ -100,7 +103,7 @@ def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path) -> No
             )
         ],
     )
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
     review = SessionReview(
         session_id="sess_123",
@@ -125,9 +128,9 @@ def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path) -> No
         ),
     )
 
-    repository.save_session_review(review)
+    asyncio.run(repository.save_session_review(review))
 
-    loaded = repository.get_session_review("sess_123")
+    loaded = asyncio.run(repository.get_session_review("sess_123"))
 
     assert loaded.session_id == "sess_123"
     assert loaded.title == "本轮回响"
@@ -167,10 +170,10 @@ def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_path) -> 
         updated_at=datetime.now(timezone.utc),
     )
 
-    repository.save_session(earlier)
-    repository.save_session(later)
+    asyncio.run(repository.save_session(earlier))
+    asyncio.run(repository.save_session(later))
 
-    listed = repository.list_user_sessions("demo-user")
+    listed = asyncio.run(repository.list_user_sessions("demo-user"))
 
     assert [session.id for session in listed] == ["sess_late", "sess_early"]
 
@@ -192,9 +195,9 @@ def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_la
         messages=[],
     )
 
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
-    loaded = repository.get_session("sess_legacy")
+    loaded = asyncio.run(repository.get_session("sess_legacy"))
 
     assert loaded.visual_anchors == []
     assert loaded.vocab_candidates == ["meeting", "deadline"]
@@ -225,9 +228,9 @@ def test_sqlalchemy_session_repository_persists_sample_sessions_without_media_id
         ],
     )
 
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
-    loaded = repository.get_session("sess_sample")
+    loaded = asyncio.run(repository.get_session("sess_sample"))
 
     assert loaded.media_id is None
     assert loaded.scene == "coffee_shop"
@@ -257,32 +260,36 @@ def test_sqlalchemy_session_repository_persists_session_events_and_voice_facts(t
             )
         ],
     )
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
-    repository.save_session_event(
-        SessionEvent(
-            session_id="sess_voice_runtime",
-            event_type="voice_bootstrapped",
-            stage="voice_active",
-            payload={"expires_in": 600.0, "output_sample_rate": 24000},
+    asyncio.run(
+        repository.save_session_event(
+            SessionEvent(
+                session_id="sess_voice_runtime",
+                event_type="voice_bootstrapped",
+                stage="voice_active",
+                payload={"expires_in": 600.0, "output_sample_rate": 24000},
+            )
         )
     )
-    repository.save_voice_session_fact(
-        VoiceSessionFact(
-            session_id="sess_voice_runtime",
-            status="completed",
-            termination_reason="user_ended",
-            transcript_turn_count=3,
-            client_diagnostics={
-                "processor_buffer_size": 2048,
-                "track_sample_rate": 48000,
-                "playback_gap_resets": 1,
-            },
+    asyncio.run(
+        repository.save_voice_session_fact(
+            VoiceSessionFact(
+                session_id="sess_voice_runtime",
+                status="completed",
+                termination_reason="user_ended",
+                transcript_turn_count=3,
+                client_diagnostics={
+                    "processor_buffer_size": 2048,
+                    "track_sample_rate": 48000,
+                    "playback_gap_resets": 1,
+                },
+            )
         )
     )
 
-    loaded_events = repository.list_session_events("sess_voice_runtime")
-    loaded_voice_fact = repository.get_latest_voice_session_fact("sess_voice_runtime")
+    loaded_events = asyncio.run(repository.list_session_events("sess_voice_runtime"))
+    loaded_voice_fact = asyncio.run(repository.get_latest_voice_session_fact("sess_voice_runtime"))
 
     assert [event.event_type for event in loaded_events] == ["voice_bootstrapped"]
     assert loaded_events[0].stage == "voice_active"
@@ -330,7 +337,7 @@ def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(tmp_pa
             )
         ],
     )
-    repository.save_session(original)
+    asyncio.run(repository.save_session(original))
 
     finalized_session = original.model_copy(
         update={
@@ -389,17 +396,19 @@ def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(tmp_pa
         ),
     ]
 
-    repository.finalize_voice_session(
-        session=finalized_session,
-        review=review,
-        voice_fact=voice_fact,
-        events=events,
+    asyncio.run(
+        repository.finalize_voice_session(
+            session=finalized_session,
+            review=review,
+            voice_fact=voice_fact,
+            events=events,
+        )
     )
 
-    loaded_session = repository.get_session("sess_voice_finalized")
-    loaded_review = repository.get_session_review("sess_voice_finalized")
-    loaded_events = repository.list_session_events("sess_voice_finalized")
-    loaded_voice_fact = repository.get_latest_voice_session_fact("sess_voice_finalized")
+    loaded_session = asyncio.run(repository.get_session("sess_voice_finalized"))
+    loaded_review = asyncio.run(repository.get_session_review("sess_voice_finalized"))
+    loaded_events = asyncio.run(repository.list_session_events("sess_voice_finalized"))
+    loaded_voice_fact = asyncio.run(repository.get_latest_voice_session_fact("sess_voice_finalized"))
 
     assert [message.id for message in loaded_session.messages] == ["msg_1", "msg_2", "msg_3"]
     assert loaded_review.title == "本轮回响"
@@ -462,26 +471,30 @@ def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_batch(t
         ),
     ]
     for session in sessions:
-        repository.save_session(session)
-        repository.save_session_review(
-            SessionReview(
-                session_id=session.id,
-                title=f"Review {session.id}",
-                highlight=f"Highlight {session.id}",
-                next_try=f"Next {session.id}",
-                feedback=PracticeFeedback(
-                    grammar=FeedbackMetric(title="Grammar", body="ok"),
-                    more_natural=FeedbackMetric(title="More Natural", body="ok"),
-                    useful_words=UsefulWordsMetric(title="Useful Words", words=["one"], body="ok"),
-                    next_step=FeedbackMetric(title="Next Step", body="ok"),
-                ),
+        asyncio.run(repository.save_session(session))
+        asyncio.run(
+            repository.save_session_review(
+                SessionReview(
+                    session_id=session.id,
+                    title=f"Review {session.id}",
+                    highlight=f"Highlight {session.id}",
+                    next_try=f"Next {session.id}",
+                    feedback=PracticeFeedback(
+                        grammar=FeedbackMetric(title="Grammar", body="ok"),
+                        more_natural=FeedbackMetric(title="More Natural", body="ok"),
+                        useful_words=UsefulWordsMetric(title="Useful Words", words=["one"], body="ok"),
+                        next_step=FeedbackMetric(title="Next Step", body="ok"),
+                    ),
+                )
             )
         )
 
-    first_page, has_more, next_cursor = repository.list_user_sessions_page(
-        "demo-user",
-        limit=2,
-        cursor=None,
+    first_page, has_more, next_cursor = asyncio.run(
+        repository.list_user_sessions_page(
+            "demo-user",
+            limit=2,
+            cursor=None,
+        )
     )
 
     assert [session.id for session in first_page] == ["sess_c", "sess_b"]
@@ -489,15 +502,17 @@ def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_batch(t
     assert next_cursor is not None
     assert all(session.messages == [] for session in first_page)
 
-    second_page, second_has_more, _ = repository.list_user_sessions_page(
-        "demo-user",
-        limit=2,
-        cursor=next_cursor,
+    second_page, second_has_more, _ = asyncio.run(
+        repository.list_user_sessions_page(
+            "demo-user",
+            limit=2,
+            cursor=next_cursor,
+        )
     )
     assert [session.id for session in second_page] == ["sess_a"]
     assert second_has_more is False
 
-    reviews = repository.list_session_reviews_by_ids(["sess_c", "sess_a", "sess_missing"])
+    reviews = asyncio.run(repository.list_session_reviews_by_ids(["sess_c", "sess_a", "sess_missing"]))
     assert set(reviews.keys()) == {"sess_c", "sess_a"}
     assert reviews["sess_c"].title == "Review sess_c"
     assert reviews["sess_a"].highlight == "Highlight sess_a"
@@ -526,22 +541,26 @@ def test_sqlalchemy_session_repository_lists_replay_messages_page(tmp_path) -> N
             Message(id="msg_5", role="assistant", text="Great choice."),
         ],
     )
-    repository.save_session(session)
+    asyncio.run(repository.save_session(session))
 
-    items, has_more, next_cursor = repository.list_session_messages_page(
-        "sess_replay",
-        limit=2,
-        cursor=None,
+    items, has_more, next_cursor = asyncio.run(
+        repository.list_session_messages_page(
+            "sess_replay",
+            limit=2,
+            cursor=None,
+        )
     )
     assert [message.id for message in items] == ["msg_4", "msg_5"]
     assert has_more is True
     assert next_cursor is not None
-    assert repository.count_session_messages("sess_replay") == 5
+    assert asyncio.run(repository.count_session_messages("sess_replay")) == 5
 
-    previous_items, previous_has_more, _ = repository.list_session_messages_page(
-        "sess_replay",
-        limit=3,
-        cursor=next_cursor,
+    previous_items, previous_has_more, _ = asyncio.run(
+        repository.list_session_messages_page(
+            "sess_replay",
+            limit=3,
+            cursor=next_cursor,
+        )
     )
     assert [message.id for message in previous_items] == ["msg_1", "msg_2", "msg_3"]
     assert previous_has_more is False

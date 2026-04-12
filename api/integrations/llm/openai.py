@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+from typing import Any
 from urllib.parse import urljoin
 
 import httpx
@@ -30,8 +32,19 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         self.timeout_seconds = timeout_seconds
         self._transport = transport
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+
     def complete_text(self, *, system_prompt: str, user_prompt: str) -> str:
-        payload = {
+        payload = self._build_text_payload(system_prompt, user_prompt)
+        return self._post_chat_completion(payload)
+
+    async def async_complete_text(self, *, system_prompt: str, user_prompt: str) -> str:
+        payload = self._build_text_payload(system_prompt, user_prompt)
+        return await self._async_post_chat_completion(payload)
+
+    def _build_text_payload(self, system_prompt: str, user_prompt: str) -> dict[str, object]:
+        return {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -39,10 +52,17 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             ],
             "temperature": 0.2,
         }
-        return self._post_chat_completion(payload)
 
     def analyze_image(self, *, system_prompt: str, user_prompt: str, image_url: str) -> str:
-        payload = {
+        payload = self._build_image_payload(system_prompt, user_prompt, image_url)
+        return self._post_chat_completion(payload)
+
+    async def async_analyze_image(self, *, system_prompt: str, user_prompt: str, image_url: str) -> str:
+        payload = self._build_image_payload(system_prompt, user_prompt, image_url)
+        return await self._async_post_chat_completion(payload)
+
+    def _build_image_payload(self, system_prompt: str, user_prompt: str, image_url: str) -> dict[str, object]:
+        return {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -58,13 +78,24 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         }
         return self._post_chat_completion(payload)
 
-    def _post_chat_completion(self, payload: dict[str, object]) -> str:
+    def _get_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
 
-        with httpx.Client(timeout=self.timeout_seconds, transport=self._transport) as client:
-            response = client.post(
+    def _post_chat_completion(self, payload: dict[str, object]) -> str:
+        headers = self._get_headers()
+        if self._transport is not None:
+            with httpx.Client(timeout=self.timeout_seconds, transport=self._transport) as client:
+                response = client.post(
+                    urljoin(self.base_url, "chat/completions"),
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+        else:
+            response = _get_shared_sync_client(self.timeout_seconds).post(
                 urljoin(self.base_url, "chat/completions"),
                 headers=headers,
                 json=payload,
@@ -72,6 +103,30 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             response.raise_for_status()
 
         data = response.json()
+        return self._extract_content(data)
+
+    async def _async_post_chat_completion(self, payload: dict[str, object]) -> str:
+        headers = self._get_headers()
+        if self._transport is not None:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self._transport) as client:
+                response = await client.post(
+                    urljoin(self.base_url, "chat/completions"),
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+        else:
+            response = await _get_shared_async_client(self.timeout_seconds).post(
+                urljoin(self.base_url, "chat/completions"),
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+
+        data = response.json()
+        return self._extract_content(data)
+
+    def _extract_content(self, data: dict[str, Any]) -> str:
         choices = data.get("choices", [])
         if not choices:
             raise ValueError("Model response did not contain choices")
@@ -88,3 +143,13 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         if not isinstance(content, str) or not content.strip():
             raise ValueError("Model response did not contain textual content")
         return content.strip()
+
+
+@lru_cache(maxsize=8)
+def _get_shared_sync_client(timeout_seconds: int) -> httpx.Client:
+    return httpx.Client(timeout=timeout_seconds)
+
+
+@lru_cache(maxsize=8)
+def _get_shared_async_client(timeout_seconds: int) -> httpx.AsyncClient:
+    return httpx.AsyncClient(timeout=timeout_seconds)

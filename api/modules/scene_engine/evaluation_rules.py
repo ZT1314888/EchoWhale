@@ -20,6 +20,7 @@ SCENE_VOCAB_EXPECTATIONS: dict[str, set[str]] = {
 
 
 def match_expected_keywords(expected_keywords: list[str], actual_values: list[str]) -> bool:
+    """按同义词规则判断输出是否覆盖预期锚点。"""
     if not expected_keywords:
         return True
 
@@ -32,6 +33,7 @@ def match_expected_keywords(expected_keywords: list[str], actual_values: list[st
 
 
 def vocab_candidates_are_valuable(scene: str, vocab_candidates: list[str]) -> bool:
+    """过滤低价值词，并校验是否命中该场景的练习重点。"""
     normalized = {value.lower() for value in vocab_candidates}
     if not normalized:
         return False

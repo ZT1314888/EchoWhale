@@ -100,3 +100,15 @@ class VoiceTokenError(EchoWhaleError):
     code = 1302
     status_code = 503
     default_message = "Deepgram token 获取失败"
+
+
+class EmailDeliveryError(EchoWhaleError):
+    code = 1005
+    status_code = 503
+    default_message = "邮件服务暂时不可用，请稍后重试。"
+
+
+class QueuePublishError(EchoWhaleError):
+    code = 1005
+    status_code = 503
+    default_message = "邮件任务入队失败，请稍后重试。"

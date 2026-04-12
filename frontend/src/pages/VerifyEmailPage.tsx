@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { BrandHeader } from "../components/BrandHeader";
@@ -10,42 +10,14 @@ export function VerifyEmailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const token = params.get("token") ?? "";
   const email = params.get("email") ?? "";
-  const [state, setState] = useState<VerificationState>(token ? "verifying" : "ready");
+  const [code, setCode] = useState("");
+  const [state, setState] = useState<VerificationState>("ready");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    if (!token) {
-      return;
-    }
-
-    let cancelled = false;
-    setState("verifying");
-    setError("");
-    verifyEmail(token)
-      .then(() => {
-        if (!cancelled) {
-          setState("verified");
-        }
-      })
-      .catch((reason) => {
-        if (cancelled) {
-          return;
-        }
-        const typed = reason as { message?: string };
-        setError(typed.message ?? "邮箱验证失败，请稍后重试。");
-        setState("error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   async function onResend() {
     if (!email) {
-      setError("缺少邮箱地址，无法重新发送验证邮件。");
+      setError("缺少邮箱地址，无法重新发送验证码。");
       setState("error");
       return;
     }
@@ -57,7 +29,32 @@ export function VerifyEmailPage() {
       setState("sent");
     } catch (reason) {
       const typed = reason as { message?: string };
-      setError(typed.message ?? "验证邮件发送失败，请稍后重试。");
+      setError(typed.message ?? "验证码发送失败，请稍后重试。");
+      setState("error");
+    }
+  }
+
+  async function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!email) {
+      setError("缺少邮箱地址，无法完成验证。");
+      setState("error");
+      return;
+    }
+    if (!code.trim()) {
+      setError("验证码不能为空");
+      setState("error");
+      return;
+    }
+
+    setState("verifying");
+    setError("");
+    try {
+      await verifyEmail({ email, code: code.trim() });
+      setState("verified");
+    } catch (reason) {
+      const typed = reason as { message?: string };
+      setError(typed.message ?? "邮箱验证失败，请稍后重试。");
       setState("error");
     }
   }
@@ -65,15 +62,11 @@ export function VerifyEmailPage() {
   const title =
     state === "verified"
       ? "邮箱验证完成"
-      : token
-        ? "正在验证邮箱…"
-        : "查收你的验证邮件";
+      : "查收你的验证码";
   const description =
     state === "verified"
       ? "你的账号已经激活，现在可以返回登录并继续练习。"
-      : token
-        ? "我们正在确认这封邮件属于你。"
-        : "注册已完成。为了保护账号安全，请先完成邮箱验证，再进入登录。";
+      : "注册已完成。请输入邮件中的 6 位验证码，完成账号激活。";
 
   return (
     <div className="page-shell page-shell--auth">
@@ -94,14 +87,30 @@ export function VerifyEmailPage() {
               <p className="muted-text">{description}</p>
             </div>
 
-            {!token && email ? <p className="muted-text">验证邮件已发送到：{email}</p> : null}
+            {email ? <p className="muted-text">验证码已发送到：{email}</p> : null}
             {error ? <p className="form-error">{error}</p> : null}
-            {state === "sent" ? <p className="muted-text">新的验证邮件已经发出，请检查收件箱和垃圾邮件。</p> : null}
+            {state === "sent" ? <p className="muted-text">新的验证码已经发出，请检查收件箱和垃圾邮件。</p> : null}
 
-            {!token && state !== "verified" ? (
-              <button className="primary-button" type="button" disabled={state === "sending"} onClick={onResend}>
-                {state === "sending" ? "发送中…" : "重新发送验证邮件"}
-              </button>
+            {state !== "verified" ? (
+              <form className="auth-form" onSubmit={onSubmit}>
+                <label className="field-label" htmlFor="verify-email-code">
+                  验证码
+                </label>
+                <input
+                  id="verify-email-code"
+                  className="input-field"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
+                <button className="primary-button primary-button--aqua" type="submit" disabled={state === "verifying"}>
+                  {state === "verifying" ? "验证中…" : "完成验证"}
+                </button>
+                <button className="primary-button" type="button" disabled={state === "sending"} onClick={onResend}>
+                  {state === "sending" ? "发送中…" : "重新发送验证码"}
+                </button>
+              </form>
             ) : null}
 
             <button className="link-button" type="button" onClick={() => navigate("/login", { state: { prefillEmail: email } })}>

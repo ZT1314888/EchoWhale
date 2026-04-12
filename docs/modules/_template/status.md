@@ -43,6 +43,12 @@
 - 最少要覆盖的用例：
 - 还没覆盖的风险：
 
+## 控制面同步
+
+- `docs/control/agent-control-plane.json` 中的模块状态、说明和 owner files 应与这里保持一致
+- 同步后运行：`uv run python -m tools.agent_ops render`
+- 校验：`uv run python -m tools.agent_ops check`
+
 ## 阻塞项
 
 - ...

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
     database_url: str = ""
+    database_pool_size: int = 10
+    database_max_overflow: int = 20
+    database_pool_timeout_seconds: int = 30
+    database_pool_recycle_seconds: int = 1800
     auth_jwt_secret: str = "dev-secret-change-me"
     auth_access_token_ttl_seconds: int = 900
     auth_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 14
@@ -37,6 +41,7 @@ class Settings(BaseSettings):
     auth_smtp_from_name: str = "EchoWhale"
     auth_smtp_use_ssl: bool = True
     auth_smtp_use_starttls: bool = False
+    auth_mail_queue_name: str = "auth-mail"
     r2_bucket: str = "echo-whale-media"
     r2_account_id: str = ""
     r2_access_key_id: str = ""

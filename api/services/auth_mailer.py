@@ -20,6 +20,7 @@ class AuthMailDelivery:
     kind: str
     user_id: str
     email: str
+    nickname: str | None = None
     token: str | None = None
     code: str | None = None
     reset_url: str | None = None
@@ -49,6 +50,7 @@ class RecordedAuthMailer:
                 kind="email_verification",
                 user_id=user.id,
                 email=user.email,
+                nickname=user.nickname,
                 code=code,
             )
         )
@@ -59,6 +61,7 @@ class RecordedAuthMailer:
                 kind="password_reset",
                 user_id=user.id,
                 email=user.email,
+                nickname=user.nickname,
                 reset_url=reset_url,
             )
         )

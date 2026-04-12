@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/feedback_engine`
 - `owner`: `unassigned`
-- `updated_at`: `2026-04-05`
+- `updated_at`: `2026-04-09`
 
 ## 模块目标
 
@@ -17,6 +17,7 @@
 - 现有实现：`api/modules/feedback_engine/` 已支持图片 `vocab_candidates` 输入，并保留 mock / live 双路径
 - 已完成边界：schema、agent、service、prompts、基于教学词优先的 useful words 选择逻辑
 - live 模式下已完成主文本模型联调，`feedback_engine` 已能返回真实结构化反馈
+- 已完成边界：live 模式现在只遍历显式配置的真实文本 client；当 primary/fallback 都不是实时 provider 时会显式报配置错误，不再静默落回 mock feedback
 
 ## 输入输出契约
 
@@ -39,7 +40,7 @@
 ## 测试门
 
 - `module_test_passed` 的标准：三类反馈字段稳定存在，且教学词优先进入 useful words
-- 当前证据：`tests/modules/test_feedback_engine.py` 已覆盖 `vocab_candidates` 优先和 scene fallback
+- 当前证据：`tests/modules/test_feedback_engine.py` 已覆盖 `vocab_candidates` 优先、scene fallback、live 模式最少一个真实 provider 的配置门禁，以及只使用显式配置的真实 client
 - 还没覆盖的风险：真实模型 JSON 格式波动、文本兜底模型在 JSON-only 任务下超时或断开
 
 ## 阻塞项
@@ -49,6 +50,7 @@
 ## 变更记录
 
 - `2026-04-06`：将输入契约升级为 `vocab_candidates`，不再直接消费视觉标签
+- `2026-04-09`：收紧 live provider 语义，避免真实运行模式在空配置下静默落回 mock，并确保仅遍历显式配置的真实 client
 - `2026-03-30`：初始化模块状态文档
 
 

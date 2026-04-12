@@ -7,4 +7,5 @@ SCENE_QUESTIONS = {
 
 
 def build_follow_up(scene: str) -> str:
+    """按场景挑一条稳妥的追问，保持对话继续推进。"""
     return SCENE_QUESTIONS.get(scene, "Can you tell me a little more?")

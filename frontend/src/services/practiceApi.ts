@@ -1,11 +1,6 @@
 import type { PracticeTurnInput, SessionSummary, SubmitPracticeTurnResult, UploadDraft } from "../types/app";
 
-import * as mockApi from "./mockApi";
 import * as sessionApi from "./sessionApi";
-
-function isRealSession(sessionId: string): boolean {
-  return sessionId.startsWith("sess_");
-}
 
 export async function createPracticeSession(draft: UploadDraft): Promise<{ sessionId: string }> {
   if (draft.source === "file") {
@@ -30,18 +25,12 @@ export async function createPracticeSession(draft: UploadDraft): Promise<{ sessi
 }
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {
-  if (isRealSession(sessionId)) {
-    return sessionApi.getPracticeSession(sessionId);
-  }
-  return mockApi.getPracticeSession(sessionId);
+  return sessionApi.getPracticeSession(sessionId);
 }
 
 export async function submitPracticeTurn(
   sessionId: string,
   input: PracticeTurnInput,
 ): Promise<SubmitPracticeTurnResult> {
-  if (isRealSession(sessionId)) {
-    return sessionApi.submitPracticeTurn(sessionId, input);
-  }
-  return mockApi.submitPracticeTurn(sessionId, input);
+  return sessionApi.submitPracticeTurn(sessionId, input);
 }
