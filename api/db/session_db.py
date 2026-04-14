@@ -184,7 +184,7 @@ class SqlAlchemySessionRepository:
                 delete(MessageRecord).where(MessageRecord.session_id == session.id)
             )
             for position, message in enumerate(session.messages):
-                db_session.add(await self._to_message_record(session.id, position, message))
+                db_session.add(self._to_message_record(session.id, position, message))
             await db_session.commit()
         return await self.get_session(session.id)
 
@@ -208,7 +208,7 @@ class SqlAlchemySessionRepository:
                 )
             )
             db_session.add(
-                await self._to_message_record(
+                self._to_message_record(
                     session_id,
                     int(current_position) + 1,
                     message,
@@ -236,9 +236,9 @@ class SqlAlchemySessionRepository:
                 )
             )
             next_position = int(current_position) + 1
-            db_session.add(await self._to_message_record(session_id, next_position, learner_message))
+            db_session.add(self._to_message_record(session_id, next_position, learner_message))
             db_session.add(
-                await self._to_message_record(session_id, next_position + 1, assistant_message)
+                self._to_message_record(session_id, next_position + 1, assistant_message)
             )
             await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
@@ -264,7 +264,7 @@ class SqlAlchemySessionRepository:
                 delete(MessageRecord).where(MessageRecord.session_id == session.id)
             )
             for position, message in enumerate(session.messages):
-                db_session.add(await self._to_message_record(session.id, position, message))
+                db_session.add(self._to_message_record(session.id, position, message))
 
             await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
@@ -453,11 +453,12 @@ class SqlAlchemySessionRepository:
             await db_session.commit()
 
     async def _load_messages(self, db_session, session_id: str) -> Sequence[MessageRecord]:
-        return await db_session.scalars(
+        result = await db_session.scalars(
             select(MessageRecord)
             .where(MessageRecord.session_id == session_id)
             .order_by(MessageRecord.position.asc())
-        ).all()
+        )
+        return result.all()
 
     async def _ensure_session_exists(self, db_session, session_id: str) -> None:
         record = await db_session.get(SessionRecord, session_id)

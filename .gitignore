@@ -222,6 +222,11 @@ docs/*
 docs/control/*
 !docs/control/agent-control-plane.json
 !docs/control/agent-governance.md
+!docs/screenshots/
+docs/screenshots/*
+!docs/screenshots/home-upload.png
+!docs/screenshots/practice-session.png
+!docs/screenshots/post-review.png
 infra/
 tests/*
 !tests/tools/
