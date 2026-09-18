@@ -233,5 +233,7 @@ tests/*
 tests/tools/*
 !tests/tools/test_agent_ops.py
 tmp/
+.codex/
+.superpowers/
 
 
