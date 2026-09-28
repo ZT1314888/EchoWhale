@@ -218,6 +218,9 @@ demo2.html
 design/
 designs/
 docs/*
+!docs/interview/
+docs/interview/*
+!docs/interview/*.md
 !docs/control/
 docs/control/*
 !docs/control/agent-control-plane.json
@@ -235,5 +238,10 @@ tests/tools/*
 tmp/
 .codex/
 .superpowers/
+
+# AI workflow tooling and local state (kept on disk only, never pushed)
+.trellis/
+.zcode/
+.claude/settings.local.json
 
 
