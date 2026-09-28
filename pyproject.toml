@@ -21,5 +21,10 @@ dependencies = [
 [dependency-groups]
 dev = [
     "alembic>=1.16.5",
+    "black>=26.5.1",
     "pytest>=9.0.2",
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
