@@ -97,3 +97,24 @@ class SceneAnalysisResult(BaseModel):
 
         self.labels = aggregate or list(self.labels)
         return self
+
+
+def scene_result_from_snapshot(snapshot: object) -> "SceneAnalysisResult":
+    """把 scene_analyses 仓储快照还原成 SceneAnalysisResult（labels 由模型校验器自动聚合）。
+
+    只信任 ready 行；关键字段缺失视为缓存损坏，抛 ValueError 由调用方降级重分析。
+    """
+    scene = getattr(snapshot, "scene", None)
+    role = getattr(snapshot, "role", None)
+    opener = getattr(snapshot, "opener", None)
+    confidence = getattr(snapshot, "confidence", None)
+    if not scene or not role or not opener or confidence is None:
+        raise ValueError("scene analysis snapshot is incomplete")
+    return SceneAnalysisResult(
+        scene=scene,
+        role=role,
+        opener=opener,
+        visual_anchors=[str(item) for item in getattr(snapshot, "visual_anchors", None) or []],
+        vocab_candidates=[str(item) for item in getattr(snapshot, "vocab_candidates", None) or []],
+        confidence=float(confidence),
+    )

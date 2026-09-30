@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
-
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import ModelProviderError
 from api.core.config import settings
-from api.integrations.llm.openai import OpenAICompatibleClient
+from api.integrations.llm.json_utils import parse_llm_json
+from api.integrations.llm.resilience import LLMAttempt
+from api.integrations.llm.resilience import run_llm_with_failover
+from api.integrations.llm.runtime import provider_slot_from_settings
+from api.integrations.llm.runtime import resolve_engine_providers
+from api.integrations.llm.runtime import TextCompletionProvider
+from api.modules.coach_engine.providers.chat_provider import MockChatProvider
 from api.modules.feedback_engine.prompts.feedback_prompts import FEEDBACK_PROMPT
 from api.modules.feedback_engine.schema import FeedbackInput, FeedbackResult
 from api.modules.feedback_engine.tools.correction_tools import normalize_sentence
@@ -46,67 +48,30 @@ class FeedbackEngineAgent:
             ]
         )
 
-        active_clients = _build_live_feedback_clients()
-        if not active_clients:
-            raise ConfigurationError("Live runtime requires at least one real text provider")
-
-        last_error: Exception | None = None
-        for client in active_clients:
-            try:
-                raw = await client.async_complete_text(
-                    system_prompt=FEEDBACK_PROMPT,
-                    user_prompt=user_prompt,
-                )
-                return FeedbackResult.model_validate(_load_json(raw))
-            except Exception as exc:
-                last_error = exc
-
-        raise ModelProviderError("Feedback provider failed to generate review") from last_error
-
-
-def _load_json(raw: str) -> dict[str, object]:
-    """兼容模型把 JSON 包在 Markdown 代码块中的输出。"""
-    normalized = raw.strip()
-    if normalized.startswith("```"):
-        normalized = normalized.strip("`")
-        if normalized.lower().startswith("json"):
-            normalized = normalized[4:].strip()
-    return json.loads(normalized)
-
-
-def _build_live_feedback_clients() -> list[OpenAICompatibleClient]:
-    """按主备配置构建 live 模式可尝试的文本模型客户端列表。"""
-    if settings.model_runtime_mode.lower() != "live":
-        return []
-
-    clients: list[OpenAICompatibleClient] = []
-    for provider, base_url, api_key, model, timeout_seconds in (
-        (
-            settings.text_primary_provider,
-            settings.text_primary_base_url,
-            settings.text_primary_api_key,
-            settings.text_primary_model,
-            settings.text_primary_timeout_seconds,
-        ),
-        (
-            settings.text_fallback_provider,
-            settings.text_fallback_base_url,
-            settings.text_fallback_api_key,
-            settings.text_fallback_model,
-            settings.text_fallback_timeout_seconds,
+        primary, fallback = resolve_engine_providers(
+            kind="text",
+            primary_slot=provider_slot_from_settings("text", "primary"),
+            fallback_slot=provider_slot_from_settings("text", "fallback"),
+            build_mock=MockChatProvider,
+            build_real=lambda slot: TextCompletionProvider(
+                slot, json_mode=settings.llm_json_mode_enabled
+            ),
         )
-    ):
-        if provider.strip().lower() in {"", "mock"}:
-            continue
-        clients.append(
-            OpenAICompatibleClient(
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                timeout_seconds=timeout_seconds,
+
+        attempts = [LLMAttempt("text_primary", lambda: _request_feedback(primary, user_prompt))]
+        if fallback is not primary:
+            attempts.append(
+                LLMAttempt("text_fallback", lambda: _request_feedback(fallback, user_prompt))
             )
+        return await run_llm_with_failover(
+            attempts,
+            retries_per_provider=settings.llm_max_retries_per_provider,
+            retry_backoff_seconds=settings.llm_retry_backoff_seconds,
+            deadline_seconds=settings.llm_request_deadline_seconds,
         )
 
-    if not clients:
-        raise ConfigurationError("Live runtime requires at least one real text provider")
-    return clients
+
+async def _request_feedback(provider: TextCompletionProvider, user_prompt: str) -> FeedbackResult:
+    """调用文本模型并校验结构化输出；解析失败按可重试的 provider 错误处理。"""
+    raw = await provider.complete(system_prompt=FEEDBACK_PROMPT, user_prompt=user_prompt)
+    return FeedbackResult.model_validate(parse_llm_json(raw))

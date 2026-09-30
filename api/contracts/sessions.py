@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from api.models.message_model import Message
@@ -157,6 +159,13 @@ class SessionReplyResponse(BaseModel):
                 feedback = ReplyFeedbackResponse(**message.feedback)
                 break
         return cls(session=SessionResponse.from_session(session), feedback=feedback)
+
+
+class SessionStartPendingResponse(BaseModel):
+    """start 未命中场景缓存且已转异步分析时的 202 载荷，客户端轮询场景状态端点。"""
+
+    status: Literal["analyzing"] = "analyzing"
+    media_id: str
 
 
 class VoiceBootstrapResponse(BaseModel):

@@ -33,10 +33,10 @@ class FakeStorageService:
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
 
-    def upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
+    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
         self.objects[key] = content
 
-    def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
+    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
         expires_at = datetime(2026, 4, 2, 12, 0, tzinfo=timezone.utc)
         return (f"https://signed.test/{key}?expires_in={expires_in}", expires_at)
 
@@ -45,11 +45,11 @@ class FakeMediaRepository:
     def __init__(self) -> None:
         self.media: dict[str, Media] = {}
 
-    def save_media(self, media: Media) -> Media:
+    async def save_media(self, media: Media) -> Media:
         self.media[media.id] = media
         return media
 
-    def get_media(self, media_id: str) -> Media:
+    async def get_media(self, media_id: str) -> Media:
         if media_id not in self.media:
             raise NotFoundError(f"Media {media_id} not found")
         return self.media[media_id]
@@ -223,3 +223,16 @@ def test_health_route_keeps_plain_response(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_upload_assigns_visitor_cookie_when_request_is_anonymous(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/media/upload",
+        files={"file": ("coffee-shop.png", PNG_BYTES, "image/png")},
+    )
+
+    assert response.status_code == 200
+    set_cookie = response.headers.get("set-cookie")
+    assert set_cookie
+    assert "echowhale_visitor_id=" in set_cookie
+    assert response.json()["data"]["storage_key"].startswith("media/visitor/")

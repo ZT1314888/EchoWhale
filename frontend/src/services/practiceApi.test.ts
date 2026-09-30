@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import * as mediaApi from "./mediaApi";
 import * as mockApi from "./mockApi";
 import { createPracticeSession, getPracticeSession, submitPracticeTurn } from "./practiceApi";
 import * as sessionApi from "./sessionApi";
@@ -12,7 +13,7 @@ describe("practiceApi", () => {
   it("creates sample sessions through the real backend session api", async () => {
     const createSampleSpy = vi
       .spyOn(sessionApi, "createSamplePracticeSession")
-      .mockResolvedValue({ sessionId: "sess_sample" });
+      .mockResolvedValue({ kind: "created", sessionId: "sess_sample" });
     const mockCreateSpy = vi.spyOn(mockApi, "createPracticeSession");
 
     const result = await createPracticeSession({
@@ -84,4 +85,52 @@ describe("practiceApi", () => {
     });
     expect(mockSubmitSpy).not.toHaveBeenCalled();
   });
+
+  it("waits for scene analysis and retries session start when the backend answers 202", async () => {
+    const createMediaSpy = vi
+      .spyOn(sessionApi, "createPracticeSession")
+      .mockResolvedValueOnce({ kind: "analyzing", mediaId: "med_wait" })
+      .mockResolvedValueOnce({ kind: "created", sessionId: "sess_wait" });
+    const waitSpy = vi.spyOn(mediaApi, "waitForSceneAnalysis").mockResolvedValue(undefined);
+    const onAnalysisPending = vi.fn();
+
+    const result = await createPracticeSession(
+      { source: "file", uploadedMedia: uploadedMedia("med_wait") },
+      { onAnalysisPending },
+    );
+
+    expect(onAnalysisPending).toHaveBeenCalledTimes(1);
+    expect(waitSpy).toHaveBeenCalledWith("med_wait");
+    expect(createMediaSpy).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ sessionId: "sess_wait" });
+  });
+
+  it("propagates structured analysis failures after a 202 pending response", async () => {
+    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({
+      kind: "analyzing",
+      mediaId: "med_failed",
+    });
+    vi.spyOn(mediaApi, "waitForSceneAnalysis").mockRejectedValue({
+      code: "SCENE_ANALYSIS_FAILED",
+      message: "图片场景分析失败，请重试或换一张图片。",
+    });
+
+    await expect(
+      createPracticeSession({ source: "file", uploadedMedia: uploadedMedia("med_failed") }),
+    ).rejects.toMatchObject({ code: "SCENE_ANALYSIS_FAILED" });
+  });
 });
+
+function uploadedMedia(mediaId: string) {
+  return {
+    mediaId,
+    filename: "coffee.png",
+    contentType: "image/png",
+    fileSize: 5,
+    storageKey: `media/demo-user/${mediaId}-coffee.png`,
+    previewUrl: "https://signed.test/preview",
+    previewUrlExpiresAt: "2026-04-02T12:00:00Z",
+    uploadStatus: "uploaded",
+  };
+}
+

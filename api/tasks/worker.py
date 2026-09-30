@@ -15,7 +15,13 @@ def main() -> None:
     if Worker is None:
         raise ConfigurationError("RQ is not installed")
 
-    worker = Worker([settings.auth_mail_queue_name], connection=get_queue_redis_client())
+    worker = Worker(
+        [
+            settings.auth_mail_queue_name,
+            settings.scene_analysis_queue_name,
+        ],
+        connection=get_queue_redis_client(),
+    )
     worker.work()
 
 

@@ -84,9 +84,6 @@ class FakeSessionRepository:
     async def get_session_review(self, session_id: str):
         return self.reviews[session_id]
 
-    async def list_user_sessions(self, user_id: str) -> list[Session]:
-        return [session for session in self.sessions.values() if session.user_id == user_id]
-
     async def save_session_event(self, event: SessionEvent) -> SessionEvent:
         self.events.setdefault(event.session_id, []).append(event)
         return event
@@ -103,6 +100,9 @@ class FakeSessionRepository:
 
     async def get_session_head(self, session_id: str) -> Session:
         return self.sessions[session_id]
+
+    async def list_recent_messages(self, session_id: str, *, limit: int) -> list[Message]:
+        return list(self.sessions[session_id].messages[-limit:])
 
     async def count_session_messages(self, session_id: str) -> int:
         return len(self.sessions[session_id].messages)
@@ -288,7 +288,15 @@ def test_start_session_from_sample_preset_bypasses_media_lookup_and_scene_engine
 
 
 class FailingCoachEngine:
-    async def respond(self, scene: str, role: str, learner_message: str):
+    async def respond(
+        self,
+        scene: str,
+        role: str,
+        learner_message: str,
+        visual_anchors: list[str],
+        vocab_candidates: list[str],
+        recent_messages: list[Message],
+    ):
         raise RuntimeError("coach provider unavailable")
 
 

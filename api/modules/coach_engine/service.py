@@ -1,3 +1,4 @@
+from api.integrations.llm.base import TextStream
 from api.modules.coach_engine.agent import CoachEngineAgent
 from api.modules.coach_engine.providers.chat_provider import ChatProvider
 from api.modules.coach_engine.schema import CoachReplyInput, CoachReplyResult
@@ -36,3 +37,23 @@ class CoachEngineService:
             recent_messages=recent_messages,
         )
         return await self.agent.run(payload)
+
+    async def stream_respond(
+        self,
+        scene: str,
+        role: str,
+        learner_message: str,
+        visual_anchors: list[str],
+        vocab_candidates: list[str],
+        recent_messages: list[Message],
+    ) -> TextStream:
+        """组装 payload 后打开教练回复增量流，供 SSE 端点逐 token 下发。"""
+        payload = CoachReplyInput(
+            scene=scene,
+            role=role,
+            learner_message=learner_message,
+            visual_anchors=visual_anchors,
+            vocab_candidates=vocab_candidates,
+            recent_messages=recent_messages,
+        )
+        return await self.agent.stream_reply(payload)

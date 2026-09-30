@@ -45,6 +45,18 @@ class MediaResponse(BaseModel):
         )
 
 
+class SceneAnalysisStatusResponse(BaseModel):
+    """媒体场景分析缓存状态；start 返回 202 后客户端轮询此载荷。"""
+
+    media_id: str
+    status: str
+    prompt_version: str | None = None
+    scene: str | None = None
+    role: str | None = None
+    confidence: float | None = None
+    error_code: int | None = None
+
+
 class MediaAccessResponse(BaseModel):
     media_id: str
     read_url: str

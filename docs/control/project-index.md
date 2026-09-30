@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/auth_email_code_verification/feature.md`
-- 本轮结论：auth 注册验证已切到 6 位邮箱验证码，Redis 验证码存储、邮箱/IP 频控和 SMTP 配置入口都已落地。
-- 当前主要阻塞：真实 Redis / 阿里云 SMTP 仍需 smoke；Deepgram token、麦克风与浏览器播放联调也仍待系统级样本验证。
-- 补充进展：`coach_engine`、`scene_engine`、`feedback_engine` 在 `MODEL_RUNTIME_MODE=live` 下都已收紧为至少存在一个真实 provider。
+- 最新归档：`docs/features/frontend_quality_gates/feature.md`
+- 本轮结论：第五批质量门禁落地：tsc --noEmit 清零（lib ES2022 / vite-env.d.ts / apiClient credentials as const / streamState holder 修 never 收窄 / 示例场景白名单守卫），package.json 新增 typecheck 脚本；consumeSseResponse 包 try/finally 并在退出时 reader.cancel，中途取消/断流不再泄漏读取器（含中途失败 spy 测试）；新增仓库首个 CI（backend：uv sync --frozen + sqlite 建表 + pytest；frontend：npm ci + typecheck + vitest）。CI 配方逼出并修复测试密闭性缺口：无 .env 时 38 failed（DATABASE_URL 必填 + live 用例隐式依赖本机供应商密钥），live 用例改为 dummy 槽位 monkeypatch、CI 用 sqlite + create_all 预建表，配方逐字本地验证。
+- 当前主要阻塞：vitest coverage 阈值与 lint 接入 CI 待下一批；上传页真实进度与取消等待、语音回合反馈卡统一为 P1 体验项；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费；真实依赖的系统级 smoke 仍是既有主阻塞。
+- 补充进展：npx tsc --noEmit 0 error（批前 13）；npx vitest run 99 passed（基线 98 + 新增 1）；uv run pytest tests 224 passed / 2 skipped（本地与模拟 CI 环境均为全绿）；uv lock --check 通过。
 
 ## 模块看板
 
@@ -58,6 +58,10 @@
 | 学习反馈 | `feedback_engine` | `in_progress` | `feature_test_passed` | `module/feedback_engine` |
 | 会话编排 | `session_orchestration` | `in_progress` | `feature_test_passed` | `module/session_orchestration` |
 | 历史查看 | `history_review` | `in_progress` | `feature_test_passed` | `module/history_review` |
+| 文字回复流式 | `text_reply_streaming` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 场景分析缓存 | `scene_analysis_caching` | `feature_test_passed` | `feature_test_passed` | `module/scene_engine` |
+| 前端流式与轮询接线 | `frontend_stream_ui_wiring` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| 前端质量门禁 | `frontend_quality_gates` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 
 ## 测试门
 

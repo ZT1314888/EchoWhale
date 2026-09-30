@@ -31,6 +31,18 @@ export type UploadedMedia = {
   uploadStatus: string;
 };
 
+export type SceneAnalysisStatusValue = "unknown" | "pending" | "ready" | "failed";
+
+export type SceneAnalysisStatus = {
+  mediaId: string;
+  status: SceneAnalysisStatusValue;
+  promptVersion?: string;
+  scene?: string;
+  role?: string;
+  confidence?: number;
+  errorCode?: number;
+};
+
 export type PracticeMessage = {
   id: string;
   role: MessageRole;

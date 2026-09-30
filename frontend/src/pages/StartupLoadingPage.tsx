@@ -27,6 +27,7 @@ export function StartupLoadingPage() {
   const [uploading, setUploading] = useState(draft?.source === "file");
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | undefined>(draft?.uploadedMedia);
   const [retryKey, setRetryKey] = useState(0);
+  const [analysisPending, setAnalysisPending] = useState(false);
 
   useEffect(() => {
     const timers = ANALYSIS_STAGES.slice(1).map((_, index) =>
@@ -98,9 +99,12 @@ export function StartupLoadingPage() {
     }
 
     setStartingSession(true);
+    setAnalysisPending(false);
     setSessionError(null);
     try {
-      const created = await createPracticeSession(nextDraft);
+      const created = await createPracticeSession(nextDraft, {
+        onAnalysisPending: () => setAnalysisPending(true),
+      });
       navigate(`/session/${created.sessionId}`, {
         state: { draft: nextDraft },
       });
@@ -110,6 +114,7 @@ export function StartupLoadingPage() {
         message: "创建练习会话失败，请稍后重试。",
       };
       setSessionError(error);
+      setAnalysisPending(false);
     } finally {
       setStartingSession(false);
     }
@@ -149,6 +154,9 @@ export function StartupLoadingPage() {
               </p>
             ) : null}
             {sessionError ? <p className="muted-text loading-copy">{sessionError.message}</p> : null}
+            {analysisPending && !sessionError ? (
+              <p className="muted-text loading-copy">场景分析排队中，完成后会自动进入练习…</p>
+            ) : null}
 
             <div className="loading-progress" aria-label="分析进度">
               {ANALYSIS_STAGES.map((item, index) => {
@@ -184,6 +192,15 @@ export function StartupLoadingPage() {
                   返回首页重新选择
                 </button>
               </div>
+            ) : sessionError?.code === "SCENE_ANALYSIS_FAILED" || sessionError?.code === "SCENE_ANALYSIS_TIMEOUT" ? (
+              <div className="action-row">
+                <button className="primary-button loading-cta" type="button" onClick={enterPractice}>
+                  重试创建练习
+                </button>
+                <button className="ghost-button loading-cta" type="button" onClick={returnHome}>
+                  换一张图片
+                </button>
+              </div>
             ) : sessionError ? (
               <div className="action-row">
                 <button className="primary-button loading-cta" type="button" onClick={enterPractice}>
@@ -197,7 +214,11 @@ export function StartupLoadingPage() {
                 onClick={enterPractice}
                 disabled={!readyToEnter}
               >
-                {startingSession ? "正在创建练习…" : "进入练习"}
+                {startingSession
+                  ? analysisPending
+                    ? "正在分析场景…"
+                    : "正在创建练习…"
+                  : "进入练习"}
               </button>
             )}
           </section>

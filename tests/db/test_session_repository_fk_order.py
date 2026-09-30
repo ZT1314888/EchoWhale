@@ -1,24 +1,31 @@
 from __future__ import annotations
 
+import pytest
 from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from api.db.database import create_all_tables, create_database_engine, create_session_factory
+from api.db.database import (
+    create_all_tables_async,
+    create_async_database_engine,
+    create_async_session_factory,
+)
 from api.db.session_db import SqlAlchemySessionRepository
 from api.models.message_model import Message
 from api.models.session_model import Session
 
 
-def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced() -> None:
-    engine = create_database_engine("sqlite:///:memory:")
+@pytest.mark.anyio
+async def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced() -> None:
+    engine: AsyncEngine = create_async_database_engine("sqlite+aiosqlite:///:memory:")
 
-    @event.listens_for(engine, "connect")
+    @event.listens_for(engine.sync_engine, "connect")
     def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-    create_all_tables(engine)
-    repository = SqlAlchemySessionRepository(create_session_factory(engine))
+    await create_all_tables_async(engine)
+    repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
     session = Session(
         id="sess_fk_order",
@@ -38,7 +45,7 @@ def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enfo
         ],
     )
 
-    saved = repository.save_session(session)
+    saved = await repository.save_session(session)
 
     assert saved.id == "sess_fk_order"
     assert [message.id for message in saved.messages] == ["msg_fk_order_1"]

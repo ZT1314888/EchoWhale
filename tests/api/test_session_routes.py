@@ -24,6 +24,8 @@ except ImportError:  # pragma: no cover - expected during red phase
     get_auth_service = None
     get_session_service = None
 
+from api.services.llm_rate_limit import InMemoryLLMRateLimiter, LLMRateLimitRule, get_llm_rate_limiter
+
 
 class FakeSessionService:
     def __init__(self) -> None:
@@ -145,7 +147,7 @@ class FakeSessionService:
             ),
         }
 
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -193,21 +195,21 @@ class FakeSessionService:
         self.sessions[session.id] = session
         return session
 
-    def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+    async def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
         assert owner_id in (None, "user:user_123")
         session = self.sessions.get(session_id)
         if session is None:
             raise NotFoundError(f"Session {session_id} not found")
         return session
 
-    def reply_to_session(
+    async def reply_to_session(
         self,
         session_id: str,
         learner_message: str,
         owner_id: str | None = None,
     ) -> Session:
         assert owner_id in (None, "user:user_123")
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         session.messages.append(
             Message(
                 id="msg_2",
@@ -229,18 +231,18 @@ class FakeSessionService:
         )
         return session
 
-    def get_session_review(self, session_id: str, owner_id: str | None = None):
+    async def get_session_review(self, session_id: str, owner_id: str | None = None):
         assert owner_id in (None, "user:user_123")
         review = self.reviews.get(session_id)
         if review is None:
             raise NotFoundError(f"Session review {session_id} not found")
         return review
 
-    def list_history_sessions(self, user_id: str) -> list[Session]:
+    async def list_history_sessions(self, user_id: str) -> list[Session]:
         assert user_id == "user:user_123"
         return list(self.sessions.values())
 
-    def list_history_sessions_page(
+    async def list_history_sessions_page(
         self,
         user_id: str,
         *,
@@ -261,20 +263,20 @@ class FakeSessionService:
         next_cursor = page[-1].id if has_more and page else None
         return (page, has_more, next_cursor)
 
-    def list_history_reviews(self, session_ids: list[str]):
+    async def list_history_reviews(self, session_ids: list[str]):
         return {
             session_id: review
             for session_id, review in self.reviews.items()
             if session_id in session_ids
         }
 
-    def get_history_session_overview(self, user_id: str, session_id: str):
+    async def get_history_session_overview(self, user_id: str, session_id: str):
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
-        review = self.get_session_review(session_id)
+        session = await self.get_session(session_id)
+        review = await self.get_session_review(session_id)
         return (session, review, len(session.messages))
 
-    def list_history_session_messages(
+    async def list_history_session_messages(
         self,
         user_id: str,
         session_id: str,
@@ -283,7 +285,7 @@ class FakeSessionService:
         cursor: str | None,
     ) -> tuple[list[Message], bool, str | None]:
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         messages = list(session.messages)
         if cursor is not None:
             ids = [message.id for message in messages]
@@ -295,15 +297,15 @@ class FakeSessionService:
         next_before = page[0].id if has_more and page else None
         return (page, has_more, next_before)
 
-    def get_history_session_detail(self, user_id: str, session_id: str):
+    async def get_history_session_detail(self, user_id: str, session_id: str):
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
-        review = self.get_session_review(session_id)
+        session = await self.get_session(session_id)
+        review = await self.get_session_review(session_id)
         return (session, review)
 
-    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
         assert owner_id in (None, "user:user_123")
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         return {
             "session_id": session.id,
             "deepgram_access_token": "dg-token",
@@ -319,7 +321,7 @@ class FakeSessionService:
             "session": session,
         }
 
-    def complete_voice_session(
+    async def complete_voice_session(
         self,
         session_id: str,
         conversation,
@@ -330,14 +332,14 @@ class FakeSessionService:
         assert owner_id in (None, "user:user_123")
         assert termination_reason == "user_ended"
         assert client_diagnostics == {}
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         session.messages = [
             Message(id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"),
             Message(id="msg_2", role="user", text="Could I get an iced latte, please?"),
             Message(id="msg_3", role="assistant", text="Of course. What size would you like?"),
         ]
         self.sessions[session_id] = session
-        review = self.get_session_review("sess_123")
+        review = await self.get_session_review("sess_123")
         self.reviews[session_id] = review
         return {"session": session, "review": review}
 
@@ -350,7 +352,7 @@ class FakeAuthService:
 
 
 class UnsupportedSessionService:
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -363,7 +365,7 @@ class UnsupportedSessionService:
 
 
 class UnavailableSceneSessionService:
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -373,7 +375,7 @@ class UnavailableSceneSessionService:
 
 
 class VoiceBootstrapFailureSessionService(FakeSessionService):
-    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
         raise VoiceTokenError()
 
 
@@ -390,6 +392,7 @@ def client() -> Iterator[TestClient]:
         app.dependency_overrides[get_session_service] = lambda: FakeSessionService()
     if get_auth_service is not None:
         app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: InMemoryLLMRateLimiter()
 
     with TestClient(app) as test_client:
         yield test_client
@@ -712,3 +715,26 @@ def test_get_session_returns_not_found_error(client: TestClient) -> None:
         "code": 1004,
         "message": "Session sess_missing not found",
     }
+
+
+def test_reply_returns_429_envelope_when_rate_limit_exceeded(client: TestClient) -> None:
+    limiter = InMemoryLLMRateLimiter(
+        rules={"reply": LLMRateLimitRule(limit=1, window_seconds=3600)}
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    first = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "Could I get an iced latte?"},
+        headers=headers,
+    )
+    second = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "And a croissant, please."},
+        headers=headers,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == 1006

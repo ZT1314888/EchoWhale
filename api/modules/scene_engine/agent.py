@@ -1,14 +1,17 @@
 from pydantic import ValidationError
 
-from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import ConfigurationError
+from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import ModelProviderError
 from api.common.exceptions import UnsupportedSceneImageError
 from api.core.config import settings
+from api.integrations.llm.resilience import LLMAttempt
+from api.integrations.llm.resilience import run_llm_with_failover
+from api.integrations.llm.runtime import provider_slot_from_settings
+from api.integrations.llm.runtime import resolve_engine_providers
+from api.modules.scene_engine.providers.vision_provider import MockVisionProvider
+from api.modules.scene_engine.providers.vision_provider import OpenAICompatibleVisionProvider
 from api.modules.scene_engine.providers.vision_provider import VisionProvider
-from api.modules.scene_engine.providers.vision_provider import build_fallback_vision_provider
-from api.modules.scene_engine.providers.vision_provider import build_primary_vision_provider
-from api.modules.scene_engine.providers.vision_provider import has_real_vision_provider
 from api.modules.scene_engine.schema import SceneAnalysisInput, SceneAnalysisResult
 
 
@@ -21,57 +24,55 @@ class SceneEngineAgent:
         primary_provider: VisionProvider | None = None,
         fallback_provider: VisionProvider | None = None,
     ) -> None:
-        """初始化主备视觉 provider，并处理 live/mock 模式分流。"""
+        """初始化主备视觉 provider；显式注入优先于配置解析。"""
         if primary_provider is not None:
             self.primary_provider = primary_provider
             self.fallback_provider = fallback_provider or primary_provider
             return
 
-        if settings.model_runtime_mode.lower() == "live":
-            has_primary = has_real_vision_provider(settings.vision_primary_provider)
-            has_fallback = has_real_vision_provider(settings.vision_fallback_provider)
-            if not has_primary and not has_fallback:
-                raise ConfigurationError("Live runtime requires at least one real vision provider")
-            if has_primary:
-                self.primary_provider = build_primary_vision_provider()
-                self.fallback_provider = (
-                    fallback_provider
-                    or build_fallback_vision_provider()
-                    if has_fallback
-                    else self.primary_provider
-                )
-                return
-            resolved_fallback = fallback_provider or build_fallback_vision_provider()
-            self.primary_provider = resolved_fallback
-            self.fallback_provider = resolved_fallback
-            return
-
-        self.primary_provider = build_primary_vision_provider()
-        self.fallback_provider = fallback_provider or build_fallback_vision_provider()
+        self.primary_provider, self.fallback_provider = resolve_engine_providers(
+            kind="vision",
+            primary_slot=provider_slot_from_settings("vision", "primary"),
+            fallback_slot=provider_slot_from_settings("vision", "fallback"),
+            build_mock=lambda: MockVisionProvider(),
+            build_real=lambda slot: OpenAICompatibleVisionProvider(
+                base_url=slot.base_url,
+                api_key=slot.api_key,
+                model=slot.model,
+                timeout_seconds=slot.timeout_seconds,
+            ),
+        )
 
     async def run(self, payload: SceneAnalysisInput) -> SceneAnalysisResult:
-        """优先走主 provider，失败后在可行时自动切到回退 provider。"""
-        primary_error: Exception | None = None
-        try:
-            return await self._analyze_with_provider(
-                provider=self.primary_provider,
-                payload=payload,
-                provider_name="primary",
+        """优先走主 provider：瞬时错误带退避重试，仍失败则切到回退 provider。"""
+        attempts = [
+            LLMAttempt(
+                name="vision_primary",
+                call=lambda: self._analyze_with_provider(
+                    provider=self.primary_provider,
+                    payload=payload,
+                    provider_name="primary",
+                ),
             )
-        except Exception as exc:
-            primary_error = exc
-
-        if self.fallback_provider is self.primary_provider:
-            raise self._compose_failure(primary_error, None)
-
-        try:
-            return await self._analyze_with_provider(
-                provider=self.fallback_provider,
-                payload=payload,
-                provider_name="fallback",
+        ]
+        if self.fallback_provider is not self.primary_provider:
+            attempts.append(
+                LLMAttempt(
+                    name="vision_fallback",
+                    call=lambda: self._analyze_with_provider(
+                        provider=self.fallback_provider,
+                        payload=payload,
+                        provider_name="fallback",
+                    ),
+                )
             )
-        except Exception as fallback_error:
-            raise self._compose_failure(primary_error, fallback_error) from fallback_error
+        return await run_llm_with_failover(
+            attempts,
+            retries_per_provider=settings.llm_max_retries_per_provider,
+            retry_backoff_seconds=settings.llm_retry_backoff_seconds,
+            deadline_seconds=settings.llm_request_deadline_seconds,
+            compose_failure=_compose_scene_failures,
+        )
 
     async def _analyze_with_provider(
         self,
@@ -108,33 +109,15 @@ class SceneEngineAgent:
             )
         return result
 
-    def _compose_failure(
-        self,
-        primary_error: Exception | None,
-        fallback_error: Exception | None,
-    ) -> EchoWhaleError:
-        """把主备 provider 的失败原因归并成可对外暴露的统一错误。"""
-        if fallback_error is None and isinstance(primary_error, EchoWhaleError):
-            return primary_error
+def _compose_scene_failures(failures: list[tuple[str, Exception]]) -> EchoWhaleError:
+    """把主备 provider 的失败原因归并成可对外暴露的统一错误。"""
+    errors = [error for _, error in failures]
+    if errors and all(isinstance(error, UnsupportedSceneImageError) for error in errors):
+        # 仅当所有 provider 都认定图片不适合练习时，才按业务门禁错误返回。
+        return UnsupportedSceneImageError(
+            "Unsupported scene image",
+            data={"reason": "scene_not_practice_ready", "retryable": False},
+        )
 
-        if _all_unsupported_scene_errors(primary_error, fallback_error):
-            return UnsupportedSceneImageError(
-                "Unsupported scene image",
-                data={"reason": "scene_not_practice_ready", "retryable": False},
-            )
-
-        reasons = []
-        if primary_error is not None:
-            reasons.append(f"primary={primary_error}")
-        if fallback_error is not None:
-            reasons.append(f"fallback={fallback_error}")
-        summary = "; ".join(reasons) or "unknown provider failure"
-        return ModelProviderError(f"Scene engine failed after fallback: {summary}")
-
-
-def _all_unsupported_scene_errors(*errors: Exception | None) -> bool:
-    """仅当所有真实错误都表明图片不适合练习时才返回真。"""
-    present_errors = [error for error in errors if error is not None]
-    return bool(present_errors) and all(
-        isinstance(error, UnsupportedSceneImageError) for error in present_errors
-    )
+    summary = "; ".join(f"{name}={error}" for name, error in failures) or "unknown provider failure"
+    return ModelProviderError(f"Scene engine failed after fallback: {summary}")

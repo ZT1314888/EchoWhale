@@ -51,7 +51,7 @@ class SqlAlchemyMediaRepository:
                 created_at=media.created_at,
                 tags=list(media.tags),
             )
-            session.add(record)
+            # merge 按主键 upsert，重复保存同一 media 时幂等。
             await session.merge(record)
             await session.commit()
         return media

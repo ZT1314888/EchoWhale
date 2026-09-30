@@ -176,6 +176,7 @@ describe("App", () => {
     vi.useFakeTimers();
     installSpeechRecognitionMock();
     vi.spyOn(sessionApi, "createSamplePracticeSession").mockResolvedValue({
+      kind: "created",
       sessionId: "sess_real",
     });
     vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
@@ -199,8 +200,8 @@ describe("App", () => {
     expect(sessionApi.createSamplePracticeSession).toHaveBeenCalledWith("coffee");
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
     expect(screen.getByText(/咖啡店柜台点单/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /发送回答/i })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/文本补充/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /发送/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/用文字继续练习/i)).toBeInTheDocument();
   });
 
   it("uploads a real file, creates a real session, and enters the session route", async () => {
@@ -215,7 +216,7 @@ describe("App", () => {
       previewUrlExpiresAt: "2026-04-02T12:00:00Z",
       uploadStatus: "uploaded",
     });
-    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({ sessionId: "sess_real" });
+    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({ kind: "created", sessionId: "sess_real" });
     vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
 
     await renderApp();
@@ -928,6 +929,98 @@ describe("App", () => {
     });
     vi.useRealTimers();
     expect(screen.getByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+  });
+
+  it("waits out async scene analysis and enters the session when the retry succeeds", async () => {
+    installSpeechRecognitionMock();
+    vi.spyOn(mediaApi, "uploadMedia").mockResolvedValue({
+      mediaId: "med_async",
+      filename: "counter.png",
+      contentType: "image/png",
+      fileSize: 5,
+      storageKey: "media/demo-user/med_async-counter.png",
+      previewUrl: "https://signed.test/med_async",
+      previewUrlExpiresAt: "2026-04-02T12:00:00Z",
+      uploadStatus: "uploaded",
+    });
+    let releaseSession!: (value: { kind: "created"; sessionId: string }) => void;
+    const pendingSession = new Promise<{ kind: "created"; sessionId: string }>((resolve) => {
+      releaseSession = resolve;
+    });
+    const createSpy = vi
+      .spyOn(sessionApi, "createPracticeSession")
+      .mockResolvedValueOnce({ kind: "analyzing", mediaId: "med_async" })
+      .mockReturnValueOnce(pendingSession);
+    vi.spyOn(mediaApi, "waitForSceneAnalysis").mockResolvedValue(undefined);
+    vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
+
+    await renderApp();
+
+    const input = screen.getByLabelText(/点击上传，或把图片拖到这里/i, {
+      selector: "input",
+    });
+    const file = new File(["hello"], "counter.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByRole("heading", { name: /正在分析你的上传内容/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /进入练习/i })).toBeEnabled();
+    }, { timeout: 4000 });
+
+    fireEvent.click(screen.getByRole("button", { name: /进入练习/i }));
+
+    expect(await screen.findByText(/场景分析排队中/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /正在分析场景/i })).toBeInTheDocument();
+
+    act(() => {
+      releaseSession({ kind: "created", sessionId: "sess_async" });
+    });
+    expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    expect(mediaApi.waitForSceneAnalysis).toHaveBeenCalledWith("med_async");
+    expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_async");
+  });
+
+  it("offers retry and change-image actions when async scene analysis fails", async () => {
+    installSpeechRecognitionMock();
+    vi.spyOn(mediaApi, "uploadMedia").mockResolvedValue({
+      mediaId: "med_fail",
+      filename: "counter.png",
+      contentType: "image/png",
+      fileSize: 5,
+      storageKey: "media/demo-user/med_fail-counter.png",
+      previewUrl: "https://signed.test/med_fail",
+      previewUrlExpiresAt: "2026-04-02T12:00:00Z",
+      uploadStatus: "uploaded",
+    });
+    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({
+      kind: "analyzing",
+      mediaId: "med_fail",
+    });
+    vi.spyOn(mediaApi, "waitForSceneAnalysis").mockRejectedValue({
+      code: "SCENE_ANALYSIS_FAILED",
+      message: "图片场景分析失败，请重试或换一张图片。",
+    });
+
+    await renderApp();
+
+    const input = screen.getByLabelText(/点击上传，或把图片拖到这里/i, {
+      selector: "input",
+    });
+    const file = new File(["hello"], "counter.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(await screen.findByRole("heading", { name: /正在分析你的上传内容/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /进入练习/i })).toBeEnabled();
+    }, { timeout: 4000 });
+
+    fireEvent.click(screen.getByRole("button", { name: /进入练习/i }));
+
+    expect(await screen.findByText("图片场景分析失败，请重试或换一张图片。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /重试创建练习/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /换一张图片/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: /练习暂时不可用/i })).not.toBeInTheDocument();
   });
 });
 

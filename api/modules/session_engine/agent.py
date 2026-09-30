@@ -1,16 +1,26 @@
 import asyncio
-import inspect
+import contextlib
+import hashlib
+import hmac
+import logging
+from collections.abc import AsyncIterator, Callable
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from api.common.enums import MediaUploadStatus
 from api.common.exceptions import EchoWhaleError
 from api.common.exceptions import InvalidStateError
+from api.common.exceptions import ModelProviderError
 from api.common.exceptions import SceneAnalysisUnavailableError
 from api.common.exceptions import UnsupportedSceneImageError
 from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
 from api.db.media_db import MediaLookup, build_media_repository
+from api.db.scene_analysis_db import (
+    SCENE_ANALYSIS_STATUS_READY,
+    SceneAnalysisStore,
+    build_scene_analysis_store,
+)
 from api.db.session_db import SessionRepository, build_session_repository
 from api.integrations.deepgram import DeepgramSettingsBuilder
 from api.integrations.deepgram import DeepgramTokenIssuer
@@ -22,16 +32,23 @@ from api.models.runtime_model import VoiceSessionFact
 from api.models.session_model import Session
 from api.modules.coach_engine.service import CoachEngineService
 from api.modules.feedback_engine.service import FeedbackEngineService
+from api.modules.scene_engine.schema import SceneAnalysisResult, scene_result_from_snapshot
 from api.modules.scene_engine.service import SceneEngineService
 from api.modules.session_engine.review_builder import build_session_review
 from api.modules.session_engine.sample_presets import get_sample_session_preset
 from api.modules.session_engine.schema import (
     ReplyInput,
+    SceneAnalysisPending,
     StartSessionInput,
     VoiceBootstrapResult,
     VoiceCompleteInput,
     VoiceCompleteResult,
 )
+
+from api.tasks.image_analysis import enqueue_scene_analysis
+
+
+logger = logging.getLogger(__name__)
 
 
 class SessionEngineAgent:
@@ -40,19 +57,23 @@ class SessionEngineAgent:
         media_lookup: MediaLookup | None = None,
         session_repository: SessionRepository | None = None,
         read_url_signer: R2StorageService | None = None,
+        scene_analysis_store: SceneAnalysisStore | None = None,
+        scene_dispatcher: Callable[[str], bool] | None = None,
     ) -> None:
         """装配会话编排依赖，包括媒体、存储、三段 agent 和语音组件。"""
         self.media_lookup = media_lookup or build_media_repository()
         self.session_repository = session_repository or build_session_repository()
         self.read_url_signer = read_url_signer or R2StorageService()
+        self.scene_analysis_store = scene_analysis_store or build_scene_analysis_store()
+        self.scene_dispatcher = scene_dispatcher or enqueue_scene_analysis
         self.scene_engine = SceneEngineService()
         self.coach_engine = CoachEngineService()
         self.feedback_engine = FeedbackEngineService()
         self.voice_token_issuer = DeepgramTokenIssuer()
         self.voice_settings_builder = DeepgramSettingsBuilder()
 
-    async def start(self, payload: StartSessionInput) -> Session:
-        """从样例场景或图片分析结果创建一条新会话。"""
+    async def start(self, payload: StartSessionInput) -> Session | SceneAnalysisPending:
+        """从样例场景或图片分析结果创建一条新会话；缓存未命中且已入队时返回挂起结果。"""
         if payload.sample_scene_id is not None:
             preset = get_sample_session_preset(payload.sample_scene_id)
             session = Session(
@@ -68,21 +89,20 @@ class SessionEngineAgent:
             )
             return await self.session_repository.save_session(session)
 
-        assert payload.media_id is not None
+        if payload.media_id is None:
+            raise AppValidationError("media_id is required to start an image session")
         media = await self.media_lookup.get_media(payload.media_id)
         if media.upload_status != MediaUploadStatus.uploaded:
             raise InvalidStateError(f"Media {media.id} is not uploaded")
 
-        signed_read_url, _ = await self.read_url_signer.async_create_signed_read_url(
-            media.storage_key,
-            expires_in=settings.r2_signed_url_ttl_seconds,
-        )
-        try:
-            analysis = await self.scene_engine.analyze(media.filename, signed_read_url)
-        except UnsupportedSceneImageError:
-            raise
-        except EchoWhaleError as exc:
-            raise SceneAnalysisUnavailableError() from exc
+        cached_analysis = await self._load_cached_scene_analysis(media.id)
+        if cached_analysis is not None:
+            analysis = cached_analysis
+        elif await self._dispatch_scene_analysis(media.id):
+            return SceneAnalysisPending(media_id=media.id)
+        else:
+            analysis = await self._analyze_scene_media(media)
+            await self._store_scene_analysis(media.id, analysis)
         session = Session(
             id=f"sess_{uuid4().hex[:12]}",
             user_id=payload.user_id,
@@ -96,6 +116,72 @@ class SessionEngineAgent:
         )
         return await self.session_repository.save_session(session)
 
+    async def _load_cached_scene_analysis(self, media_id: str) -> SceneAnalysisResult | None:
+        """命中且版本一致的缓存直接复用，省掉重复的下载、质检与视觉调用。"""
+        if not settings.scene_analysis_cache_enabled:
+            return None
+        snapshot = await self.scene_analysis_store.get(media_id)
+        if snapshot is None or snapshot.status != SCENE_ANALYSIS_STATUS_READY:
+            return None
+        if snapshot.prompt_version != settings.scene_analysis_prompt_version:
+            return None
+        try:
+            return scene_result_from_snapshot(snapshot)
+        except (TypeError, ValueError) as exc:
+            # 缓存行损坏时自愈：放弃命中，走重分析并覆写缓存。
+            logger.warning("scene_analysis_cache_snapshot_invalid media_id=%s error=%s", media_id, exc)
+            return None
+
+    async def _dispatch_scene_analysis(self, media_id: str) -> bool:
+        """mock 模式与显式关闭异步时直接内联；入队成功返回 True。
+
+        Redis/RQ 缺席由 dispatcher 吞掉并返回 False（内部已记 warning），
+        调用方降级为内联分析，请求不失败。
+        """
+        if settings.model_runtime_mode.lower() != "live":
+            return False
+        if not settings.scene_analysis_async_enabled:
+            return False
+        await self.scene_analysis_store.save_pending(
+            media_id, settings.scene_analysis_prompt_version
+        )
+        queued = await asyncio.to_thread(self.scene_dispatcher, media_id)
+        if not queued:
+            # 入队失败：留下失败痕迹供状态端点追溯，调用方随即内联重试。
+            await self.scene_analysis_store.save_failure(
+                media_id,
+                settings.scene_analysis_prompt_version,
+                error_code=1005,
+            )
+        return queued
+
+    async def _analyze_scene_media(self, media) -> SceneAnalysisResult:
+        signed_read_url, _ = await self.read_url_signer.async_create_signed_read_url(
+            media.storage_key,
+            expires_in=settings.r2_signed_url_ttl_seconds,
+        )
+        try:
+            return await self.scene_engine.analyze(media.filename, signed_read_url)
+        except UnsupportedSceneImageError:
+            raise
+        except EchoWhaleError as exc:
+            raise SceneAnalysisUnavailableError() from exc
+
+    async def _store_scene_analysis(self, media_id: str, analysis: SceneAnalysisResult) -> None:
+        """内联路径的分析结果顺手写穿缓存，让下一次 start 直接命中。"""
+        if not settings.scene_analysis_cache_enabled:
+            return
+        await self.scene_analysis_store.save_result(
+            media_id,
+            settings.scene_analysis_prompt_version,
+            scene=analysis.scene,
+            role=analysis.role,
+            opener=analysis.opener,
+            visual_anchors=list(analysis.visual_anchors),
+            vocab_candidates=list(analysis.vocab_candidates),
+            confidence=analysis.confidence,
+        )
+
     async def get(self, session_id: str) -> Session:
         """读取完整会话。"""
         return await self.session_repository.get_session(session_id)
@@ -105,49 +191,116 @@ class SessionEngineAgent:
         return await self.session_repository.get_session_head(session_id)
 
     async def reply(self, payload: ReplyInput) -> Session:
-        """并发生成反馈与教练回复，再把这一轮消息原子化落库。"""
-        session = await self.session_repository.get_session(payload.session_id)
-        feedback, coach_reply = await asyncio.gather(
-            self._review_with_context(
-                learner_message=payload.learner_message,
-                scene=session.scene,
-                vocab_candidates=session.vocab_candidates,
-            ),
-            self._respond_with_context(
-                scene=session.scene,
-                role=session.role,
-                learner_message=payload.learner_message,
-                visual_anchors=session.visual_anchors,
-                vocab_candidates=session.vocab_candidates,
-                recent_messages=list(session.messages),
-            ),
-        )
-        # 反馈和回复互不依赖，并发执行可以显著缩短单轮等待时间。
-        learner_message = Message(role="user", text=payload.learner_message)
+        """并发生成反馈与教练回复，再把这一轮消息原子化落库。
 
-        assistant_message = Message(
-            role="assistant",
-            text=coach_reply.text,
-            feedback=feedback.model_dump(),
+        读路径只取会话头 + 最近窗口消息，避免每轮全量拉取整个消息历史；
+        写后的全量重读保留，作为响应契约的一部分。
+        """
+        session_head = await self.session_repository.get_session_head(payload.session_id)
+        recent_messages = await self.session_repository.list_recent_messages(
+            payload.session_id,
+            limit=settings.llm_coach_window_size,
         )
-        updated_session = session.model_copy(
-            update={"messages": [*session.messages, learner_message, assistant_message]}
+        feedback_result, coach_result = await asyncio.gather(
+            self.feedback_engine.review(
+                payload.learner_message,
+                session_head.scene,
+                session_head.vocab_candidates,
+            ),
+            self.coach_engine.respond(
+                scene=session_head.scene,
+                role=session_head.role,
+                learner_message=payload.learner_message,
+                visual_anchors=session_head.visual_anchors,
+                vocab_candidates=session_head.vocab_candidates,
+                recent_messages=recent_messages,
+            ),
+            return_exceptions=True,
         )
-        review = build_session_review(updated_session, feedback)
+        # 反馈和回复互不依赖，并发执行可以显著缩短单轮等待时间；
+        # return_exceptions 确保一侧失败时不再取消另一侧已在计费的调用。
+        _log_failed_branch("feedback", feedback_result)
+        _log_failed_branch("coach", coach_result)
+        feedback, coach_reply = _unwrap_gather_results(feedback_result, coach_result)
+
+        learner_message, assistant_message, review = _build_reply_turn(
+            session_head,
+            recent_messages,
+            learner_text=payload.learner_message,
+            coach_text=coach_reply.text,
+            feedback=feedback,
+        )
         return await self.session_repository.save_reply_turn(
-            session.id,
+            session_head.id,
             learner_message,
             assistant_message,
             review,
         )
 
+    async def stream_reply(self, payload: ReplyInput) -> AsyncIterator[tuple[str, object]]:
+        """流式 reply：先回执 feedback，再逐 token 下发教练回复，全部成功后原子落库。
+
+        语义与 reply() 一致：feedback 与 coach 并发启动，任一分支失败则整轮失败、
+        不落任何消息；区别只在 coach 分支从整段调用换成"打开流 + 增量消费"。
+        """
+        session_head = await self.session_repository.get_session_head(payload.session_id)
+        recent_messages = await self.session_repository.list_recent_messages(
+            payload.session_id,
+            limit=settings.llm_coach_window_size,
+        )
+        feedback_task = asyncio.create_task(
+            self.feedback_engine.review(
+                payload.learner_message,
+                session_head.scene,
+                session_head.vocab_candidates,
+            )
+        )
+        try:
+            coach_stream = await self.coach_engine.stream_respond(
+                scene=session_head.scene,
+                role=session_head.role,
+                learner_message=payload.learner_message,
+                visual_anchors=session_head.visual_anchors,
+                vocab_candidates=session_head.vocab_candidates,
+                recent_messages=recent_messages,
+            )
+        except BaseException:
+            # 回复流打不开，这一轮已注定失败；不再等待另一侧已计费的反馈调用。
+            feedback_task.cancel()
+            with contextlib.suppress(BaseException):
+                await feedback_task
+            raise
+
+        try:
+            feedback = await feedback_task
+            yield ("feedback", feedback)
+
+            coach_chunks: list[str] = []
+            async for delta in coach_stream.aiter_deltas():
+                coach_chunks.append(delta)
+                yield ("delta", delta)
+
+            learner_message, assistant_message, review = _build_reply_turn(
+                session_head,
+                recent_messages,
+                learner_text=payload.learner_message,
+                coach_text="".join(coach_chunks),
+                feedback=feedback,
+            )
+            session = await self.session_repository.save_reply_turn(
+                session_head.id,
+                learner_message,
+                assistant_message,
+                review,
+            )
+            yield ("session", session)
+        finally:
+            with contextlib.suppress(Exception):
+                await coach_stream.aclose()
+
     async def get_review(self, session_id: str):
         """读取会话对应的复盘结果。"""
         return await self.session_repository.get_session_review(session_id)
-
-    async def list_history_sessions(self, user_id: str) -> list[Session]:
-        """列出用户全部历史会话。"""
-        return await self.session_repository.list_user_sessions(user_id)
 
     async def list_history_sessions_page(
         self,
@@ -198,8 +351,9 @@ class SessionEngineAgent:
     async def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
         """签发语音会话令牌，并记录语音链路已启动。"""
         session = await self.session_repository.get_session(session_id)
-        token, expires_in = self.voice_token_issuer.issue_token(
-            settings.deepgram_agent_token_ttl_seconds
+        token, expires_in = await asyncio.to_thread(
+            self.voice_token_issuer.issue_token,
+            settings.deepgram_agent_token_ttl_seconds,
         )
         bootstrap = VoiceBootstrapResult(
             session_id=session.id,
@@ -241,10 +395,10 @@ class SessionEngineAgent:
         last_learner_message = _find_latest_user_content(payload)
         if last_learner_message is None:
             raise AppValidationError("Validation error")
-        feedback = await self._review_with_context(
-            learner_message=last_learner_message,
-            scene=updated_session.scene,
-            vocab_candidates=updated_session.vocab_candidates,
+        feedback = await self.feedback_engine.review(
+            last_learner_message,
+            updated_session.scene,
+            updated_session.vocab_candidates,
         )
         review = build_session_review(updated_session, feedback)
         existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(payload.session_id)
@@ -290,59 +444,53 @@ class SessionEngineAgent:
         )
         return VoiceCompleteResult(session=stored_session, review=stored_review)
 
-    async def _review_with_context(
-        self,
-        *,
-        learner_message: str,
-        scene: str,
-        vocab_candidates: list[str],
-    ):
-        """兼容不同版本的反馈 service 签名，稳定透传上下文。"""
-        parameters = inspect.signature(self.feedback_engine.review).parameters
-        if "vocab_candidates" in parameters:
-            return await self.feedback_engine.review(learner_message, scene, vocab_candidates)
-        if "labels" in parameters:
-            return await self.feedback_engine.review(learner_message, scene, vocab_candidates)
-        return await self.feedback_engine.review(learner_message, scene)
+def _build_reply_turn(
+    session_head: Session,
+    recent_messages: list[Message],
+    *,
+    learner_text: str,
+    coach_text: str,
+    feedback: object,
+) -> tuple[Message, Message, SessionReview]:
+    """组装一轮对话的两条消息与复盘；coach 文本为空按模型失败处理。"""
+    coach_text = coach_text.strip()
+    if not coach_text:
+        raise ModelProviderError("Coach reply was empty")
 
-    async def _respond_with_context(
-        self,
-        *,
-        scene: str,
-        role: str,
-        learner_message: str,
-        visual_anchors: list[str],
-        vocab_candidates: list[str],
-        recent_messages: list[Message],
-    ):
-        """兼容不同版本的教练 service 签名，优先传递更多上下文。"""
-        parameters = inspect.signature(self.coach_engine.respond).parameters
-        if "visual_anchors" in parameters and "vocab_candidates" in parameters:
-            return await self.coach_engine.respond(
-                scene=scene,
-                role=role,
-                learner_message=learner_message,
-                visual_anchors=visual_anchors,
-                vocab_candidates=vocab_candidates,
-                recent_messages=recent_messages,
-            )
-        if "visual_anchors" in parameters:
-            return await self.coach_engine.respond(
-                scene=scene,
-                role=role,
-                learner_message=learner_message,
-                visual_anchors=visual_anchors,
-                recent_messages=recent_messages,
-            )
-        if "labels" in parameters or "recent_messages" in parameters:
-            return await self.coach_engine.respond(
-                scene=scene,
-                role=role,
-                learner_message=learner_message,
-                labels=visual_anchors,
-                recent_messages=recent_messages,
-            )
-        return await self.coach_engine.respond(scene, role, learner_message)
+    learner_message = Message(role="user", text=learner_text)
+    assistant_message = Message(
+        role="assistant",
+        text=coach_text,
+        feedback=feedback.model_dump(),
+    )
+    reviewed_session = session_head.model_copy(
+        update={"messages": [*recent_messages, learner_message, assistant_message]}
+    )
+    review = build_session_review(reviewed_session, feedback)
+    return (learner_message, assistant_message, review)
+
+
+def _log_failed_branch(branch: str, result: object) -> None:
+    """记录 gather 中失败分支的异常，避免静默吞掉可观测信息。"""
+    if isinstance(result, BaseException):
+        logger.warning(
+            "session_reply_branch_failed branch=%s error=%s: %s",
+            branch,
+            type(result).__name__,
+            result,
+        )
+
+
+def _unwrap_gather_results(*results: object) -> tuple:
+    """从 return_exceptions 的 gather 结果中提取首个异常并统一上抛。"""
+    errors = [result for result in results if isinstance(result, BaseException)]
+    if not errors:
+        return tuple(results)
+    # 优先上抛业务异常，保持与全局异常处理器的既有契约一致。
+    for error in errors:
+        if isinstance(error, EchoWhaleError):
+            raise error
+    raise errors[0]
 
 
 def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list[Message]:
@@ -405,17 +553,24 @@ def _message_signature(message: Message) -> tuple[str, str]:
 
 
 def _encode_history_cursor(value: tuple[datetime, str]) -> str:
-    """把分页游标编码成带 UTC 时间戳的字符串。"""
+    """把分页游标编码成带签名防篡改的字符串。"""
     updated_at, session_id = value
     normalized = updated_at.astimezone(timezone.utc)
-    return f"{normalized.isoformat()}|{session_id}"
+    payload = f"{normalized.isoformat()}|{session_id}"
+    return f"{payload}|{_sign_cursor_payload(payload)}"
 
 
 def _decode_history_cursor(cursor: str | None) -> tuple[datetime, str] | None:
-    """把 API 透传游标解回仓储层需要的时间戳和会话 ID。"""
+    """验签并解回仓储层需要的时间戳和会话 ID，防止客户端伪造游标。"""
     if cursor is None:
         return None
-    timestamp, _, session_id = cursor.partition("|")
+    payload, _, signature = cursor.rpartition("|")
+    if not payload or not signature:
+        raise AppValidationError("Validation error")
+    expected_signature = _sign_cursor_payload(payload)
+    if not hmac.compare_digest(signature, expected_signature):
+        raise AppValidationError("Validation error")
+    timestamp, _, session_id = payload.partition("|")
     if not timestamp or not session_id:
         raise AppValidationError("Validation error")
     try:
@@ -425,3 +580,12 @@ def _decode_history_cursor(cursor: str | None) -> tuple[datetime, str] | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return (parsed, session_id)
+
+
+def _sign_cursor_payload(payload: str) -> str:
+    """用应用密钥给游标内容生成十六进制 HMAC 签名。"""
+    return hmac.new(
+        settings.auth_jwt_secret.encode("utf-8"),
+        payload.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()

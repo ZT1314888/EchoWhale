@@ -41,6 +41,13 @@ class ReplyInput(LearnerMessagePayload):
     session_id: str
 
 
+class SceneAnalysisPending(BaseModel):
+    """media 路径未命中缓存且已入队异步分析时的挂起结果，客户端凭 media_id 轮询状态端点。"""
+
+    media_id: str
+    status: Literal["analyzing"] = "analyzing"
+
+
 class VoiceConversationTurn(BaseModel):
     role: Literal["assistant", "user"]
     content: str

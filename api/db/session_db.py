@@ -30,6 +30,13 @@ from api.models.session_model import Session
 
 
 class SessionRepository(Protocol):
+    async def list_recent_messages(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> list[Message]: ...
+
     async def save_session(self, session: Session) -> Session: ...
 
     async def get_session(self, session_id: str) -> Session: ...
@@ -57,7 +64,6 @@ class SessionRepository(Protocol):
 
     async def get_session_review(self, session_id: str) -> SessionReview: ...
 
-    async def list_user_sessions(self, user_id: str) -> list[Session]: ...
 
     async def list_user_sessions_page(
         self,
@@ -300,18 +306,6 @@ class SqlAlchemySessionRepository:
                 raise NotFoundError(f"Session review {session_id} not found")
             return _to_review(record)
 
-    async def list_user_sessions(self, user_id: str) -> list[Session]:
-        async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionRecord)
-                .where(SessionRecord.user_id == user_id)
-                .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
-            ).all()
-            return [
-                _to_session(record, await self._load_messages(db_session, record.id))
-                for record in records
-            ]
-
     async def list_user_sessions_page(
         self,
         user_id: str,
@@ -339,10 +333,12 @@ class SqlAlchemySessionRepository:
                         ),
                     )
                 )
-            records = await db_session.scalars(
-                statement
-                .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
-                .limit(limit + 1)
+            records = (
+                await db_session.scalars(
+                    statement
+                    .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
+                    .limit(limit + 1)
+                )
             ).all()
             has_more = len(records) > limit
             page_records = records[:limit]
@@ -357,8 +353,10 @@ class SqlAlchemySessionRepository:
         if not session_ids:
             return {}
         async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
+            records = (
+                await db_session.scalars(
+                    select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
+                )
             ).all()
             return {record.session_id: _to_review(record) for record in records}
 
@@ -368,6 +366,25 @@ class SqlAlchemySessionRepository:
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
             return _to_session_head(record)
+
+    async def list_recent_messages(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> list[Message]:
+        """按 position 倒序取最近 N 条消息后回正序，供教练窗口使用。"""
+        async with self._session_factory() as db_session:
+            await self._ensure_session_exists(db_session, session_id)
+            records = (
+                await db_session.scalars(
+                    select(MessageRecord)
+                    .where(MessageRecord.session_id == session_id)
+                    .order_by(MessageRecord.position.desc())
+                    .limit(max(1, limit))
+                )
+            ).all()
+            return [self._to_message(record) for record in reversed(records)]
 
     async def count_session_messages(self, session_id: str) -> int:
         async with self._session_factory() as db_session:
@@ -398,8 +415,10 @@ class SqlAlchemySessionRepository:
                     raise NotFoundError(f"Message {cursor} not found")
                 statement = statement.where(MessageRecord.position < int(cursor_position))
 
-            records_desc = await db_session.scalars(
-                statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
+            records_desc = (
+                await db_session.scalars(
+                    statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
+                )
             ).all()
             has_more = len(records_desc) > limit
             page_desc = records_desc[:limit]
@@ -422,10 +441,12 @@ class SqlAlchemySessionRepository:
 
     async def list_session_events(self, session_id: str) -> list[SessionEvent]:
         async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionEventRecord)
-                .where(SessionEventRecord.session_id == session_id)
-                .order_by(SessionEventRecord.id.asc())
+            records = (
+                await db_session.scalars(
+                    select(SessionEventRecord)
+                    .where(SessionEventRecord.session_id == session_id)
+                    .order_by(SessionEventRecord.id.asc())
+                )
             ).all()
             return [_to_session_event(record) for record in records]
 
@@ -581,10 +602,6 @@ async def get_session(session_id: str) -> Session:
 
 async def add_message(session_id: str, message: Message) -> Session:
     return await SqlAlchemySessionRepository().add_message(session_id, message)
-
-
-async def list_user_sessions(user_id: str) -> list[Session]:
-    return await SqlAlchemySessionRepository().list_user_sessions(user_id)
 
 
 async def reset_session_store() -> None:

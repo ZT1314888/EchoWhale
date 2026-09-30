@@ -1,4 +1,9 @@
-import type { AppError, UploadedMedia } from "../types/app";
+import type {
+  AppError,
+  SceneAnalysisStatus,
+  SceneAnalysisStatusValue,
+  UploadedMedia,
+} from "../types/app";
 import { apiFetch } from "./apiClient";
 
 type ApiResponse<T> = {
@@ -6,6 +11,17 @@ type ApiResponse<T> = {
   message?: string;
   data?: T;
 };
+
+type SceneAnalysisStatusPayload = {
+  media_id: string;
+  status: string;
+  prompt_version?: string | null;
+  scene?: string | null;
+  role?: string | null;
+  confidence?: number | null;
+  error_code?: number | null;
+};
+
 
 type MediaUploadResponse = {
   media_id: string;
@@ -58,4 +74,82 @@ export async function uploadMedia(file: File): Promise<UploadedMedia> {
     previewUrlExpiresAt: media?.preview_url_expires_at ?? "",
     uploadStatus: media?.upload_status ?? "uploaded",
   };
+}
+
+export async function getSceneAnalysisStatus(mediaId: string): Promise<SceneAnalysisStatus> {
+  let response: Response;
+
+  try {
+    response = await apiFetch(`/api/v1/media/${mediaId}/scene-analysis`);
+  } catch {
+    throw toSceneError("查询场景分析状态失败，请稍后重试。");
+  }
+
+  const payload = (await response.json()) as ApiResponse<SceneAnalysisStatusPayload>;
+  const data = payload.data;
+
+  if (!response.ok || !data) {
+    throw toSceneError(payload.message ?? "查询场景分析状态失败，请稍后重试。");
+  }
+
+  return {
+    mediaId: data.media_id,
+    status: data.status as SceneAnalysisStatusValue,
+    promptVersion: data.prompt_version ?? undefined,
+    scene: data.scene ?? undefined,
+    role: data.role ?? undefined,
+    confidence: data.confidence ?? undefined,
+    errorCode: data.error_code ?? undefined,
+  };
+}
+
+export const SCENE_ANALYSIS_POLL_INTERVAL_MS = 2000;
+export const SCENE_ANALYSIS_POLL_TIMEOUT_MS = 60000;
+
+const SCENE_ANALYSIS_UNSUPPORTED_CODE = 1007;
+
+function toSceneError(message: string, code = "SCENE_ANALYSIS_STATUS_FAILED"): AppError {
+  return { code, message };
+}
+
+function waitMilliseconds(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+export async function waitForSceneAnalysis(
+  mediaId: string,
+  options: { intervalMs?: number; timeoutMs?: number } = {},
+): Promise<void> {
+  const intervalMs = options.intervalMs ?? SCENE_ANALYSIS_POLL_INTERVAL_MS;
+  const timeoutMs = options.timeoutMs ?? SCENE_ANALYSIS_POLL_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    await waitMilliseconds(intervalMs);
+
+    let snapshot: SceneAnalysisStatus;
+    try {
+      snapshot = await getSceneAnalysisStatus(mediaId);
+    } catch {
+      // 单次轮询失败（网络抖动等）继续等待，由总超时兑底。
+      continue;
+    }
+
+    if (snapshot.status === "ready") {
+      return;
+    }
+    if (snapshot.status === "failed") {
+      if (Number(snapshot.errorCode) === SCENE_ANALYSIS_UNSUPPORTED_CODE) {
+        throw toSceneError(
+          "图片暂不支持这类内容，请换一张生活场景更清晰的图片。",
+          "UNSUPPORTED_SCENE_IMAGE",
+        );
+      }
+      throw toSceneError("图片场景分析失败，请重试或换一张图片。", "SCENE_ANALYSIS_FAILED");
+    }
+  }
+
+  throw toSceneError("场景分析等待超时，请稍后重试或换一张图片。", "SCENE_ANALYSIS_TIMEOUT");
 }

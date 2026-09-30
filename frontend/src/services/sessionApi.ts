@@ -71,6 +71,11 @@ type BackendReview = {
   };
 };
 
+type BackendSessionStartPending = {
+  status: string;
+  media_id: string;
+};
+
 type BackendVoiceBootstrapResponse = {
   session_id: string;
   deepgram_access_token: string;
@@ -191,19 +196,25 @@ function toReviewSummary(review: BackendReview): ReviewSummary {
   };
 }
 
-export async function createPracticeSession(mediaId: string): Promise<{ sessionId: string }> {
+export type SessionStartOutcome =
+  | { kind: "created"; sessionId: string }
+  | { kind: "analyzing"; mediaId: string };
+
+export async function createPracticeSession(
+  mediaId: string,
+): Promise<SessionStartOutcome> {
   return createSession({ media_id: mediaId });
 }
 
 export async function createSamplePracticeSession(
   sampleSceneId: "coffee" | "office" | "street",
-): Promise<{ sessionId: string }> {
+): Promise<SessionStartOutcome> {
   return createSession({ sample_scene_id: sampleSceneId });
 }
 
 async function createSession(
   payloadBody: { media_id: string } | { sample_scene_id: "coffee" | "office" | "street" },
-): Promise<{ sessionId: string }> {
+): Promise<SessionStartOutcome> {
   let response: Response;
 
   try {
@@ -235,7 +246,15 @@ async function createSession(
     throw toError(payload.message ?? "创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
   }
 
-  return { sessionId: (payload.data as BackendSession).session_id };
+  if (response.status === 202) {
+    const pending = payload.data as BackendSessionStartPending | undefined;
+    if (!pending || !pending.media_id) {
+      throw toError("创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
+    }
+    return { kind: "analyzing", mediaId: pending.media_id };
+  }
+
+  return { kind: "created", sessionId: (payload.data as BackendSession).session_id };
 }
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {
@@ -280,6 +299,132 @@ export async function submitPracticeTurn(
     messages: payload.data.session.messages.map(toPracticeMessage),
     feedback: toPracticeFeedback(payload.data.feedback),
   };
+}
+
+export type PracticeTurnStreamHandlers = {
+  onFeedback?: (feedback: PracticeFeedback) => void;
+  onDelta?: (delta: string) => void;
+};
+
+export async function submitPracticeTurnStream(
+  sessionId: string,
+  input: PracticeTurnInput,
+  handlers: PracticeTurnStreamHandlers = {},
+  signal?: AbortSignal,
+): Promise<SubmitPracticeTurnResult> {
+  let response: Response;
+
+  try {
+    response = await apiFetch(`/api/v1/sessions/${sessionId}/reply/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify({ learner_message: input.content }),
+      signal,
+    });
+  } catch {
+    throw toError("发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  if (!response.ok || !response.body) {
+    const payload = await parseEnvelopeQuietly(response);
+    throw toError(payload.message ?? "发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  const streamState = {
+    finalData: null as BackendReplyResponse | null,
+    streamError: null as { message?: string } | null,
+  };
+
+  await consumeSseResponse(response.body, (eventName, rawData) => {
+    if (eventName === "feedback") {
+      handlers.onFeedback?.(toPracticeFeedback(rawData as BackendReplyFeedback));
+      return;
+    }
+    if (eventName === "delta") {
+      const delta = (rawData as { text?: string }).text ?? "";
+      if (delta) handlers.onDelta?.(delta);
+      return;
+    }
+    if (eventName === "session") {
+      streamState.finalData = rawData as BackendReplyResponse;
+      return;
+    }
+    if (eventName === "error") {
+      streamState.streamError = rawData as { message?: string };
+    }
+  });
+
+  if (streamState.streamError) {
+    throw toError(streamState.streamError.message ?? "发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  const finalData = streamState.finalData;
+  if (finalData === null) {
+    throw toError("回复流提前结束，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  return {
+    messages: finalData.session.messages.map(toPracticeMessage),
+    feedback: toPracticeFeedback(finalData.feedback),
+  };
+}
+
+async function parseEnvelopeQuietly(response: Response): Promise<ApiResponse<unknown>> {
+  try {
+    return (await response.json()) as ApiResponse<unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function consumeSseResponse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (eventName: string, rawData: unknown) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const dispatchFrame = (frame: string) => {
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const rawLine of frame.split("\n")) {
+      const line = rawLine.replace(/\r$/, "");
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trim());
+      }
+    }
+    if (!dataLines.length) return;
+    try {
+      onEvent(eventName, JSON.parse(dataLines.join("\n")) as unknown);
+    } catch {
+      // 与后端解析口径一致：无法解析的帧静默忽略。
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separator = buffer.indexOf("\n\n");
+      while (separator !== -1) {
+        dispatchFrame(buffer.slice(0, separator));
+        buffer = buffer.slice(separator + 2);
+        separator = buffer.indexOf("\n\n");
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) dispatchFrame(buffer.trimEnd());
+  } finally {
+    // 正常结束、中途失败或 AbortSignal 触发都必须收回读取器；
+    // 流已关闭/已出错时 cancel 自身会拒绝，静默处理。
+    await reader.cancel().catch(() => {
+      // no-op
+    });
+  }
 }
 
 export async function bootstrapVoiceSession(sessionId: string): Promise<VoiceBootstrapResult> {

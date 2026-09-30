@@ -2,10 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Logo } from "../components/Logo";
+import { TextComposer } from "../components/TextComposer";
+import { TurnFeedbackCard } from "../components/TurnFeedbackCard";
 import { useDeepgramVoiceAgent } from "../hooks/useDeepgramVoiceAgent";
 import { getPracticeSession } from "../services/practiceApi";
-import { bootstrapVoiceSession, completeVoiceSession } from "../services/sessionApi";
-import type { SessionSummary } from "../types/app";
+import {
+  bootstrapVoiceSession,
+  completeVoiceSession,
+  submitPracticeTurnStream,
+} from "../services/sessionApi";
+import type { PracticeFeedback, SessionSummary } from "../types/app";
 
 type LogoVisualState = "idle" | "activating" | "live" | "ending";
 
@@ -21,6 +27,10 @@ export function PracticeSessionPage() {
   const conversationEndRef = useRef<HTMLDivElement | null>(null);
   const activationTimeoutRef = useRef<number | null>(null);
   const voice = useDeepgramVoiceAgent();
+  const [textSending, setTextSending] = useState(false);
+  const [liveLearnerContent, setLiveLearnerContent] = useState("");
+  const [streamText, setStreamText] = useState("");
+  const [turnFeedback, setTurnFeedback] = useState<PracticeFeedback | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -47,7 +57,7 @@ export function PracticeSessionPage() {
     if (typeof scrollIntoView === "function") {
       scrollIntoView.call(conversationEndRef.current, { block: "end" });
     }
-  }, [session?.messages.length, voice.transcript.length]);
+  }, [session?.messages.length, voice.transcript.length, liveLearnerContent, streamText.length]);
 
   useEffect(() => {
     return () => {
@@ -110,6 +120,40 @@ export function PracticeSessionPage() {
     }
   }
 
+  async function onSendText(content: string, options: { signal: AbortSignal }) {
+    setLiveLearnerContent(content);
+    setStreamText("");
+    setTurnFeedback(null);
+    setError("");
+    setTextSending(true);
+    try {
+      const result = await submitPracticeTurnStream(
+        sessionId,
+        { content },
+        {
+          onFeedback: (feedback) => setTurnFeedback(feedback),
+          onDelta: (delta) => setStreamText((current) => current + delta),
+        },
+        options.signal,
+      );
+      setSession((current) => (current ? { ...current, messages: result.messages } : current));
+      setLiveLearnerContent("");
+      setStreamText("");
+    } catch (reason) {
+      const typed = reason as { name?: string; message?: string };
+      if (typed?.name === "AbortError") {
+        setLiveLearnerContent("");
+        setStreamText("");
+        setTurnFeedback(null);
+      } else {
+        setError(typed?.message ?? "发送失败，请稍后再试。");
+      }
+      throw reason;
+    } finally {
+      setTextSending(false);
+    }
+  }
+
   if (error && !session) {
     return (
       <div className="page-shell page-shell--session-immersive">
@@ -143,16 +187,18 @@ export function PracticeSessionPage() {
   const roleTitle = session.roleLabel.replace(/^角色 · /, "");
   const statusLabel = ending
     ? "Ending"
-    : voice.isSpeaking
-      ? "Speaking"
-      : voice.isThinking
-        ? "Thinking"
-        : isLive
-          ? "Listening"
-          : "Ready";
+    : textSending
+      ? "Thinking"
+      : voice.isSpeaking
+        ? "Speaking"
+        : voice.isThinking
+          ? "Thinking"
+          : isLive
+            ? "Listening"
+            : "Ready";
   const statusToneClass = ending
     ? "session-status-pill--ending"
-    : voice.isSpeaking || voice.isThinking || isLive
+    : textSending || voice.isSpeaking || voice.isThinking || isLive
       ? "session-status-pill--live"
       : "session-status-pill--ready";
   const logoVisualState: LogoVisualState = ending
@@ -179,7 +225,7 @@ export function PracticeSessionPage() {
               className="session-logo-button"
               type="button"
               onClick={isLive ? onEndConversation : onStartConversation}
-              disabled={starting || ending}
+              disabled={starting || ending || textSending}
               aria-label={logoButtonLabel}
               data-state={logoVisualState}
             >
@@ -235,8 +281,29 @@ export function PracticeSessionPage() {
                 <p>{message.content}</p>
               </article>
             ))}
+            {liveLearnerContent ? (
+              <article
+                className="session-bubble session-bubble--learner session-bubble--live"
+                data-testid="learner-live-bubble"
+              >
+                <p className="eyebrow">你 · 本轮回答</p>
+                <p>{liveLearnerContent}</p>
+              </article>
+            ) : null}
+            {turnFeedback ? <TurnFeedbackCard feedback={turnFeedback} /> : null}
+            {streamText ? (
+              <article
+                className="session-bubble session-bubble--coach session-bubble--live"
+                data-testid="coach-stream-bubble"
+              >
+                <p className="eyebrow">教练 · 正在回复</p>
+                <p>{streamText}</p>
+              </article>
+            ) : null}
             <div ref={conversationEndRef} aria-hidden="true" />
           </div>
+
+          <TextComposer disabled={starting || ending} onSend={onSendText} />
         </section>
       </main>
     </div>

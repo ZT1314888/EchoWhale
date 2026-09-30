@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from api.common.exceptions import UnsupportedSceneImageError
 from api.core.config import settings
+from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient
 from api.modules.scene_engine.evaluation_rules import match_expected_keywords
 from api.modules.scene_engine.evaluation_rules import vocab_candidates_are_valuable
@@ -232,7 +233,7 @@ class SceneOutputJudge:
                 ]
             ),
         )
-        return SceneJudgeResult.model_validate(_load_json(raw))
+        return SceneJudgeResult.model_validate(parse_llm_json(raw))
 
 
 async def run_scene_evaluation(
@@ -255,8 +256,7 @@ async def run_scene_evaluation(
         """在并发限流下执行单个样例的分析与裁判流程。"""
         async with semaphore:
             try:
-                # 评测入口目前复用同步封装，因此用 to_thread 避免阻塞事件循环。
-                output = await asyncio.to_thread(service.analyze, case.filename, case.signed_url)
+                output = await service.analyze(case.filename, case.signed_url)
             except UnsupportedSceneImageError as exc:
                 return evaluate_scene_output(
                     case=case,
@@ -325,13 +325,3 @@ def _normalize_judge_result(
     if isinstance(value, SceneJudgeResult):
         return value
     return SceneJudgeResult.model_validate(value)
-
-
-def _load_json(raw: str) -> dict[str, Any]:
-    """兼容 LLM 常见的 fenced JSON 输出格式。"""
-    normalized = raw.strip()
-    if normalized.startswith("```"):
-        normalized = normalized.strip("`")
-        if normalized.lower().startswith("json"):
-            normalized = normalized[4:].strip()
-    return json.loads(normalized)

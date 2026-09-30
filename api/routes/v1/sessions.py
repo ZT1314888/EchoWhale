@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, Depends
+from fastapi import status as fastapi_status
+from fastapi.responses import StreamingResponse
 
 from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
+from api.common.exceptions import EchoWhaleError
 from api.common.responses import ApiResponse
 from api.contracts.sessions import (
     SessionReplyRequest,
     SessionReplyResponse,
     SessionResponse,
     SessionReviewResponse,
+    SessionStartPendingResponse,
     StartSessionRequest,
     VoiceBootstrapResponse,
     VoiceCompleteRequest,
@@ -19,7 +27,12 @@ from api.contracts.sessions import (
 from api.db.media_db import build_media_repository
 from api.db.session_db import build_session_repository
 from api.integrations.storage.r2 import R2StorageService
+from api.modules.session_engine.schema import SceneAnalysisPending
 from api.modules.session_engine.service import SessionEngineService
+from api.services.llm_rate_limit import LLMRateLimiter, get_llm_rate_limiter
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -38,13 +51,22 @@ async def start_session(
     payload: StartSessionRequest,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
-    session = await session_service.start_session(
+    rate_limiter.consume(action="session_start", key=owner.owner_id)
+    result = await session_service.start_session(
         user_id=owner.owner_id,
         media_id=payload.media_id,
         sample_scene_id=payload.sample_scene_id,
     )
-    response = ApiResponse.success(data=SessionResponse.from_session(session))
+    if isinstance(result, SceneAnalysisPending):
+        # 缓存未命中且已转异步分析：202 + 状态挂起载荷，客户端轮询后重试 start。
+        response = ApiResponse.success(
+            data=SessionStartPendingResponse(status=result.status, media_id=result.media_id),
+            http_code=fastapi_status.HTTP_202_ACCEPTED,
+        )
+    else:
+        response = ApiResponse.success(data=SessionResponse.from_session(result))
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
@@ -67,7 +89,9 @@ async def reply_to_session(
     payload: SessionReplyRequest,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
+    rate_limiter.consume(action="reply", key=owner.owner_id)
     session = await session_service.reply_to_session(
         session_id,
         payload.learner_message,
@@ -143,3 +167,66 @@ async def complete_voice_session(
     )
     apply_visitor_cookie(response=response, owner=owner)
     return response
+
+
+@router.post("/{session_id}/reply/stream")
+async def stream_reply_to_session(
+    session_id: str,
+    payload: SessionReplyRequest,
+    session_service: SessionEngineService = Depends(get_session_service),
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
+) -> Any:
+    """SSE 版文字回复：先回执 feedback，再逐 token 下发 coach 回复。
+
+    鉴权/限流/404 等前置校验全部发生在开流之前，错误仍走统一信封；
+    开流后的任何失败以 error 事件下发（信封同构，无 HTTP 状态码可改）。
+    """
+    rate_limiter.consume(action="reply", key=owner.owner_id)
+    event_stream = await session_service.prepare_reply_stream(
+        session_id,
+        payload.learner_message,
+        owner_id=owner.owner_id,
+    )
+    response = StreamingResponse(
+        _reply_sse_events(event_stream),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+    apply_visitor_cookie(response=response, owner=owner)
+    return response
+
+
+async def _reply_sse_events(
+    event_stream: AsyncIterator[tuple[str, object]],
+) -> AsyncIterator[str]:
+    """把 agent 事件流编码成 SSE 帧；异常收敛为 error 事件（失败轮次不落库）。"""
+    try:
+        async for event_name, event_payload in event_stream:
+            if event_name == "delta":
+                data: dict[str, object] = {"text": event_payload}
+            elif event_name == "feedback":
+                data = event_payload.model_dump()
+            elif event_name == "session":
+                data = SessionReplyResponse.from_session(event_payload).model_dump()
+            else:  # pragma: no cover - 防御未知事件类型
+                continue
+            yield _encode_sse_event(event_name, data)
+    except EchoWhaleError as exc:
+        logger.warning("reply_stream_business_error code=%s message=%s", exc.code, exc.message)
+        yield _encode_sse_event(
+            "error",
+            {"code": exc.code, "message": exc.message, "data": exc.data},
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("reply_stream_unexpected_error")
+        yield _encode_sse_event(
+            "error",
+            {"code": 1005, "message": "Internal server error", "data": None},
+        )
+
+
+def _encode_sse_event(event_name: str, data: dict[str, object]) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"

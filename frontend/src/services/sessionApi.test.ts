@@ -7,6 +7,7 @@ import {
   createSamplePracticeSession,
   getPracticeSession,
   submitPracticeTurn,
+  submitPracticeTurnStream,
 } from "./sessionApi";
 
 const originalFetch = globalThis.fetch;
@@ -38,7 +39,7 @@ describe("sessionApi", () => {
 
     const result = await createPracticeSession("med_123");
 
-    expect(result).toEqual({ sessionId: "sess_123" });
+    expect(result).toEqual({ kind: "created", sessionId: "sess_123" });
   });
 
   it("starts a sample practice session from a sample scene id", async () => {
@@ -64,7 +65,7 @@ describe("sessionApi", () => {
 
     const result = await createSamplePracticeSession("coffee");
 
-    expect(result).toEqual({ sessionId: "sess_sample" });
+    expect(result).toEqual({ kind: "created", sessionId: "sess_sample" });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -72,6 +73,23 @@ describe("sessionApi", () => {
         body: JSON.stringify({ sample_scene_id: "coffee" }),
       }),
     );
+  });
+
+  it("surfaces a 202 analyzing outcome with the pending media id", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        code: 202,
+        message: "Scene analysis queued",
+        data: { status: "analyzing", media_id: "med_pending" },
+      }),
+    }) as typeof fetch;
+
+    await expect(createPracticeSession("med_pending")).resolves.toEqual({
+      kind: "analyzing",
+      mediaId: "med_pending",
+    });
   });
 
   it("maps unsupported scene images to a localized frontend error", async () => {
@@ -333,5 +351,122 @@ describe("sessionApi", () => {
         }),
       }),
     );
+  });
+});
+describe("submitPracticeTurnStream", () => {
+  const encoder = new TextEncoder();
+
+  function sseResponse(frames: string[], ok = true, status = 200) {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const frame of frames) controller.enqueue(encoder.encode(frame));
+        controller.close();
+      },
+    });
+    return { ok, status, body: stream, json: async () => ({}) } as unknown as Response;
+  }
+
+  function mockFetch(response: Response) {
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+  }
+
+  const sessionFrame = [
+    "event: session",
+    `data: ${JSON.stringify({
+      session: {
+        session_id: "sess_1",
+        media_id: null,
+        scene: "coffee_shop",
+        role: "barista",
+        opener: "o",
+        status: "active",
+        messages: [
+          { message_id: "m1", role: "user", text: "hi" },
+          { message_id: "m2", role: "assistant", text: "Hello there!" },
+        ],
+      },
+      feedback: { grammar: "a", more_natural: "b", useful_words: ["c"] },
+      })}`,
+    "",
+    "",
+  ].join("\n");
+
+  it("consumes feedback, deltas and the final session event", async () => {
+    mockFetch(sseResponse([
+      'event: feedback\ndata: {"grammar":"a","more_natural":"b","useful_words":["c"]}\n\n',
+      'event: delta\ndata: {"text":"Hello "}\n\n',
+      'event: delta\ndata: {"text":"there!"}\n\n',
+      sessionFrame,
+    ]));
+
+    const deltas: string[] = [];
+    let feedbackBody = "";
+    const result = await submitPracticeTurnStream("sess_1", { content: "hi" }, {
+      onDelta: (delta) => deltas.push(delta),
+      onFeedback: (feedback) => {
+        feedbackBody = feedback.grammar.body;
+      },
+    });
+
+    expect(deltas.join("")).toBe("Hello there!");
+    expect(feedbackBody).toBe("a");
+    expect(result.feedback?.grammar.body).toBe("a");
+    expect(result.messages.map((message) => message.content)).toEqual(["hi", "Hello there!"]);
+  });
+
+  it("throws a structured error when the stream carries an error event", async () => {
+    mockFetch(
+      sseResponse(['event: error\ndata: {"code":1005,"message":"Coach failed"}\n\n']),
+    );
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+      message: "Coach failed",
+    });
+  });
+
+  it("falls back to the envelope error when the endpoint rejects before streaming", async () => {
+    mockFetch({
+      ok: false,
+      status: 429,
+      json: async () => ({ code: 1006, message: "Too many requests" }),
+    } as unknown as Response);
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+      message: "Too many requests",
+    });
+  });
+
+  it("throws when the stream ends without a session event", async () => {
+    mockFetch(
+      sseResponse(['event: delta\ndata: {"text":"partial"}\n\n']),
+    );
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+    });
+  });
+
+  it("cancels the reader when the stream fails mid-flight", async () => {
+    const cancelSpy = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    const failingStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: delta\ndata: {"text":"partial"}\n\n'));
+        controller.error(new Error("stream failed"));
+      },
+    });
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: failingStream,
+      json: async () => ({}),
+    } as unknown as Response);
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      message: "stream failed",
+    });
+    expect(cancelSpy).toHaveBeenCalled();
   });
 });

@@ -101,6 +101,17 @@ def get_async_session_factory() -> AsyncSessionFactory:
 def create_all_tables(engine: Engine) -> None:
     import api.db.auth_db  # noqa: F401
     import api.db.media_db  # noqa: F401
+    import api.db.scene_analysis_db  # noqa: F401
     import api.db.session_db  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+
+
+async def create_all_tables_async(engine: AsyncEngine) -> None:
+    import api.db.auth_db  # noqa: F401
+    import api.db.media_db  # noqa: F401
+    import api.db.scene_analysis_db  # noqa: F401
+    import api.db.session_db  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

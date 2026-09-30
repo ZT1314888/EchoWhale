@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend (pytest)
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: sqlite+aiosqlite:///./ci.db
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies (frozen lockfile)
+        run: uv sync --frozen
+
+      - name: Prepare sqlite schema for app-level routes
+        run: |
+          uv run python - <<'PY'
+          import asyncio
+
+          from api.core.config import settings
+          from api.db.database import (
+            create_all_tables_async,
+            create_async_database_engine,
+          )
+
+          async def prepare() -> None:
+              engine = create_async_database_engine(settings.database_url)
+              await create_all_tables_async(engine)
+              await engine.dispose()
+
+          asyncio.run(prepare())
+          PY
+
+      - name: Run backend tests
+        run: uv run pytest tests
+
+  frontend:
+    name: frontend (typecheck + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
