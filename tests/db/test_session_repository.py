@@ -426,6 +426,10 @@ async def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(
 
     await repository.finalize_voice_session(
         session=finalized_session,
+        new_messages=[
+            Message(id="msg_2", role="user", text="Could I get an iced latte, please?"),
+            Message(id="msg_3", role="assistant", text="Of course. What size would you like?"),
+        ],
         review=review,
         voice_fact=voice_fact,
         events=events,

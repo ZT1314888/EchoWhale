@@ -407,6 +407,10 @@ class SessionEngineAgent:
         """把语音转写收束成文本会话，并补齐反馈、review 与运行时事件。"""
         session = await self.session_repository.get_session(payload.session_id)
         messages = _build_voice_messages(session, payload)
+        # _build_voice_messages 已完成尾段去重：结果 = 既有消息 + 新增尾巴。
+        # 仓储只追加新增部分（append-only），既有消息行保持不动，
+        # 避免收口期间与文本轮并发时覆盖/删除对方消息（Finding 8）。
+        new_messages = messages[len(session.messages) :]
         updated_session = session.model_copy(
             update={
                 "messages": messages,
@@ -460,6 +464,7 @@ class SessionEngineAgent:
         ]
         stored_session, stored_review = await self.session_repository.finalize_voice_session(
             session=updated_session,
+            new_messages=new_messages,
             review=review,
             voice_fact=voice_fact,
             events=events,

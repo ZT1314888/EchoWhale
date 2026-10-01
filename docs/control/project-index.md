@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/feedback_failure_degradation/feature.md`
-- 本轮结论：审计 Finding 6 修复：确立编排失败策略——主价值分支（教练）失败才整轮失败，增强分支（反馈）失败显式降级（单一转换点构造诚实占位 FeedbackResult + degraded=true warning，契约模型与前端零改动，SSE 事件序不变）。reply()/stream_reply() 落地；complete_voice_session 留待后续对齐。至此审计 Fix Immediately 五项全部完成。
-- 当前主要阻塞：voice 收口反馈降级对齐、反馈异步补写、分支 criticality 机制归后续批次；Fix Before Stable Release 队列开启（position 唯一约束、语音收口追加语义、auth 限流 Redis 化、LLM max_tokens+usage 落库等）。
-- 补充进展：uv run pytest tests 388 passed / 2 skipped；ruff/black 全绿；mock 模式 uvicorn 冒烟 /health 200。
+- 最新归档：`docs/features/session_write_integrity/feature.md`
+- 本轮结论：审计 Finding 7/8 修复：迁移 0011 给 session_messages 加 UNIQUE(session_id,position)（batch_alter_table，SQLite/PG 双兼容）+ sessions(user_id,updated_at) 复合索引；save_reply_turn 冲突重试（独立事务，二次冲突InvalidStateError）；finalize_voice_session 改 append-only（agent 层传 new_messages，仓储绝不动既有消息行），消除语音收口与文本轮并发的丢失更新。
+- 当前主要阻塞：add_message 重试随调用方出现再补；Finding 9 历史 INNER JOIN 语义待决策；本批次后续：限流收口（F5+F12）→ LLM 成本与输入边界（F10+F11）→ 可观测性 → 交付门禁与部署。
+- 补充进展：uv run pytest tests 393 passed / 2 skipped（+5：约束/重试/append-only/迁移可逆）；ruff/black 全绿。
 
 ## 模块看板
 
@@ -70,6 +70,7 @@
 | 生产配置门控反转与清单补全 | `production_config_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 会话启动媒体归属校验 | `session_media_ownership_check` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 反馈失败降级不拖垮整轮对话 | `feedback_failure_degradation` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 会话写路径完整性与追加语义 | `session_write_integrity` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 

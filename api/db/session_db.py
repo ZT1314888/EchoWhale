@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
@@ -8,24 +9,29 @@ from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     and_,
     delete,
     func,
     or_,
     select,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import SessionStatus
-from api.common.exceptions import NotFoundError
+from api.common.exceptions import InvalidStateError, NotFoundError
 from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
 from api.models.message_model import Message
 from api.models.review_model import PracticeFeedback, SessionReview
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
+
+logger = logging.getLogger(__name__)
 
 
 class SessionRepository(Protocol):
@@ -54,6 +60,7 @@ class SessionRepository(Protocol):
         self,
         *,
         session: Session,
+        new_messages: list[Message],
         review: SessionReview,
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
@@ -98,6 +105,8 @@ class SessionRepository(Protocol):
 
 class SessionRecord(Base):
     __tablename__ = "sessions"
+    # 历史列表按 (user_id, updated_at) keyset 分页，复合索引与迁移 0011 保持一致。
+    __table_args__ = (Index("ix_sessions_user_id_updated_at", "user_id", "updated_at"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
@@ -115,6 +124,11 @@ class SessionRecord(Base):
 
 class MessageRecord(Base):
     __tablename__ = "session_messages"
+    # (session_id, position) 唯一是消息序号的数据库级兜底：并发写同一会话
+    # 分配到重复 position 时必须撞约束失败，而不是静默落库打乱回放顺序。
+    __table_args__ = (
+        UniqueConstraint("session_id", "position", name="uq_session_messages_session_position"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     session_id: Mapped[str] = mapped_column(
@@ -182,6 +196,13 @@ class SqlAlchemySessionRepository:
         self._session_factory = session_factory or get_async_session_factory()
 
     async def save_session(self, session: Session) -> Session:
+        """仅用于会话创建路径（agent.start）的全量落库。
+
+        实现是"删除该会话全部消息后按内存快照重插"，创建时会话尚无并发写者，
+        这样做安全；会话创建之后的消息追加一律走 save_reply_turn /
+        finalize_voice_session 的 append 语义，禁止再调用本方法，否则会把
+        并发写入的消息静默删掉（丢失更新）。
+        """
         async with self._session_factory() as db_session:
             await self._upsert_session_record(db_session, session)
             # 强制先落父 session，避免在 FK 严格数据库中先写子 message。
@@ -208,15 +229,11 @@ class SqlAlchemySessionRepository:
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = await db_session.scalar(
-                select(func.coalesce(func.max(MessageRecord.position), -1)).where(
-                    MessageRecord.session_id == session_id
-                )
-            )
+            current_position = await self._read_max_position(db_session, session_id)
             db_session.add(
                 self._to_message_record(
                     session_id,
-                    int(current_position) + 1,
+                    current_position + 1,
                     message,
                 )
             )
@@ -231,34 +248,53 @@ class SqlAlchemySessionRepository:
         assistant_message: Message,
         review: SessionReview,
     ) -> Session:
-        async with self._session_factory() as db_session:
-            record = await db_session.get(SessionRecord, session_id)
-            if record is None:
-                raise NotFoundError(f"Session {session_id} not found")
+        # "读 max(position) → 写"窗口内若另一并发回复先落库，唯一约束会拒绝
+        # 重复 position（Finding 7）。每次尝试用独立事务：冲突后整体回滚重开，
+        # 兼容 SQLite（commit 时报错）与 PG（flush 时报错）的差异，避免半提交；
+        # 重读 max 再试一次即可覆盖该竞态窗口，仍冲突说明并发方持续写入，
+        # 按状态冲突上抛，交由调用方的重试语义处理。
+        for attempt in range(2):
+            try:
+                async with self._session_factory() as db_session:
+                    record = await db_session.get(SessionRecord, session_id)
+                    if record is None:
+                        raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = await db_session.scalar(
-                select(func.coalesce(func.max(MessageRecord.position), -1)).where(
-                    MessageRecord.session_id == session_id
-                )
-            )
-            next_position = int(current_position) + 1
-            db_session.add(self._to_message_record(session_id, next_position, learner_message))
-            db_session.add(
-                self._to_message_record(session_id, next_position + 1, assistant_message)
-            )
-            await self._upsert_review_record(db_session, review)
-            record.updated_at = review.updated_at
-            await db_session.commit()
+                    next_position = await self._read_max_position(db_session, session_id) + 1
+                    db_session.add(
+                        self._to_message_record(session_id, next_position, learner_message)
+                    )
+                    db_session.add(
+                        self._to_message_record(session_id, next_position + 1, assistant_message)
+                    )
+                    await self._upsert_review_record(db_session, review)
+                    record.updated_at = review.updated_at
+                    await db_session.commit()
+                break
+            except IntegrityError as exc:
+                if attempt == 0:
+                    logger.warning(
+                        "save_reply_turn_position_conflict session_id=%s retry=true", session_id
+                    )
+                    continue
+                raise InvalidStateError("Concurrent reply write conflict") from exc
         return await self.get_session(session_id)
 
     async def finalize_voice_session(
         self,
         *,
         session: Session,
+        new_messages: list[Message],
         review: SessionReview,
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
     ) -> tuple[Session, SessionReview]:
+        """语音收口的 append-only 落库：既有消息行一律不动，只追加新增部分。
+
+        new_messages 由 agent 层经 _build_voice_messages 尾段去重后传入
+        （即 remainder[overlap:]）。此前实现是删除全部消息后按内存快照重插，
+        语音收口与文本轮并发时会静默删掉对方刚落库的消息（Finding 8）。
+        """
         async with self._session_factory() as db_session:
             record = await db_session.get(SessionRecord, session.id)
             if record is None:
@@ -266,11 +302,13 @@ class SqlAlchemySessionRepository:
 
             await self._upsert_session_record(db_session, session)
             await db_session.flush()
-            await db_session.execute(
-                delete(MessageRecord).where(MessageRecord.session_id == session.id)
-            )
-            for position, message in enumerate(session.messages):
-                db_session.add(self._to_message_record(session.id, position, message))
+
+            # 只追加：position 从当前 max+1 连续分配，绝不 delete 既有消息行。
+            current_position = await self._read_max_position(db_session, session.id)
+            for offset, message in enumerate(new_messages):
+                db_session.add(
+                    self._to_message_record(session.id, current_position + 1 + offset, message)
+                )
 
             await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
@@ -477,6 +515,19 @@ class SqlAlchemySessionRepository:
             await db_session.execute(delete(MessageRecord))
             await db_session.execute(delete(SessionRecord))
             await db_session.commit()
+
+    async def _read_max_position(self, db_session, session_id: str) -> int:
+        """读取会话当前最大消息序号；无消息时返回 -1，使首个 position 从 0 开始。
+
+        抽成独立方法同时是测试缝隙：重试路径测试用它伪造过期的 max 读值，
+        无需真实并发即可稳定复现唯一约束冲突。
+        """
+        value = await db_session.scalar(
+            select(func.coalesce(func.max(MessageRecord.position), -1)).where(
+                MessageRecord.session_id == session_id
+            )
+        )
+        return int(value)
 
     async def _load_messages(self, db_session, session_id: str) -> Sequence[MessageRecord]:
         result = await db_session.scalars(

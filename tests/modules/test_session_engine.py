@@ -69,15 +69,19 @@ class FakeSessionRepository:
         self,
         *,
         session: Session,
+        new_messages: list[Message],
         review,
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
     ) -> tuple[Session, object]:
-        self.sessions[session.id] = session
+        # 与真实仓储的 append 语义对齐：既有消息行保持不动，只拼接新增部分。
+        stored = self.sessions[session.id]
+        merged = session.model_copy(update={"messages": [*stored.messages, *new_messages]})
+        self.sessions[session.id] = merged
         self.reviews[review.session_id] = review
         self.voice_facts[voice_fact.session_id] = voice_fact
         self.events.setdefault(session.id, []).extend(events)
-        return (session, review)
+        return (merged, review)
 
     async def save_session_review(self, review) -> object:
         self.reviews[review.session_id] = review
