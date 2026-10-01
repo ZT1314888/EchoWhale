@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     llm_session_start_window_seconds: int = 3600
     llm_reply_limit: int = 30
     llm_reply_window_seconds: int = 3600
+    # 匿名访客 IP 维度兜底限额（默认 visitor 限额 ×5）：
+    # 键取 TCP 对端地址而非 X-Forwarded-For（XFF 可伪造），共享出口 IP 的
+    # 误伤由放大系数吸收。仅作用于 sessions 的 start / reply / reply-stream。
+    llm_session_start_ip_limit: int = 50
+    llm_reply_ip_limit: int = 150
+    # 进程内限流字典的键容量上限（LRU 淘汰最久未用键）；
+    # Redis 变体不受影响（键自带 TTL，天然有界）。
+    rate_limiter_max_keys: int = 10_000
     scene_analysis_cache_enabled: bool = False
     scene_analysis_async_enabled: bool = False
     scene_analysis_prompt_version: str = "v1"

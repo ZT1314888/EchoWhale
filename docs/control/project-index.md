@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/black_formatting/feature.md`
-- 本轮结论：第八批格式化门禁：pyproject 增加 [tool.black]（line-length=100 与 ruff 对齐），uv run black 全量重排 api/tests/tools（默认 88 口径实测 51 文件漂移，对齐后 25 文件漂移/90 不变，纯机械 diff），复跑全部门禁数字与基线逐项一致（pytest 224 passed+2 skipped、ruff All checks passed、tsc 0 error、vitest 108 passed、coverage 79.07/76.54/82.15/79.07），CI backend 在 Lint 步骤旁增加 Format (black) --check 门禁。
-- 当前主要阻塞：前端 eslint 引入批次待排；内联分析路径进度真实化、语音逐轮反馈（后端管线）、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
-- 补充进展：black --check api tests tools 零漂移（115 files unchanged）；ruff All checks passed；tsc 0 error；vitest 108 passed；coverage Stmts 79.07/Branch 76.54/Funcs 82.15/Lines 79.07 均超阈值；pytest 224 passed / 2 skipped。
+- 最新归档：`docs/features/visitor_ratelimit_hardening/feature.md`
+- 本轮结论：审计 Finding 1 加固：访客 Cookie 签名化（security.py 新增通用 sign_value/verify_signed_value，get_resource_owner 验签 fail-closed 重新签发，伪造值进不了 owner/限流键/存储路径）；sessions 三端点为匿名 owner 追加对端 IP 维度兜底限流（不读 XFF，默认 visitor 限额 ×5）；InMemoryLLMRateLimiter 与 AuthRateLimiter 改有界 OrderedDict + LRU 淘汰（RATE_LIMITER_MAX_KEYS=10000，含 Redis 降级路径与零容量误配兜底）。旧版未签名 Cookie 一律重签，匿名访客历史会话失联（已记录权衡）。
+- 当前主要阻塞：审计后续批次待排：Finding 2 媒体上传整包读内存且无限流、Finding 4 AUTH_JWT_SECRET 密钥分离、Finding 5 auth 限流反代头处理；前端 eslint 引入批次、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
+- 补充进展：uv run pytest tests 249 passed / 2 skipped；ruff check api tests tools All checks passed；black --check api tests tools 115 files unchanged；agent_ops check 与 render 通过。
 
 ## 模块看板
 
@@ -65,6 +65,7 @@
 | 等待体验与反馈统一 | `frontend_wait_ux_feedback_unification` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 | CI 覆盖率与 lint 门禁 | `ci_coverage_lint_gates` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | black 格式化门禁 | `black_formatting` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 访客身份与限流加固 | `visitor_ratelimit_hardening` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 

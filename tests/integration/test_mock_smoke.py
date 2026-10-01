@@ -27,6 +27,7 @@ from api.db.scene_analysis_db import SqlAlchemySceneAnalysisStore
 from api.db.session_db import SqlAlchemySessionRepository
 from api.main import app
 from api.common.ownership import build_visitor_owner
+from api.core.security import sign_value
 from api.models.media_model import Media
 from api.modules.scene_engine.service import SceneEngineService
 from api.modules.session_engine.service import SessionEngineService
@@ -141,7 +142,12 @@ def _parse_sse(text: str) -> list[tuple[str, dict]]:
 def test_mock_full_chain_with_scene_cache_and_reply_stream(smoke) -> None:
     test_client, gate, signer = smoke
     # 固定访客身份：cookie 值与 fixture 种子媒体的属主一一对应。
-    test_client.cookies.set(settings.auth_visitor_cookie_name, "visitor_smoke_owner")
+    # 访客 Cookie 已签名化：必须用 sign_value 生成服务端可验签的值，
+    # 旧版裸 id 会被验签拒绝并重新签发新身份，种子媒体将不可见。
+    test_client.cookies.set(
+        settings.auth_visitor_cookie_name,
+        sign_value("visitor_smoke_owner", secret=settings.auth_jwt_secret),
+    )
 
     # 1) 首次开课：内联 mock 分析 + 写穿缓存
     first = test_client.post("/api/v1/sessions", json={"media_id": "med_smoke"})

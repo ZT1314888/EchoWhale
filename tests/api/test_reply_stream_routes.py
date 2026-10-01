@@ -101,10 +101,14 @@ def client():
     service = FakeReplyStreamService()
     app.dependency_overrides[get_session_service] = lambda: service
     # 限流器必须是同一个实例：lambda 内重建会让每次请求都拿到全新计数。
+    # 显式规则即完整规则集：匿名请求还会消耗 IP 兜底键（reply_ip /
+    # session_start_ip），规则集必须一并给出，否则 _resolve_rule 会 KeyError。
     limiter = InMemoryLLMRateLimiter(
         rules={
             "reply": LLMRateLimitRule(limit=5, window_seconds=3600),
             "session_start": LLMRateLimitRule(limit=5, window_seconds=3600),
+            "reply_ip": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "session_start_ip": LLMRateLimitRule(limit=100, window_seconds=3600),
         }
     )
     app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter

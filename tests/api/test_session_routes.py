@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +13,8 @@ from api.common.exceptions import NotFoundError
 from api.common.exceptions import SceneAnalysisUnavailableError
 from api.common.exceptions import UnsupportedSceneImageError
 from api.common.exceptions import VoiceTokenError
+from api.core.config import settings
+from api.core.security import sign_value, verify_signed_value
 from api.main import app
 from api.models.message_model import Message
 from api.models.session_model import Session
@@ -379,6 +382,51 @@ class VoiceBootstrapFailureSessionService(FakeSessionService):
         raise VoiceTokenError()
 
 
+class VisitorAwareSessionService(FakeSessionService):
+    """匿名访客场景专用替身：owner_id 随 Cookie 变化，不固定为 user:user_123。
+
+    记录每次请求看到的 owner_id，供测试断言伪造 Cookie 值没有进入身份链路。
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_owner_ids: list[str | None] = []
+
+    async def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
+        self.seen_owner_ids.append(user_id)
+        session = Session(
+            id=f"sess_visitor_{len(self.seen_owner_ids)}",
+            user_id=user_id,
+            media_id=media_id,
+            scene="coffee_shop",
+            role="barista",
+            opener="Hi there, what can I get started for you today?",
+            visual_anchors=["counter", "menu board"],
+            vocab_candidates=["coffee", "order"],
+            messages=[
+                Message(
+                    id=f"msg_visitor_{len(self.seen_owner_ids)}",
+                    role="assistant",
+                    text="Hi there, what can I get started for you today?",
+                )
+            ],
+        )
+        self.sessions[session.id] = session
+        return session
+
+    async def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+        self.seen_owner_ids.append(owner_id)
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise NotFoundError(f"Session {session_id} not found")
+        return session
+
+
 @pytest.fixture(autouse=True)
 def clear_session_overrides() -> Iterator[None]:
     app.dependency_overrides.clear()
@@ -738,3 +786,126 @@ def test_reply_returns_429_envelope_when_rate_limit_exceeded(client: TestClient)
     assert first.status_code == 200
     assert second.status_code == 429
     assert second.json()["code"] == 1006
+
+
+def _visitor_cookie_value(response) -> str | None:
+    """从响应 Set-Cookie 头解出访客 Cookie 值；未设置时返回 None。"""
+    cookie_header = response.headers.get("set-cookie")
+    if not cookie_header:
+        return None
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    morsel = cookie.get(settings.auth_visitor_cookie_name)
+    return morsel.value if morsel else None
+
+
+def test_forged_visitor_cookie_is_rejected_and_reissued(client: TestClient) -> None:
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_forge"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_value = _visitor_cookie_value(response)
+    # 伪造值被验签拒绝：响应用全新签名 Cookie 重新签发身份。
+    assert set_cookie_value is not None
+    assert set_cookie_value != "visitor_forge"
+    visitor_id = verify_signed_value(set_cookie_value, secret=settings.auth_jwt_secret)
+    assert visitor_id is not None
+    assert visitor_id != "visitor_forge"
+    # 伪造值没有进入 owner：本次请求走的是重新签发的访客身份。
+    assert service.seen_owner_ids == [f"visitor:{visitor_id}"]
+
+
+def test_forged_visitor_cookie_hits_missing_session_returns_404_without_500(
+    client: TestClient,
+) -> None:
+    """伪造 Cookie 不许打崩请求：访问不存在的会话仍是标准 404 信封。"""
+    app.dependency_overrides[get_session_service] = lambda: VisitorAwareSessionService()
+
+    response = client.get(
+        "/api/v1/sessions/sess_missing",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_forge"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 1004
+
+
+def test_valid_signed_visitor_cookie_is_trusted_without_reset(client: TestClient) -> None:
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    signed = sign_value("visitor_trusted", secret=settings.auth_jwt_secret)
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}={signed}"},
+    )
+
+    assert response.status_code == 200
+    # 验签通过：沿用既有访客身份，且不重设 Cookie。
+    assert service.seen_owner_ids == ["visitor:visitor_trusted"]
+    assert settings.auth_visitor_cookie_name not in response.headers.get("set-cookie", "")
+
+
+def test_legacy_unsigned_visitor_cookie_is_reissued(client: TestClient) -> None:
+    """旧版未签名 Cookie 一律视为无效：重新签发，不沿用旧值。"""
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_smoke_owner"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_value = _visitor_cookie_value(response)
+    assert set_cookie_value is not None
+    assert verify_signed_value(set_cookie_value, secret=settings.auth_jwt_secret) is not None
+    assert service.seen_owner_ids != ["visitor:visitor_smoke_owner"]
+
+
+def test_anonymous_rotating_cookies_hit_ip_rate_limit(client: TestClient) -> None:
+    """同 IP 轮换 Cookie 刷新配额：visitor 键挡不住，IP 兜底键返回 429。"""
+    app.dependency_overrides[get_session_service] = lambda: VisitorAwareSessionService()
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "session_start": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "session_start_ip": LLMRateLimitRule(limit=2, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # TestClient 的对端地址固定为 testclient：每次请求换一个伪造 Cookie，
+    # visitor 键始终是全新身份，第 3 次请求撞上 IP 限额（limit=2）。
+    responses = [
+        client.post(
+            "/api/v1/sessions",
+            json={"sample_scene_id": "coffee"},
+            headers={"Cookie": f"{settings.auth_visitor_cookie_name}=forged_{index}"},
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses[:2]] == [200, 200]
+    assert responses[2].status_code == 429
+    assert responses[2].json()["code"] == 1006
+
+
+def test_authenticated_user_bursts_do_not_consume_ip_quota(client: TestClient) -> None:
+    """认证用户不受 IP 兜底键影响：IP 限额调到 1 也应连发无阻。"""
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "session_start": LLMRateLimitRule(limit=10, window_seconds=3600),
+            "session_start_ip": LLMRateLimitRule(limit=1, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    for _ in range(3):
+        response = client.post("/api/v1/sessions", json={"media_id": "med_123"}, headers=headers)
+        assert response.status_code == 200
