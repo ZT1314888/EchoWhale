@@ -1,3 +1,4 @@
+import logging
 from functools import lru_cache
 from typing import Annotated, ClassVar
 
@@ -5,6 +6,18 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from api.common.exceptions import ConfigurationError
+
+logger = logging.getLogger(__name__)
+
+# AUTH_JWT_SECRET 的开发默认值：生产门控用它识别"没有显式换密钥"的部署。
+# 提取为模块常量供测试直接引用，避免测试里硬编码同一字面量。
+DEFAULT_JWT_SECRET = "dev-secret-change-me"
+
+# 非生产环境白名单（大小写不敏感）：只有这些值豁免生产清单检查。
+# 注意是白名单而非黑名单——APP_ENV 取白名单外的任何值（prod / staging / live /
+# 空串 / 拼写错误）一律按生产标准校验（fail-closed）：宁可误报阻止启动，
+# 不可漏报带着公开默认密钥上线（可伪造任意用户 token）。
+NON_PRODUCTION_ENVS = frozenset({"development", "dev", "test", "testing", "local"})
 
 
 class Settings(BaseSettings):
@@ -21,7 +34,7 @@ class Settings(BaseSettings):
     database_max_overflow: int = 20
     database_pool_timeout_seconds: int = 30
     database_pool_recycle_seconds: int = 1800
-    auth_jwt_secret: str = "dev-secret-change-me"
+    auth_jwt_secret: str = DEFAULT_JWT_SECRET
     auth_access_token_ttl_seconds: int = 900
     auth_refresh_token_ttl_seconds: int = 60 * 60 * 24 * 14
     auth_refresh_cookie_name: str = "echowhale_refresh_token"
@@ -57,7 +70,6 @@ class Settings(BaseSettings):
     # 全局请求体大小门（BodySizeLimitMiddleware）：12MB = 当前业务最大合法 body
     # （10MB 媒体上传）+ multipart 编码余量；未来新增更大 body 的端点时需同步上调。
     max_request_body_bytes: int = 12 * 1024 * 1024
-    llm_provider: str = "mock"
     model_runtime_mode: str = "mock"
     vision_primary_provider: str = "mock"
     vision_primary_base_url: str = ""
@@ -141,27 +153,71 @@ class Settings(BaseSettings):
         self._validate_model_runtime()
         self._validate_smtp_settings()
 
-        if self.app_env.lower() != "production":
-            return
+        # 门控反转（fail-closed）：白名单外的任何值一律执行生产清单检查。
+        # 空串视为"环境变量未注入"（compose 漏配是最常见的生产事故形态），
+        # 按最严格标准校验——宁可误报阻止启动，不可漏报带病上线。
+        if self.app_env.strip().lower() not in NON_PRODUCTION_ENVS:
+            errors: list[str] = []
+            if len(self.auth_jwt_secret) < 32 or self.auth_jwt_secret == DEFAULT_JWT_SECRET:
+                errors.append(
+                    "AUTH_JWT_SECRET must be a strong value in production "
+                    "(not the default and at least 32 characters)"
+                )
+            if not self.auth_cookie_secure:
+                errors.append("AUTH_COOKIE_SECURE must be true in production")
+            if not self.allowed_origins:
+                errors.append("ALLOWED_ORIGINS must not be empty in production")
+            if self.frontend_public_base_url.rstrip("/") == self.default_frontend_public_base_url:
+                errors.append("FRONTEND_PUBLIC_BASE_URL must be explicitly set in production")
+            if not self.database_url.strip():
+                errors.append("DATABASE_URL must be set in production")
+            if not self.redis_url.strip():
+                errors.append(
+                    "REDIS_URL must be set in production (email codes and rate limiting "
+                    "would silently degrade to in-process implementations, which breaks "
+                    "multi-worker deployments)"
+                )
+            if self.model_runtime_mode.strip().lower() != "live":
+                errors.append(
+                    "MODEL_RUNTIME_MODE must be 'live' in production "
+                    "(mock mode would silently serve fake model responses)"
+                )
+            if not self.r2_endpoint.strip():
+                errors.append("R2_ENDPOINT must be set in production")
+            if not self.r2_access_key_id.strip():
+                errors.append("R2_ACCESS_KEY_ID must be set in production")
+            if not self.r2_secret_access_key.strip():
+                errors.append("R2_SECRET_ACCESS_KEY must be set in production")
+            # SMTP 四字段全配才放行：注册→激活链路硬依赖邮件，漏配会让全量
+            # 注册无声瘫痪（用户永久卡在 pending_verification）。
+            for smtp_field, env_name in (
+                ("auth_smtp_host", "AUTH_SMTP_HOST"),
+                ("auth_smtp_username", "AUTH_SMTP_USERNAME"),
+                ("auth_smtp_password", "AUTH_SMTP_PASSWORD"),
+                ("auth_smtp_from_email", "AUTH_SMTP_FROM_EMAIL"),
+            ):
+                if not getattr(self, smtp_field).strip():
+                    errors.append(
+                        f"{env_name} must be set in production "
+                        "(registration depends on email activation)"
+                    )
+            if not self.deepgram_api_key.strip():
+                errors.append("DEEPGRAM_API_KEY must be set in production")
+            if not self.deepgram_agent_base_url.strip():
+                errors.append("DEEPGRAM_AGENT_BASE_URL must be set in production")
+            if not self.deepgram_agent_think_model.strip():
+                errors.append("DEEPGRAM_AGENT_THINK_MODEL must be set in production")
 
-        errors: list[str] = []
-        if self.auth_jwt_secret == "dev-secret-change-me":
-            errors.append("AUTH_JWT_SECRET must be explicitly set in production")
-        if not self.auth_cookie_secure:
-            errors.append("AUTH_COOKIE_SECURE must be true in production")
-        if not self.allowed_origins:
-            errors.append("ALLOWED_ORIGINS must not be empty in production")
-        if self.frontend_public_base_url.rstrip("/") == self.default_frontend_public_base_url:
-            errors.append("FRONTEND_PUBLIC_BASE_URL must be explicitly set in production")
-        if not self.deepgram_api_key.strip():
-            errors.append("DEEPGRAM_API_KEY must be set in production")
-        if not self.deepgram_agent_base_url.strip():
-            errors.append("DEEPGRAM_AGENT_BASE_URL must be set in production")
-        if not self.deepgram_agent_think_model.strip():
-            errors.append("DEEPGRAM_AGENT_THINK_MODEL must be set in production")
+            if errors:
+                raise ConfigurationError("; ".join(errors))
 
-        if errors:
-            raise ConfigurationError("; ".join(errors))
+        # 生效模式留痕：只打非敏感开关值，帮助部署时确认"生效的是我以为的环境"。
+        logger.info(
+            "app_env=%s model_runtime_mode=%s scene_analysis_cache=%s",
+            self.app_env,
+            self.model_runtime_mode,
+            self.scene_analysis_cache_enabled,
+        )
 
     def _validate_smtp_settings(self) -> None:
         smtp_enabled = any(

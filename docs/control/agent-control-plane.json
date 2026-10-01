@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/media_upload_stream_guard/feature.md",
-    "summary": "审计 Finding 2 修复：新增纯 ASGI BodySizeLimitMiddleware（Content-Length 超限不读 body 直接 413 统一信封，chunked 逐块计数超限先发 413 再断流，双响应防护 + 哨兵异常不逃逸），先挂 body 门再挂 CORS 保证 413 带跨域头；MediaService.upload_media 改收 fileobj，asyncio.to_thread 内 64KB 分块计数超限即断（不 seek 不续读），魔法字节只读前 12 字节，StorageService Protocol 换 async_upload_fileobj（boto3 upload_fileobj 磁盘直传内存 O(1)，旧 bytes 路径删除）；上传端点接入 media_upload（20/h）+ media_upload_ip（100/h）限流，抽公共 consume_with_ip_guard 供 sessions 三端点复用（行为不变）。",
-    "blockers": "R2 预签名直传（浏览器直传）另行立项；审计 Finding 4 密钥分离、Finding 5 auth 限流反代头待排；系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。",
-    "extra_progress": "uv run pytest tests 267 passed / 2 skipped；ruff check api tests tools All checks passed；black --check api tests tools 116 files unchanged；agent_ops check 与 render 通过。注意 .gitignore tests/* 规则：tests/common/test_middleware.py 与 tests/services/test_media_service.py 需 git add -f 入库。"
+    "latest_record": "docs/features/production_config_gate/feature.md",
+    "summary": "审计 Finding 3 修复（含 Finding 18 最小修复）：validate_runtime 门控反转——APP_ENV 从精确匹配 production 改为白名单 {development,dev,test,testing,local} 外一律按生产校验（空串/拼写错误/localhost 均不豁免）；生产清单补至 17 项：JWT ≥32 字符且非默认、DATABASE_URL、REDIS_URL、MODEL_RUNTIME_MODE=live、R2 三凭证、SMTP 四字段全配，缺失项聚合进一条 ConfigurationError；校验通过打非敏感生效模式日志；删除死配置 llm_provider。",
+    "blockers": "Finding 18 队列 payload 验证码哈希化待排；生产清单写入部署 runbook 归 Dockerfile/runbook 批次；审计 Finding 4 密钥分离、Finding 5 auth 限流反代头待排；系统级 smoke、PRD 刷新原队列不变。",
+    "extra_progress": "uv run pytest tests 386 passed / 2 skipped（新增 119：108 fail-closed 参数化 + 豁免矩阵 + 弱密钥边界 + mock 上线 + 日志脱敏）；ruff/black 全绿；冒烟：默认 env /health 200，APP_ENV=prod import 失败并逐项点名。"
   },
   "modules": [
     {
@@ -258,6 +258,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/media_upload"
+    },
+    {
+      "name": "生产配置门控反转与清单补全",
+      "scope": "production_config_gate",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
     }
   ],
   "test_layers": [
