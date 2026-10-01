@@ -6,9 +6,15 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
 from threading import Lock
+from typing import TYPE_CHECKING
 
 from api.common.exceptions import ConfigurationError, TooManyRequestsError
 from api.core.config import settings
+
+if TYPE_CHECKING:  # 类型标注仅此而已：限流模块运行时不耦合路由依赖层
+    from fastapi import Request
+
+    from api.common.deps import ResourceOwnerContext
 
 try:  # pragma: no cover - exercised through factory fallback
     from redis import Redis, RedisError
@@ -20,6 +26,10 @@ except ImportError:  # pragma: no cover - local dev may not have redis extras in
 logger = logging.getLogger(__name__)
 
 RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试。"
+
+# 媒体上传限流窗口：复用既有动作的 3600 秒窗口语义，不新增环境配置键
+# （limits 本身走 settings.media_upload_limit / media_upload_ip_limit）。
+MEDIA_UPLOAD_WINDOW_SECONDS = 3600
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +167,43 @@ def default_llm_rate_limit_rule(action: str) -> LLMRateLimitRule:
             settings.llm_reply_ip_limit,
             settings.llm_reply_window_seconds,
         )
+    if action == "media_upload":
+        return LLMRateLimitRule(
+            settings.media_upload_limit,
+            MEDIA_UPLOAD_WINDOW_SECONDS,
+        )
+    if action == "media_upload_ip":
+        return LLMRateLimitRule(
+            settings.media_upload_ip_limit,
+            MEDIA_UPLOAD_WINDOW_SECONDS,
+        )
     raise ConfigurationError(f"Unknown LLM rate limit action: {action}")
+
+
+def consume_with_ip_guard(
+    limiter: LLMRateLimiter,
+    *,
+    action: str,
+    ip_action: str,
+    owner: ResourceOwnerContext,
+    request: Request,
+) -> None:
+    """先消耗 owner（账号/visitor）键，再对匿名访客追加 IP 维度兜底键。
+
+    sessions 与 media/upload 的匿名 IP 守卫是同一模式，抽公共 helper
+    供两处复用，避免键顺序与跳过条件在端点间漂移（任务 prd R3 / DRY）。
+
+    IP 键只取 TCP 对端地址（request.client.host），不解析 X-Forwarded-For：
+    XFF 头可被客户端随意伪造，用它等于把 IP 键也交给攻击者轮换。
+    认证用户不受 IP 键约束（owner 键已按账号归属计数）；
+    request.client 为 None（部分测试/UDS 部署）时跳过，避免误伤。
+    """
+    limiter.consume(action=action, key=owner.owner_id)
+    if not owner.is_anonymous:
+        return
+    if request.client is None:
+        return
+    limiter.consume(action=ip_action, key=f"ip:{request.client.host}")
 
 
 @lru_cache

@@ -29,7 +29,11 @@ from api.db.session_db import build_session_repository
 from api.integrations.storage.r2 import R2StorageService
 from api.modules.session_engine.schema import SceneAnalysisPending
 from api.modules.session_engine.service import SessionEngineService
-from api.services.llm_rate_limit import LLMRateLimiter, get_llm_rate_limiter
+from api.services.llm_rate_limit import (
+    LLMRateLimiter,
+    consume_with_ip_guard,
+    get_llm_rate_limiter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -45,27 +49,6 @@ def get_session_service() -> SessionEngineService:
     )
 
 
-def _consume_anonymous_ip_quota(
-    rate_limiter: LLMRateLimiter,
-    owner: ResourceOwnerContext,
-    request: Request,
-    *,
-    action: str,
-) -> None:
-    """匿名访客在 visitor 键之外追加 IP 维度兜底限流。
-
-    IP 键只取 TCP 对端地址（request.client.host），不解析 X-Forwarded-For：
-    XFF 头可被客户端随意伪造，用它等于把 IP 键也交给攻击者轮换。
-    认证用户不受 IP 键约束（visitor 键已按账号归属计数）；
-    request.client 为 None（部分测试/UDS 部署）时跳过，避免误伤。
-    """
-    if not owner.is_anonymous:
-        return
-    if request.client is None:
-        return
-    rate_limiter.consume(action=action, key=f"ip:{request.client.host}")
-
-
 @router.post("", response_model=ApiResponse[SessionResponse])
 async def start_session(
     payload: StartSessionRequest,
@@ -75,8 +58,13 @@ async def start_session(
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     # 先消耗 visitor 键再消耗 IP 键：任一超限即 429，visitor 先报保持既有语义。
-    rate_limiter.consume(action="session_start", key=owner.owner_id)
-    _consume_anonymous_ip_quota(rate_limiter, owner, request, action="session_start_ip")
+    consume_with_ip_guard(
+        rate_limiter,
+        action="session_start",
+        ip_action="session_start_ip",
+        owner=owner,
+        request=request,
+    )
     result = await session_service.start_session(
         user_id=owner.owner_id,
         media_id=payload.media_id,
@@ -116,8 +104,13 @@ async def reply_to_session(
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     # 先 visitor 后 IP，与 start_session 的消耗顺序保持一致。
-    rate_limiter.consume(action="reply", key=owner.owner_id)
-    _consume_anonymous_ip_quota(rate_limiter, owner, request, action="reply_ip")
+    consume_with_ip_guard(
+        rate_limiter,
+        action="reply",
+        ip_action="reply_ip",
+        owner=owner,
+        request=request,
+    )
     session = await session_service.reply_to_session(
         session_id,
         payload.learner_message,
@@ -222,8 +215,13 @@ async def stream_reply_to_session(
     开流后的任何失败以 error 事件下发（信封同构，无 HTTP 状态码可改）。
     """
     # 先 visitor 后 IP，与 start_session 的消耗顺序保持一致。
-    rate_limiter.consume(action="reply", key=owner.owner_id)
-    _consume_anonymous_ip_quota(rate_limiter, owner, request, action="reply_ip")
+    consume_with_ip_guard(
+        rate_limiter,
+        action="reply",
+        ip_action="reply_ip",
+        owner=owner,
+        request=request,
+    )
     event_stream = await session_service.prepare_reply_stream(
         session_id,
         payload.learner_message,

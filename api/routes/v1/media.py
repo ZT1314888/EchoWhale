@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 
 from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
 from api.common.exceptions import NotFoundError
@@ -12,6 +12,11 @@ from api.core.config import settings
 from api.db.media_db import MediaRepository, build_media_repository
 from api.db.scene_analysis_db import SceneAnalysisStore, build_scene_analysis_store
 from api.integrations.storage.r2 import R2StorageService
+from api.services.llm_rate_limit import (
+    LLMRateLimiter,
+    consume_with_ip_guard,
+    get_llm_rate_limiter,
+)
 from api.services.media_service import MediaService
 
 router = APIRouter(prefix="/media", tags=["media"])
@@ -29,15 +34,28 @@ def get_media_service() -> MediaService:
 
 @router.post("/upload", response_model=ApiResponse[MediaResponse])
 async def upload_media(
+    request: Request,
     file: UploadFile = File(...),
     media_service: MediaService = Depends(get_media_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
+    # 上传是无鉴权门槛的高成本端点：进流式校验前先限流——先 owner 键后
+    # 匿名 IP 兜底键，429 语义与 sessions 端点一致（任务 prd R3）。
+    consume_with_ip_guard(
+        rate_limiter,
+        action="media_upload",
+        ip_action="media_upload_ip",
+        owner=owner,
+        request=request,
+    )
     result = await media_service.upload_media(
         user_id=owner.owner_id,
         filename=file.filename or "upload",
         content_type=file.content_type or "",
-        content=await file.read(),
+        # file.file 是 SpooledTemporaryFile（>1MB 已落盘），直接交给流式
+        # 校验与 storage 直传，全程不 .read() 进内存（任务 prd R2）。
+        fileobj=file.file,
     )
     response = ApiResponse.success(data=MediaResponse.from_upload_result(result))
     apply_visitor_cookie(response=response, owner=owner)

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from re import sub
-from typing import Protocol
+from typing import BinaryIO, Protocol
 from uuid import uuid4
 
 from api.common.enums import MediaUploadStatus
@@ -17,9 +18,14 @@ from api.common.ownership import owner_to_storage_path
 from api.db.media_db import MediaRepository
 from api.models.media_model import Media, MediaAccessGrant, MediaUploadResult
 
+# 分块读取的块大小：校验期间内存占用恒定（64KB），不随文件大小增长。
+UPLOAD_CHUNK_SIZE = 64 * 1024
+
 
 class StorageService(Protocol):
-    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None: ...
+    async def async_upload_fileobj(
+        self, *, key: str, fileobj: BinaryIO, content_type: str
+    ) -> None: ...
 
     async def async_create_signed_read_url(
         self, key: str, *, expires_in: int
@@ -52,18 +58,19 @@ class MediaService:
         user_id: str,
         filename: str,
         content_type: str,
-        content: bytes,
+        fileobj: BinaryIO,
     ) -> MediaUploadResult:
         self._validate_content_type(content_type)
-        self._validate_file_size(len(content))
-        self._validate_file_signature(content_type, content)
+        # 分块校验放线程池执行：大文件时的 64KB 循环不应阻塞事件循环
+        # （任务 prd R2 / design 第 3 节）。超限在 to_thread 内立即抛错中止。
+        file_size = await asyncio.to_thread(self._validate_and_measure, content_type, fileobj)
 
         media_id = f"med_{uuid4().hex[:12]}"
         storage_key = self._build_storage_key(user_id=user_id, media_id=media_id, filename=filename)
 
-        await self.storage.async_upload_bytes(
+        await self.storage.async_upload_fileobj(
             key=storage_key,
-            content=content,
+            fileobj=fileobj,
             content_type=content_type,
         )
 
@@ -72,7 +79,7 @@ class MediaService:
             user_id=user_id,
             filename=Path(filename).name,
             content_type=content_type,
-            file_size=len(content),
+            file_size=file_size,
             storage_key=storage_key,
             upload_status=MediaUploadStatus.uploaded,
         )
@@ -107,15 +114,38 @@ class MediaService:
             expires_at=expires_at,
         )
 
+    def _validate_and_measure(self, content_type: str, fileobj: BinaryIO) -> int:
+        """流式分块校验：返回文件字节数；成功路径把指针 seek(0) 还给调用方。
+
+        - 首块只取前 12 字节做魔法字节校验（JPEG/PNG/WEBP 均可判定），
+          不必为签名校验把整个文件读进内存；
+        - 计数超过 max_file_size 立即抛错并停止读取：剩余输入不再消费，
+          磁盘 spool 里的数据交由 Starlette 的 UploadFile 生命周期清理
+          （任务 design 第 3 节）。超限路径不 seek，让调用方能从指针位置
+          感知到读取确实提前停止。
+        - 空 body 与旧 bytes 路径语义一致：魔法字节校验必然失败，拒绝上传。
+        """
+        total = 0
+        while True:
+            chunk = fileobj.read(UPLOAD_CHUNK_SIZE)
+            if not chunk:
+                break
+            if total == 0:
+                self._validate_file_signature(content_type, chunk[:12])
+            total += len(chunk)
+            if total > self.max_file_size:
+                raise FileTooLargeError(f"File exceeds size limit of {self.max_file_size} bytes")
+        if total == 0:
+            self._validate_file_signature(content_type, b"")
+        fileobj.seek(0)
+        return total
+
     def _validate_content_type(self, content_type: str) -> None:
         if content_type not in self.allowed_content_types:
             raise UnsupportedMediaTypeError(f"Unsupported media type: {content_type}")
 
-    def _validate_file_size(self, file_size: int) -> None:
-        if file_size > self.max_file_size:
-            raise FileTooLargeError(f"File exceeds size limit of {self.max_file_size} bytes")
-
     def _validate_file_signature(self, content_type: str, content: bytes) -> None:
+        """按内容类型校验魔法字节；content 只需前 12 字节即可判定。"""
         validators = {
             "image/jpeg": lambda payload: payload.startswith(b"\xff\xd8\xff"),
             "image/png": lambda payload: payload.startswith(b"\x89PNG\r\n\x1a\n"),

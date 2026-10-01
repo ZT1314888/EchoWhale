@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.common.exceptions import EchoWhaleError
+from api.common.middleware import BodySizeLimitMiddleware
 from api.common.responses import ApiResponse
 from api.core.config import settings
 from api.routes.v1 import router as v1_router
@@ -26,6 +27,11 @@ app = FastAPI(
     version="0.1.0",
     description="EchoWhale API for scene-based English conversation practice.",
 )
+
+# 请求管线顺序为 CORS → 请求体大小门 → 路由：Starlette 的 add_middleware
+# 后添加者在最外层，因此先挂 body 门再挂 CORS，超限 413 响应才会经 CORS
+# 包裹带上跨域头，浏览器端前端才能读到统一信封而不是裸网络错误。
+app.add_middleware(BodySizeLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

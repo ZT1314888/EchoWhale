@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -38,16 +39,24 @@ def test_uploads_media_to_real_r2_and_serves_signed_access_url(tmp_path: Path) -
     storage = R2StorageService()
     service = MediaService(storage=storage, repository=repository)
 
-    media = service.upload_media(
-        user_id="demo-user",
-        filename="r2-smoke.png",
-        content_type="image/png",
-        content=PNG_BYTES,
-    )
-    access = service.create_media_access_url(media.id)
+    # 真实磁盘文件走 upload_fileobj：对齐生产链路（磁盘 spool → boto3 直传）。
+    upload_file = tmp_path / "r2-smoke.png"
+    upload_file.write_bytes(PNG_BYTES)
+
+    with upload_file.open("rb") as fileobj:
+        media = asyncio.run(
+            service.upload_media(
+                user_id="demo-user",
+                filename="r2-smoke.png",
+                content_type="image/png",
+                fileobj=fileobj,
+            )
+        )
+    access = asyncio.run(service.create_media_access_url(media.id))
 
     try:
         assert media.upload_status == MediaUploadStatus.uploaded
+        assert media.file_size == len(PNG_BYTES)
         request = Request(access.read_url, method="GET")
         with urlopen(request, timeout=15) as response:  # noqa: S310
             assert response.status == 200

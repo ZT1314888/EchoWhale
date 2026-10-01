@@ -54,6 +54,9 @@ class Settings(BaseSettings):
         "image/png",
         "image/webp",
     ]
+    # 全局请求体大小门（BodySizeLimitMiddleware）：12MB = 当前业务最大合法 body
+    # （10MB 媒体上传）+ multipart 编码余量；未来新增更大 body 的端点时需同步上调。
+    max_request_body_bytes: int = 12 * 1024 * 1024
     llm_provider: str = "mock"
     model_runtime_mode: str = "mock"
     vision_primary_provider: str = "mock"
@@ -91,6 +94,10 @@ class Settings(BaseSettings):
     # 误伤由放大系数吸收。仅作用于 sessions 的 start / reply / reply-stream。
     llm_session_start_ip_limit: int = 50
     llm_reply_ip_limit: int = 150
+    # 媒体上传限流：owner 键 + 匿名访客 IP 兜底键（键构造与 sessions 的
+    # IP 键同一模式，只取 TCP 对端地址）；窗口复用 3600 秒常量语义。
+    media_upload_limit: int = 20
+    media_upload_ip_limit: int = 100
     # 进程内限流字典的键容量上限（LRU 淘汰最久未用键）；
     # Redis 变体不受影响（键自带 TTL，天然有界）。
     rate_limiter_max_keys: int = 10_000

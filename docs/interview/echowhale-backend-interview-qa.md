@@ -518,7 +518,7 @@
 
 **结论**：不能只相信 `content-type`，还要检查文件大小和文件头签名。当前实现对 JPEG、PNG、WebP 分别检查 magic bytes，伪造 content-type 但内容不匹配会被拒绝。
 
-**代码依据**：`api/services/media_service.py` 的 `upload_media()` 依次调用 `_validate_content_type()`、`_validate_file_size()`、`_validate_file_signature()`。
+**代码依据**：`api/services/media_service.py` 的 `upload_media()` 先调用 `_validate_content_type()`，再在 `asyncio.to_thread` 中执行 `_validate_and_measure()`：按 64KB 分块计数校验大小（超限立即中止），并取首块前 12 字节做 `_validate_file_signature()` 魔法字节校验。
 
 **权衡**：magic bytes 校验比只看扩展名安全，但仍不是完整图片解码校验。它能挡住常见伪造，成本也低。
 
@@ -548,7 +548,7 @@
 
 **结论**：对象已上传到 R2，但 media 记录没保存，会产生数据库不可见的 orphan object。当前主流程先上传再保存记录，因此这是需要补偿的风险点。
 
-**代码依据**：`api/services/media_service.py` 先调用 `storage.async_upload_bytes()`，再构造 `Media` 并调用 `repository.save_media()`。
+**代码依据**：`api/services/media_service.py` 先调用 `storage.async_upload_fileobj()`，再构造 `Media` 并调用 `repository.save_media()`。
 
 **权衡**：先上传再入库能确保数据库只记录已上传对象；代价是 DB 失败时要清理对象。反过来先入库则可能出现记录存在但对象上传失败。
 

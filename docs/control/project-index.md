@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/visitor_ratelimit_hardening/feature.md`
-- 本轮结论：审计 Finding 1 加固：访客 Cookie 签名化（security.py 新增通用 sign_value/verify_signed_value，get_resource_owner 验签 fail-closed 重新签发，伪造值进不了 owner/限流键/存储路径）；sessions 三端点为匿名 owner 追加对端 IP 维度兜底限流（不读 XFF，默认 visitor 限额 ×5）；InMemoryLLMRateLimiter 与 AuthRateLimiter 改有界 OrderedDict + LRU 淘汰（RATE_LIMITER_MAX_KEYS=10000，含 Redis 降级路径与零容量误配兜底）。旧版未签名 Cookie 一律重签，匿名访客历史会话失联（已记录权衡）。
-- 当前主要阻塞：审计后续批次待排：Finding 2 媒体上传整包读内存且无限流、Finding 4 AUTH_JWT_SECRET 密钥分离、Finding 5 auth 限流反代头处理；前端 eslint 引入批次、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
-- 补充进展：uv run pytest tests 249 passed / 2 skipped；ruff check api tests tools All checks passed；black --check api tests tools 115 files unchanged；agent_ops check 与 render 通过。
+- 最新归档：`docs/features/media_upload_stream_guard/feature.md`
+- 本轮结论：审计 Finding 2 修复：新增纯 ASGI BodySizeLimitMiddleware（Content-Length 超限不读 body 直接 413 统一信封，chunked 逐块计数超限先发 413 再断流，双响应防护 + 哨兵异常不逃逸），先挂 body 门再挂 CORS 保证 413 带跨域头；MediaService.upload_media 改收 fileobj，asyncio.to_thread 内 64KB 分块计数超限即断（不 seek 不续读），魔法字节只读前 12 字节，StorageService Protocol 换 async_upload_fileobj（boto3 upload_fileobj 磁盘直传内存 O(1)，旧 bytes 路径删除）；上传端点接入 media_upload（20/h）+ media_upload_ip（100/h）限流，抽公共 consume_with_ip_guard 供 sessions 三端点复用（行为不变）。
+- 当前主要阻塞：R2 预签名直传（浏览器直传）另行立项；审计 Finding 4 密钥分离、Finding 5 auth 限流反代头待排；系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
+- 补充进展：uv run pytest tests 267 passed / 2 skipped；ruff check api tests tools All checks passed；black --check api tests tools 116 files unchanged；agent_ops check 与 render 通过。注意 .gitignore tests/* 规则：tests/common/test_middleware.py 与 tests/services/test_media_service.py 需 git add -f 入库。
 
 ## 模块看板
 
@@ -66,6 +66,7 @@
 | CI 覆盖率与 lint 门禁 | `ci_coverage_lint_gates` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | black 格式化门禁 | `black_formatting` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 访客身份与限流加固 | `visitor_ratelimit_hardening` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 上传流式校验与请求体大小门 | `media_upload_stream_guard` | `feature_test_passed` | `feature_test_passed` | `module/media_upload` |
 
 ## 测试门
 

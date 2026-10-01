@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, BinaryIO
 
 from fastapi.concurrency import run_in_threadpool
 
@@ -11,23 +11,29 @@ class R2StorageService:
     def __init__(self) -> None:
         self._client: Any | None = None
 
-    def upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
+    def upload_fileobj(self, *, key: str, fileobj: BinaryIO, content_type: str) -> None:
+        """boto3 upload_fileobj 直传：超过 multipart 阈值的 body 自动分片。
+
+        文件从磁盘 spool 直接进网络，全程不读进进程内存（内存 O(1)）；
+        multipart 相比 put_object 多 1-2 个 RTT，是换取内存有界的代价
+        （任务 design 第 7 节权衡）。R2 兼容 S3 API，multipart 生效。
+        """
         try:
             client = self._get_client()
-            client.put_object(
+            client.upload_fileobj(
+                Fileobj=fileobj,
                 Bucket=settings.r2_bucket,
                 Key=key,
-                Body=content,
-                ContentType=content_type,
+                ExtraArgs={"ContentType": content_type},
             )
         except StorageError:
             raise
         except Exception as exc:  # pragma: no cover - network call
             raise StorageError("Failed to upload media to object storage") from exc
 
-    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
+    async def async_upload_fileobj(self, *, key: str, fileobj: BinaryIO, content_type: str) -> None:
         await run_in_threadpool(
-            self.upload_bytes, key=key, content=content, content_type=content_type
+            self.upload_fileobj, key=key, fileobj=fileobj, content_type=content_type
         )
 
     def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:

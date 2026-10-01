@@ -2,18 +2,28 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from datetime import datetime, timezone
+from typing import BinaryIO
 
 import pytest
 from fastapi.testclient import TestClient
 
-from api.common.exceptions import NotFoundError
-from api.models.media_model import Media
+from api.common.exceptions import AuthenticationError, NotFoundError
+from api.core.config import settings
 from api.main import app
+from api.models.media_model import Media
+from api.models.user_model import User
+from api.services.llm_rate_limit import (
+    InMemoryLLMRateLimiter,
+    LLMRateLimitRule,
+    get_llm_rate_limiter,
+)
 
 try:
+    from api.routes.v1.auth import get_auth_service
     from api.routes.v1.media import get_media_service
     from api.services.media_service import MediaService
 except ImportError:  # pragma: no cover - expected during red phase
+    get_auth_service = None
     get_media_service = None
     MediaService = None
 
@@ -30,11 +40,18 @@ PNG_BYTES = (
 
 
 class FakeStorageService:
+    """fileobj 契约替身：记录 storage 收到的完整内容与 content_type。"""
+
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.content_types: dict[str, str] = {}
 
-    async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
-        self.objects[key] = content
+    async def async_upload_fileobj(
+        self, *, key: str, fileobj: BinaryIO, content_type: str
+    ) -> None:
+        # 服务侧校验通过后已 seek(0)，这里读到的是完整文件内容。
+        self.objects[key] = fileobj.read()
+        self.content_types[key] = content_type
 
     async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
         expires_at = datetime(2026, 4, 2, 12, 0, tzinfo=timezone.utc)
@@ -74,6 +91,10 @@ def client(fake_media_repository: FakeMediaRepository) -> Iterator[TestClient]:
             storage=FakeStorageService(),
             repository=fake_media_repository,
         )
+    # 每个测试用独立限流器，与 lru_cache 的全局实例隔离，避免用例间计数串扰；
+    # 注意必须绑定单例再进 lambda：在 lambda 内构造会让每次请求都拿到新实例。
+    limiter = InMemoryLLMRateLimiter()
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
 
     with TestClient(app) as test_client:
         yield test_client
@@ -90,6 +111,8 @@ def override_media_service(
             repository=fake_media_repository,
             max_file_size=max_file_size,
         )
+    limiter = InMemoryLLMRateLimiter()
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
 
 
 def test_upload_image_returns_media_metadata(client: TestClient) -> None:
@@ -236,3 +259,87 @@ def test_upload_assigns_visitor_cookie_when_request_is_anonymous(client: TestCli
     assert set_cookie
     assert "echowhale_visitor_id=" in set_cookie
     assert response.json()["data"]["storage_key"].startswith("media/visitor/")
+
+
+class FakeAuthService:
+    def get_current_user(self, *, access_token: str) -> User:
+        if access_token != "valid-access-token":
+            raise AuthenticationError("Authentication required")
+        return User(id="user_123", email="learner@example.com", nickname="Echo Learner")
+
+
+def override_auth_service() -> None:
+    if get_auth_service is not None:
+        app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
+
+
+def test_upload_returns_429_when_owner_quota_exceeded(client: TestClient) -> None:
+    """owner（visitor/账号）键打满后返回 429 统一信封（code 1006）。"""
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "media_upload": LLMRateLimitRule(limit=1, window_seconds=3600),
+            "media_upload_ip": LLMRateLimitRule(limit=100, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # 同一 TestClient 持久化 Cookie：两次上传同一 visitor 身份，第二次撞 owner 键。
+    first = client.post(
+        "/api/v1/media/upload",
+        files={"file": ("latte.png", PNG_BYTES, "image/png")},
+    )
+    second = client.post(
+        "/api/v1/media/upload",
+        files={"file": ("croissant.png", PNG_BYTES, "image/png")},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == 1006
+
+
+def test_anonymous_rotating_cookies_hit_ip_upload_limit(client: TestClient) -> None:
+    """同 IP 轮换 Cookie 刷新上传配额：visitor 键挡不住，IP 兜底键返回 429。"""
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "media_upload": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "media_upload_ip": LLMRateLimitRule(limit=2, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # TestClient 对端地址固定为 testclient：每次请求伪造新 Cookie 使
+    # visitor 键始终全新，第 3 次请求撞上 IP 限额（limit=2）。
+    responses = [
+        client.post(
+            "/api/v1/media/upload",
+            files={"file": (f"photo-{index}.png", PNG_BYTES, "image/png")},
+            headers={"Cookie": f"{settings.auth_visitor_cookie_name}=forged_{index}"},
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses[:2]] == [200, 200]
+    assert responses[2].status_code == 429
+    assert responses[2].json()["code"] == 1006
+
+
+def test_authenticated_user_bursts_do_not_hit_upload_ip_limit(client: TestClient) -> None:
+    """认证用户不受 IP 兜底键影响：IP 限额调到 1 也应连发无阻。"""
+    override_auth_service()
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "media_upload": LLMRateLimitRule(limit=10, window_seconds=3600),
+            "media_upload_ip": LLMRateLimitRule(limit=1, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    for _ in range(3):
+        response = client.post(
+            "/api/v1/media/upload",
+            files={"file": ("coffee-shop.png", PNG_BYTES, "image/png")},
+            headers=headers,
+        )
+        assert response.status_code == 200
