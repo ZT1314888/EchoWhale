@@ -91,7 +91,7 @@ def _build_coach_user_prompt(payload: CoachReplyInput) -> str:
     """把场景、上下文和最近消息整理成单个用户提示词。"""
     recent_messages = [
         f"{message.role}: {message.text}"
-        for message in payload.recent_messages[-settings.llm_coach_window_size:]
+        for message in payload.recent_messages[-settings.llm_coach_window_size :]
     ]
     return "\n".join(
         [

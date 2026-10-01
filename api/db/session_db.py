@@ -63,7 +63,6 @@ class SessionRepository(Protocol):
 
     async def get_session_review(self, session_id: str) -> SessionReview: ...
 
-
     async def list_user_sessions_page(
         self,
         user_id: str,
@@ -72,7 +71,9 @@ class SessionRepository(Protocol):
         cursor: tuple[datetime, str] | None,
     ) -> tuple[list[Session], bool, tuple[datetime, str] | None]: ...
 
-    async def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]: ...
+    async def list_session_reviews_by_ids(
+        self, session_ids: list[str]
+    ) -> dict[str, SessionReview]: ...
 
     async def get_session_head(self, session_id: str) -> Session: ...
 
@@ -286,7 +287,10 @@ class SqlAlchemySessionRepository:
                 )
             await db_session.commit()
 
-        return (await self.get_session(session.id), await self.get_session_review(review.session_id))
+        return (
+            await self.get_session(session.id),
+            await self.get_session_review(review.session_id),
+        )
 
     async def save_session_review(self, review: SessionReview) -> SessionReview:
         async with self._session_factory() as db_session:
@@ -334,9 +338,9 @@ class SqlAlchemySessionRepository:
                 )
             records = (
                 await db_session.scalars(
-                    statement
-                    .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
-                    .limit(limit + 1)
+                    statement.order_by(
+                        SessionRecord.updated_at.desc(), SessionRecord.id.desc()
+                    ).limit(limit + 1)
                 )
             ).all()
             has_more = len(records) > limit
@@ -354,7 +358,9 @@ class SqlAlchemySessionRepository:
         async with self._session_factory() as db_session:
             records = (
                 await db_session.scalars(
-                    select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
+                    select(SessionReviewRecord).where(
+                        SessionReviewRecord.session_id.in_(session_ids)
+                    )
                 )
             ).all()
             return {record.session_id: _to_review(record) for record in records}
@@ -607,7 +613,9 @@ async def reset_session_store() -> None:
     await SqlAlchemySessionRepository().reset()
 
 
-def build_session_repository(session_factory: AsyncSessionFactory | None = None) -> SessionRepository:
+def build_session_repository(
+    session_factory: AsyncSessionFactory | None = None,
+) -> SessionRepository:
     return SqlAlchemySessionRepository(session_factory)
 
 

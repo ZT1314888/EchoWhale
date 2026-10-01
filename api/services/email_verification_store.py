@@ -130,24 +130,18 @@ class InMemoryEmailVerificationStore:
                 raise TooManyRequestsError(RATE_LIMIT_MESSAGE)
 
     def _increment_daily_count(self, key: str, now: float) -> None:
-        count, expires_at = self._daily_counts.get(key, (0, now + _seconds_until_next_shanghai_midnight(now)))
+        count, expires_at = self._daily_counts.get(
+            key, (0, now + _seconds_until_next_shanghai_midnight(now))
+        )
         self._daily_counts[key] = (count + 1, expires_at)
 
     def _prune(self, now: float) -> None:
-        self._codes = {
-            email: record
-            for email, record in self._codes.items()
-            if record[1] > now
-        }
+        self._codes = {email: record for email, record in self._codes.items() if record[1] > now}
         self._cooldowns = {
-            key: expires_at
-            for key, expires_at in self._cooldowns.items()
-            if expires_at > now
+            key: expires_at for key, expires_at in self._cooldowns.items() if expires_at > now
         }
         self._daily_counts = {
-            key: record
-            for key, record in self._daily_counts.items()
-            if record[1] > now
+            key: record for key, record in self._daily_counts.items() if record[1] > now
         }
 
 

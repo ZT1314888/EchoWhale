@@ -96,9 +96,7 @@ def _load_grayscale_pixels(content: bytes) -> tuple[list[int], int, int] | None:
             if pixels is None:
                 return None
             grayscale_values = [
-                pixels[column, row]
-                for row in range(height)
-                for column in range(width)
+                pixels[column, row] for row in range(height) for column in range(width)
             ]
             return (grayscale_values, width, height)
     except (UnidentifiedImageError, OSError):

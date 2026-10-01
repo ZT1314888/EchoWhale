@@ -78,7 +78,9 @@ async def proxy_deepgram_think_chat_completions(
     try:
         payload = await request.json()
     except JSONDecodeError:
-        logger.warning("Deepgram think proxy received invalid JSON payload for session=%s", session_id)
+        logger.warning(
+            "Deepgram think proxy received invalid JSON payload for session=%s", session_id
+        )
         return _error_response(
             status_code=400,
             message="Invalid proxy request payload",

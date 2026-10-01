@@ -109,6 +109,7 @@ class SceneEngineAgent:
             )
         return result
 
+
 def _compose_scene_failures(failures: list[tuple[str, Exception]]) -> EchoWhaleError:
     """把主备 provider 的失败原因归并成可对外暴露的统一错误。"""
     errors = [error for _, error in failures]

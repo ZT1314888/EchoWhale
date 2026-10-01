@@ -17,9 +17,13 @@ class AuthRateLimitRule:
 
 
 DEFAULT_AUTH_RATE_LIMITS: dict[str, AuthRateLimitRule] = {
-    "register": AuthRateLimitRule(5, 300, "Too many registration attempts. Please try again later."),
+    "register": AuthRateLimitRule(
+        5, 300, "Too many registration attempts. Please try again later."
+    ),
     "login": AuthRateLimitRule(8, 300, "Too many login attempts. Please try again later."),
-    "refresh": AuthRateLimitRule(20, 300, "Too many session refresh attempts. Please try again later."),
+    "refresh": AuthRateLimitRule(
+        20, 300, "Too many session refresh attempts. Please try again later."
+    ),
     "resend_verification": AuthRateLimitRule(
         5,
         300,

@@ -87,7 +87,9 @@ def create_async_database_engine(database_url: str) -> AsyncEngine:
 
 
 def create_async_session_factory(engine: AsyncEngine) -> AsyncSessionFactory:
-    factory = async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, class_=AsyncSession)
+    factory = async_sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False, class_=AsyncSession
+    )
     return factory
 
 

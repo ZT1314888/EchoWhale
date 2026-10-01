@@ -85,7 +85,9 @@ class SessionEngineService:
         payload = ReplyInput(session_id=session_id, learner_message=learner_message)
         return self.agent.stream_reply(payload)
 
-    async def get_session_review(self, session_id: str, owner_id: str | None = None) -> SessionReview:
+    async def get_session_review(
+        self, session_id: str, owner_id: str | None = None
+    ) -> SessionReview:
         """读取会话复盘前先校验访问者是否拥有该会话。"""
         self._ensure_owner(await self.agent.get(session_id), owner_id)
         return await self.agent.get_review(session_id)
@@ -135,7 +137,9 @@ class SessionEngineService:
             cursor=cursor,
         )
 
-    async def get_history_session_detail(self, user_id: str, session_id: str) -> tuple[Session, SessionReview]:
+    async def get_history_session_detail(
+        self, user_id: str, session_id: str
+    ) -> tuple[Session, SessionReview]:
         """返回历史会话详情页需要的会话体和复盘内容。"""
         session = self._ensure_owner(await self.agent.get(session_id), user_id)
         return (session, await self.agent.get_review(session_id))

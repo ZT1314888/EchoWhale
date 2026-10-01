@@ -51,7 +51,11 @@ def test_check_workspace_reports_invalid_status_value(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("artifact_type", "slug", "expected_path"),
     [
-        ("feature", "agent_governance_control_plane", "docs/features/agent_governance_control_plane/feature.md"),
+        (
+            "feature",
+            "agent_governance_control_plane",
+            "docs/features/agent_governance_control_plane/feature.md",
+        ),
         ("bug", "control-plane-drift", "docs/bugs/control-plane-drift/bug.md"),
     ],
 )

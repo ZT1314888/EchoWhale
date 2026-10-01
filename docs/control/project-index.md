@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/ci_coverage_lint_gates/feature.md`
-- 本轮结论：第七批门禁补齐：gh CLI 确认 dev 首跑 Actions 双 job 全绿后，接入 ruff 门禁（extend-select I/B/UP/RUF/SIM/TRY/FURB/DTZ/BLE，FastAPI DI 豁免 + 仓库约定豁免带理由，189→0：154 自动修 + 8 处人工裁决，pytest 全绿验证无副作用）与 vitest coverage 阈值（@vitest/coverage-v8@3.2.4，基线 79.07/76.54/82.15/79.07 下方 2-3 点设防），CI backend 增 Lint 步骤、frontend 改跑 coverage、checkout/setup-node 升 v5 消除弃用注记。决策：black 全量格式化（65 文件漂移）与前端 eslint 引入各自单独排批。
-- 当前主要阻塞：black 格式化批次与 eslint 引入批次待排；内联分析路径进度真实化、语音逐轮反馈（后端管线）、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
-- 补充进展：ruff All checks passed；tsc 0 error；vitest 108 passed；coverage Stmts 79.07/Branch 76.54/Funcs 82.15/Lines 79.07 均超阈值；pytest 224 passed / 2 skipped。
+- 最新归档：`docs/features/black_formatting/feature.md`
+- 本轮结论：第八批格式化门禁：pyproject 增加 [tool.black]（line-length=100 与 ruff 对齐），uv run black 全量重排 api/tests/tools（默认 88 口径实测 51 文件漂移，对齐后 25 文件漂移/90 不变，纯机械 diff），复跑全部门禁数字与基线逐项一致（pytest 224 passed+2 skipped、ruff All checks passed、tsc 0 error、vitest 108 passed、coverage 79.07/76.54/82.15/79.07），CI backend 在 Lint 步骤旁增加 Format (black) --check 门禁。
+- 当前主要阻塞：前端 eslint 引入批次待排；内联分析路径进度真实化、语音逐轮反馈（后端管线）、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。
+- 补充进展：black --check api tests tools 零漂移（115 files unchanged）；ruff All checks passed；tsc 0 error；vitest 108 passed；coverage Stmts 79.07/Branch 76.54/Funcs 82.15/Lines 79.07 均超阈值；pytest 224 passed / 2 skipped。
 
 ## 模块看板
 
@@ -64,6 +64,7 @@
 | 前端质量门禁 | `frontend_quality_gates` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 | 等待体验与反馈统一 | `frontend_wait_ux_feedback_unification` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 | CI 覆盖率与 lint 门禁 | `ci_coverage_lint_gates` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| black 格式化门禁 | `black_formatting` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 

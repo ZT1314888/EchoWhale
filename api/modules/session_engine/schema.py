@@ -69,7 +69,9 @@ class VoiceCompleteInput(BaseModel):
 
     @field_validator("conversation")
     @classmethod
-    def validate_conversation(cls, value: list[VoiceConversationTurn]) -> list[VoiceConversationTurn]:
+    def validate_conversation(
+        cls, value: list[VoiceConversationTurn]
+    ) -> list[VoiceConversationTurn]:
         """阻止空 transcript 进入语音收口流程。"""
         if not value:
             raise ValueError("Conversation cannot be empty")

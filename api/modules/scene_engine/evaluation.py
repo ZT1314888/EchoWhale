@@ -110,9 +110,13 @@ def evaluate_scene_output(
             vocab_value_pass=False,
             judge_result=None,
             final_pass=outcome_matches,
-            failure_reason="" if outcome_matches else (
-                failure_reason
-                or f"outcome mismatch: expected {case.expected_outcome}, got {actual_outcome}"
+            failure_reason=(
+                ""
+                if outcome_matches
+                else (
+                    failure_reason
+                    or f"outcome mismatch: expected {case.expected_outcome}, got {actual_outcome}"
+                )
             ),
         )
 
@@ -197,9 +201,10 @@ class SceneOutputJudge:
     def from_env(cls) -> SceneOutputJudge | None:
         """从环境变量解析评测裁判模型，缺省时返回空。"""
         provider = (
-            os.getenv("SCENE_EVAL_JUDGE_PROVIDER")
-            or settings.text_primary_provider
-        ).strip().lower()
+            (os.getenv("SCENE_EVAL_JUDGE_PROVIDER") or settings.text_primary_provider)
+            .strip()
+            .lower()
+        )
         if provider in {"", "mock"}:
             return None
 
@@ -207,8 +212,7 @@ class SceneOutputJudge:
         api_key = os.getenv("SCENE_EVAL_JUDGE_API_KEY") or settings.text_primary_api_key
         model = os.getenv("SCENE_EVAL_JUDGE_MODEL") or settings.text_primary_model
         timeout_seconds = int(
-            os.getenv("SCENE_EVAL_JUDGE_TIMEOUT_SECONDS")
-            or settings.text_primary_timeout_seconds
+            os.getenv("SCENE_EVAL_JUDGE_TIMEOUT_SECONDS") or settings.text_primary_timeout_seconds
         )
         if not base_url or not model:
             return None

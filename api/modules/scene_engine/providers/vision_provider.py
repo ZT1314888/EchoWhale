@@ -93,8 +93,7 @@ class OpenAICompatibleVisionProvider:
     async def analyze(self, payload: SceneAnalysisInput) -> SceneAnalysisResult:
         """调用兼容 OpenAI 的视觉模型，并把返回值收敛成统一 schema。"""
         user_prompt = (
-            "Return one JSON object for this image. "
-            f"Filename hint (weak): {payload.filename}"
+            "Return one JSON object for this image. " f"Filename hint (weak): {payload.filename}"
         )
         try:
             raw = await self.client.async_analyze_image(
@@ -111,9 +110,7 @@ class OpenAICompatibleVisionProvider:
                 raise ModelProviderError(
                     f"Vision provider rejected request with status {status_code}"
                 ) from exc
-            raise ModelProviderError(
-                f"Vision provider failed with status {status_code}"
-            ) from exc
+            raise ModelProviderError(f"Vision provider failed with status {status_code}") from exc
         except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:  # pragma: no cover
             raise ModelProviderError("Vision provider failed to analyze image") from exc
         except Exception as exc:  # pragma: no cover - live provider path

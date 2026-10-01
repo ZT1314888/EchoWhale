@@ -122,15 +122,27 @@ async def bootstrap_voice_session(
     bootstrap = await session_service.bootstrap_voice_session(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(
         data=VoiceBootstrapResponse(
-            session_id=bootstrap["session_id"] if isinstance(bootstrap, dict) else bootstrap.session_id,
-            deepgram_access_token=bootstrap["deepgram_access_token"]
-            if isinstance(bootstrap, dict)
-            else bootstrap.deepgram_access_token,
-            expires_in=bootstrap["expires_in"] if isinstance(bootstrap, dict) else bootstrap.expires_in,
-            deepgram_ws_url=bootstrap["deepgram_ws_url"]
-            if isinstance(bootstrap, dict)
-            else bootstrap.deepgram_ws_url,
-            agent_settings=bootstrap["agent_settings"] if isinstance(bootstrap, dict) else bootstrap.agent_settings,
+            session_id=(
+                bootstrap["session_id"] if isinstance(bootstrap, dict) else bootstrap.session_id
+            ),
+            deepgram_access_token=(
+                bootstrap["deepgram_access_token"]
+                if isinstance(bootstrap, dict)
+                else bootstrap.deepgram_access_token
+            ),
+            expires_in=(
+                bootstrap["expires_in"] if isinstance(bootstrap, dict) else bootstrap.expires_in
+            ),
+            deepgram_ws_url=(
+                bootstrap["deepgram_ws_url"]
+                if isinstance(bootstrap, dict)
+                else bootstrap.deepgram_ws_url
+            ),
+            agent_settings=(
+                bootstrap["agent_settings"]
+                if isinstance(bootstrap, dict)
+                else bootstrap.agent_settings
+            ),
             session=SessionResponse.from_session(
                 bootstrap["session"] if isinstance(bootstrap, dict) else bootstrap.session
             ),

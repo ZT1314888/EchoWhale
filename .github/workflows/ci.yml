@@ -32,6 +32,9 @@ jobs:
       - name: Lint (ruff)
         run: uv run ruff check api tests tools
 
+      - name: Format (black)
+        run: uv run black --check api tests tools
+
       - name: Prepare sqlite schema for app-level routes
         run: |
           uv run python - <<'PY'

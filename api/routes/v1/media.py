@@ -67,6 +67,7 @@ async def get_media_access_url(
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
+
 def get_media_repository() -> MediaRepository:
     return build_media_repository()
 

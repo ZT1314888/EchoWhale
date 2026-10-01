@@ -38,9 +38,7 @@ class CoachEngineAgent:
 
     async def run(self, payload: CoachReplyInput) -> CoachReplyResult:
         """优先调用主 provider：瞬时错误带退避重试，仍失败则退回备用 provider。"""
-        attempts = [
-            LLMAttempt("text_primary", lambda: self.primary_provider.reply(payload))
-        ]
+        attempts = [LLMAttempt("text_primary", lambda: self.primary_provider.reply(payload))]
         if self.fallback_provider is not self.primary_provider:
             attempts.append(
                 LLMAttempt("text_fallback", lambda: self.fallback_provider.reply(payload))

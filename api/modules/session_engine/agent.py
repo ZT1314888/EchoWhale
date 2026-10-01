@@ -127,7 +127,9 @@ class SessionEngineAgent:
             return scene_result_from_snapshot(snapshot)
         except (TypeError, ValueError) as exc:
             # 缓存行损坏时自愈：放弃命中，走重分析并覆写缓存。
-            logger.warning("scene_analysis_cache_snapshot_invalid media_id=%s error=%s", media_id, exc)
+            logger.warning(
+                "scene_analysis_cache_snapshot_invalid media_id=%s error=%s", media_id, exc
+            )
             return None
 
     async def _dispatch_scene_analysis(self, media_id: str) -> bool:
@@ -309,10 +311,12 @@ class SessionEngineAgent:
     ) -> tuple[list[Session], bool, str | None]:
         """把仓储层游标编码成可通过 API 透传的字符串。"""
         cursor_value = _decode_history_cursor(cursor)
-        sessions, has_more, next_cursor_value = await self.session_repository.list_user_sessions_page(
-            user_id,
-            limit=limit,
-            cursor=cursor_value,
+        sessions, has_more, next_cursor_value = (
+            await self.session_repository.list_user_sessions_page(
+                user_id,
+                limit=limit,
+                cursor=cursor_value,
+            )
         )
         next_cursor = _encode_history_cursor(next_cursor_value) if next_cursor_value else None
         return (sessions, has_more, next_cursor)
@@ -323,7 +327,9 @@ class SessionEngineAgent:
             return {}
         return await self.session_repository.list_session_reviews_by_ids(session_ids)
 
-    async def get_history_session_overview(self, session_id: str) -> tuple[Session, SessionReview, int]:
+    async def get_history_session_overview(
+        self, session_id: str
+    ) -> tuple[Session, SessionReview, int]:
         """并发聚合历史会话头信息、复盘和消息总数。"""
         session, review, total_messages = await asyncio.gather(
             self.get_session_head(session_id),
@@ -399,7 +405,9 @@ class SessionEngineAgent:
             updated_session.vocab_candidates,
         )
         review = build_session_review(updated_session, feedback)
-        existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(payload.session_id)
+        existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(
+            payload.session_id
+        )
         voice_fact = VoiceSessionFact(
             session_id=payload.session_id,
             status="completed",
@@ -441,6 +449,7 @@ class SessionEngineAgent:
             events=events,
         )
         return VoiceCompleteResult(session=stored_session, review=stored_review)
+
 
 def _build_reply_turn(
     session_head: Session,

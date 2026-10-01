@@ -123,11 +123,15 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         payload = self._build_image_payload(system_prompt, user_prompt, image_url)
         return self._post_chat_completion(payload)
 
-    async def async_analyze_image(self, *, system_prompt: str, user_prompt: str, image_url: str) -> str:
+    async def async_analyze_image(
+        self, *, system_prompt: str, user_prompt: str, image_url: str
+    ) -> str:
         payload = self._build_image_payload(system_prompt, user_prompt, image_url)
         return await self._async_post_chat_completion(payload)
 
-    def _build_image_payload(self, system_prompt: str, user_prompt: str, image_url: str) -> dict[str, object]:
+    def _build_image_payload(
+        self, system_prompt: str, user_prompt: str, image_url: str
+    ) -> dict[str, object]:
         return {
             "model": self.model,
             "messages": [
@@ -173,7 +177,9 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
     async def _async_post_chat_completion(self, payload: dict[str, object]) -> str:
         headers = self._get_headers()
         if self._transport is not None:
-            async with httpx.AsyncClient(timeout=self.timeout_seconds, transport=self._transport) as client:
+            async with httpx.AsyncClient(
+                timeout=self.timeout_seconds, transport=self._transport
+            ) as client:
                 response = await client.post(
                     urljoin(self.base_url, "chat/completions"),
                     headers=headers,

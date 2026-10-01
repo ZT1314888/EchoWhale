@@ -21,7 +21,9 @@ from api.models.media_model import Media, MediaAccessGrant, MediaUploadResult
 class StorageService(Protocol):
     async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None: ...
 
-    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]: ...
+    async def async_create_signed_read_url(
+        self, key: str, *, expires_in: int
+    ) -> tuple[str, datetime]: ...
 
 
 class MediaService:
@@ -90,7 +92,9 @@ class MediaService:
         self._ensure_owner(media, owner_id)
         return media
 
-    async def create_media_access_url(self, media_id: str, *, owner_id: str | None = None) -> MediaAccessGrant:
+    async def create_media_access_url(
+        self, media_id: str, *, owner_id: str | None = None
+    ) -> MediaAccessGrant:
         media = await self.repository.get_media(media_id)
         self._ensure_owner(media, owner_id)
         read_url, expires_at = await self.storage.async_create_signed_read_url(

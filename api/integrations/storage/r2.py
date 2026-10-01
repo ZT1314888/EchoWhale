@@ -26,7 +26,9 @@ class R2StorageService:
             raise StorageError("Failed to upload media to object storage") from exc
 
     async def async_upload_bytes(self, *, key: str, content: bytes, content_type: str) -> None:
-        await run_in_threadpool(self.upload_bytes, key=key, content=content, content_type=content_type)
+        await run_in_threadpool(
+            self.upload_bytes, key=key, content=content, content_type=content_type
+        )
 
     def create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
         try:
@@ -46,7 +48,9 @@ class R2StorageService:
             raise StorageError("Failed to create signed media access URL") from exc
         return (url, expires_at)
 
-    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
+    async def async_create_signed_read_url(
+        self, key: str, *, expires_in: int
+    ) -> tuple[str, datetime]:
         return await run_in_threadpool(self.create_signed_read_url, key=key, expires_in=expires_in)
 
     def delete_object(self, key: str) -> None:

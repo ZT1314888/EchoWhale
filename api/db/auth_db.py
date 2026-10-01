@@ -23,17 +23,13 @@ class AuthRepository(Protocol):
 
     def update_last_login(self, user_id: str, logged_in_at: datetime) -> None: ...
 
-    def update_user_status(
-        self, user_id: str, status: str, updated_at: datetime
-    ) -> None: ...
+    def update_user_status(self, user_id: str, status: str, updated_at: datetime) -> None: ...
 
     def update_password_hash(
         self, user_id: str, password_hash: str, updated_at: datetime
     ) -> None: ...
 
-    def save_refresh_token(
-        self, token: RefreshTokenRecordModel
-    ) -> RefreshTokenRecordModel: ...
+    def save_refresh_token(self, token: RefreshTokenRecordModel) -> RefreshTokenRecordModel: ...
 
     def revoke_all_refresh_tokens(self, user_id: str, revoked_at: datetime) -> None: ...
 
@@ -89,9 +85,7 @@ class UserCredentialRecord(Base):
     )
     provider: Mapped[str] = mapped_column(String(32))
     password_hash: Mapped[str] = mapped_column(String(512))
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
@@ -107,9 +101,7 @@ class RefreshTokenRecord(Base):
     )
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -125,9 +117,7 @@ class AuthActionTokenRecord(Base):
     purpose: Mapped[str] = mapped_column(String(64), index=True)
     token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
-    consumed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -205,9 +195,7 @@ class SqlAlchemyAuthRepository:
             credential.updated_at = logged_in_at
             session.commit()
 
-    def update_user_status(
-        self, user_id: str, status: str, updated_at: datetime
-    ) -> None:
+    def update_user_status(self, user_id: str, status: str, updated_at: datetime) -> None:
         with self._session_factory() as session:
             user = session.get(UserRecord, user_id)
             if user is None:
@@ -216,9 +204,7 @@ class SqlAlchemyAuthRepository:
             user.updated_at = updated_at
             session.commit()
 
-    def update_password_hash(
-        self, user_id: str, password_hash: str, updated_at: datetime
-    ) -> None:
+    def update_password_hash(self, user_id: str, password_hash: str, updated_at: datetime) -> None:
         with self._session_factory() as session:
             credential = session.scalar(
                 select(UserCredentialRecord).where(
@@ -232,9 +218,7 @@ class SqlAlchemyAuthRepository:
             credential.updated_at = updated_at
             session.commit()
 
-    def save_refresh_token(
-        self, token: RefreshTokenRecordModel
-    ) -> RefreshTokenRecordModel:
+    def save_refresh_token(self, token: RefreshTokenRecordModel) -> RefreshTokenRecordModel:
         with self._session_factory() as session:
             session.merge(
                 RefreshTokenRecord(
@@ -265,9 +249,7 @@ class SqlAlchemyAuthRepository:
     def get_refresh_token(self, token_hash: str) -> RefreshTokenRecordModel | None:
         with self._session_factory() as session:
             record = session.scalar(
-                select(RefreshTokenRecord).where(
-                    RefreshTokenRecord.token_hash == token_hash
-                )
+                select(RefreshTokenRecord).where(RefreshTokenRecord.token_hash == token_hash)
             )
             if record is None:
                 return None
@@ -298,9 +280,7 @@ class SqlAlchemyAuthRepository:
     ) -> str | None:
         with self._session_factory() as session:
             record = session.scalar(
-                select(RefreshTokenRecord).where(
-                    RefreshTokenRecord.token_hash == token_hash
-                )
+                select(RefreshTokenRecord).where(RefreshTokenRecord.token_hash == token_hash)
             )
             if (
                 record is None
@@ -376,9 +356,7 @@ class SqlAlchemyAuthRepository:
     ) -> AuthActionTokenModel | None:
         with self._session_factory() as session:
             record = session.scalar(
-                select(AuthActionTokenRecord).where(
-                    AuthActionTokenRecord.token_hash == token_hash
-                )
+                select(AuthActionTokenRecord).where(AuthActionTokenRecord.token_hash == token_hash)
             )
             if (
                 record is None

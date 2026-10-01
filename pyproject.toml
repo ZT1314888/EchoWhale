@@ -46,3 +46,7 @@ ignore = ["RUF001", "RUF002", "RUF003", "TRY003", "UP042", "UP046", "UP047"]
 [tool.ruff.lint.flake8-bugbear]
 # FastAPI 依赖注入标记在参数默认值里是官方推荐写法，不属于可变默认值。
 extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
+
+[tool.black]
+# 与 [tool.ruff] 的 line-length 对齐，减少两者互相重排的 diff。
+line-length = 100
