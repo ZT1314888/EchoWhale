@@ -7,7 +7,6 @@ from api.models.review_model import (
 from api.models.session_model import Session
 from api.modules.feedback_engine.schema import FeedbackResult
 
-
 SCENE_COPY = {
     "coffee_shop": {
         "scene_title": "咖啡店柜台点单",

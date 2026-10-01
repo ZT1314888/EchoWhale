@@ -13,7 +13,6 @@ from tools.agent_ops import (
     render_project_index,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -87,7 +86,7 @@ def test_current_workspace_control_plane_is_consistent() -> None:
 def _create_minimal_workspace(workspace: Path) -> Path:
     _write(
         workspace / "docs" / "control" / "project-index.md",
-        "\n".join(
+        "\n".join(  # noqa: FLY002 - 模板按行列举更贴近产出文件的可读性
             [
                 "# Control",
                 "",

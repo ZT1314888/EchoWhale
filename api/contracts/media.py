@@ -24,7 +24,7 @@ class MediaResponse(BaseModel):
         *,
         preview_url: str | None = None,
         preview_url_expires_at: datetime | None = None,
-    ) -> "MediaResponse":
+    ) -> MediaResponse:
         return cls(
             media_id=media.id,
             filename=media.filename,
@@ -37,7 +37,7 @@ class MediaResponse(BaseModel):
         )
 
     @classmethod
-    def from_upload_result(cls, result: MediaUploadResult) -> "MediaResponse":
+    def from_upload_result(cls, result: MediaUploadResult) -> MediaResponse:
         return cls.from_media(
             result.media,
             preview_url=result.preview_url,
@@ -63,7 +63,7 @@ class MediaAccessResponse(BaseModel):
     expires_at: datetime
 
     @classmethod
-    def from_access_grant(cls, grant: MediaAccessGrant) -> "MediaAccessResponse":
+    def from_access_grant(cls, grant: MediaAccessGrant) -> MediaAccessResponse:
         return cls(
             media_id=grant.media_id,
             read_url=grant.read_url,

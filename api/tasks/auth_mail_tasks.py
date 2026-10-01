@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from api.models.user_model import User
-from api.services.auth_mailer import AuthMailDelivery
-from api.services.auth_mailer import SmtpAuthMailer
+from api.services.auth_mailer import AuthMailDelivery, SmtpAuthMailer
 
 
 def send_verification_email_task(*, delivery: dict[str, object] | AuthMailDelivery) -> None:

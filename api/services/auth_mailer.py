@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+import logging
+import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 from functools import lru_cache
-import logging
-import smtplib
 from typing import Protocol
 
 from api.common.exceptions import EmailDeliveryError
 from api.core.config import settings
 from api.models.user_model import User
-
 
 logger = logging.getLogger(__name__)
 

@@ -6,14 +6,11 @@ from urllib.parse import urljoin
 
 from deepgram import DeepgramClient
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import VoiceTokenError
+from api.common.exceptions import ConfigurationError, VoiceTokenError
 from api.core.config import settings
-from api.core.security import create_service_token
-from api.core.security import decode_service_token
+from api.core.security import create_service_token, decode_service_token
 from api.models.message_model import Message
 from api.models.session_model import Session
-
 
 logger = logging.getLogger(__name__)
 DEEPGRAM_THINK_PROXY_PATH = "/api/v1/deepgram/think/chat/completions"

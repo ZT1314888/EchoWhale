@@ -12,7 +12,6 @@ from api.core.security import generate_visitor_id
 from api.models.user_model import User
 from api.services.auth_service import AuthService, get_auth_service
 
-
 AuthorizationHeader = Annotated[str | None, Header()]
 VisitorCookie = Annotated[str | None, Cookie(alias=settings.auth_visitor_cookie_name)]
 RefreshCookie = Annotated[str | None, Cookie(alias=settings.auth_refresh_cookie_name)]

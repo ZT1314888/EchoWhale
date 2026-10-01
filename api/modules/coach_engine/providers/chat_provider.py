@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from api.common.exceptions import ConfigurationError
 from api.common.exceptions import ModelProviderError
 from api.core.config import settings
 from api.integrations.llm.base import TextStream

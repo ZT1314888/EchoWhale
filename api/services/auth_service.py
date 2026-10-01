@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import re
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 from uuid import uuid4
+
+from sqlalchemy.exc import IntegrityError
 
 from api.common.exceptions import (
     AuthenticationError,
@@ -29,14 +31,11 @@ from api.models.auth_token_model import (
     AuthActionTokenModel,
 )
 from api.models.user_model import RefreshTokenRecordModel, User
-from api.services.auth_mail_queue import AuthMailQueuePublisher
-from api.services.auth_mail_queue import get_auth_mail_queue_publisher
+from api.services.auth_mail_queue import AuthMailQueuePublisher, get_auth_mail_queue_publisher
 from api.services.email_verification_store import (
     EmailVerificationStore,
     get_email_verification_store,
 )
-from sqlalchemy.exc import IntegrityError
-
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -86,7 +85,7 @@ class AuthService:
         if not verify_password(password, password_hash):
             raise AuthenticationError("Invalid email or password")
 
-        self.repository.update_last_login(user.id, datetime.now(timezone.utc))
+        self.repository.update_last_login(user.id, datetime.now(UTC))
         return self._issue_session(user)
 
     def get_current_user(self, *, access_token: str) -> User:
@@ -101,7 +100,7 @@ class AuthService:
     def refresh(self, *, refresh_token: str) -> AuthSession:
         token_hash = hash_refresh_token(refresh_token)
         rotated_refresh_token = generate_refresh_token()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         replacement_token = RefreshTokenRecordModel(
             id=f"rt_{uuid4().hex[:12]}",
             user_id="",
@@ -151,7 +150,7 @@ class AuthService:
         if user.status != "pending_verification":
             raise ValidationError("Verification code is invalid or expired")
         self.verification_store.consume_code(email=normalized_email, code=code.strip())
-        activated_at = datetime.now(timezone.utc)
+        activated_at = datetime.now(UTC)
         self.repository.update_user_status(user.id, "active", activated_at)
         user.status = "active"
         user.updated_at = activated_at
@@ -173,7 +172,7 @@ class AuthService:
         )
         user = self.repository.get_user_by_id(stored_token.user_id)
         self._ensure_user_is_active(user)
-        updated_at = datetime.now(timezone.utc)
+        updated_at = datetime.now(UTC)
         self.repository.update_password_hash(
             user.id,
             hash_password(normalized_password),
@@ -186,11 +185,11 @@ class AuthService:
         stored_token = self.repository.get_refresh_token(token_hash)
         if stored_token is None:
             raise AuthenticationError("Authentication required")
-        self.repository.revoke_refresh_token(stored_token.id, datetime.now(timezone.utc))
+        self.repository.revoke_refresh_token(stored_token.id, datetime.now(UTC))
 
     def _issue_session(self, user: User) -> AuthSession:
         refresh_token = generate_refresh_token()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.repository.save_refresh_token(
             RefreshTokenRecordModel(
                 id=f"rt_{uuid4().hex[:12]}",
@@ -255,7 +254,7 @@ class AuthService:
         purpose: str,
         error_message: str,
     ) -> AuthActionTokenModel:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stored_token = self.repository.consume_auth_action_token(
             token_hash=hash_action_token(token),
             purpose=purpose,
@@ -277,7 +276,7 @@ class AuthService:
 
     def _issue_password_reset(self, user: User) -> None:
         token = generate_action_token()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         self.repository.replace_auth_action_token(
             AuthActionTokenModel(
                 id=f"prt_{uuid4().hex[:12]}",
@@ -302,8 +301,8 @@ class AuthService:
 
     def _as_utc(self, value: datetime) -> datetime:
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
-        return value.astimezone(timezone.utc)
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 
 
 def get_auth_service() -> AuthService:

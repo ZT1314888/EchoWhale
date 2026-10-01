@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from re import sub
 from typing import Protocol
@@ -125,7 +125,7 @@ class MediaService:
 
     def _build_storage_key(self, *, user_id: str, media_id: str, filename: str) -> str:
         safe_name = self._sanitize_filename(filename)
-        today = datetime.now(timezone.utc)
+        today = datetime.now(UTC)
         return f"media/{owner_to_storage_path(user_id)}/{today:%Y/%m/%d}/{media_id}-{safe_name}"
 
     def _sanitize_filename(self, filename: str) -> str:

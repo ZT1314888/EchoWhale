@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from api.core.config import settings
 from api.integrations.llm.json_utils import parse_llm_json
-from api.integrations.llm.resilience import LLMAttempt
-from api.integrations.llm.resilience import run_llm_with_failover
-from api.integrations.llm.runtime import provider_slot_from_settings
-from api.integrations.llm.runtime import resolve_engine_providers
-from api.integrations.llm.runtime import TextCompletionProvider
+from api.integrations.llm.resilience import LLMAttempt, run_llm_with_failover
+from api.integrations.llm.runtime import (
+    TextCompletionProvider,
+    provider_slot_from_settings,
+    resolve_engine_providers,
+)
 from api.modules.coach_engine.providers.chat_provider import MockChatProvider
 from api.modules.feedback_engine.prompts.feedback_prompts import FEEDBACK_PROMPT
 from api.modules.feedback_engine.schema import FeedbackInput, FeedbackResult

@@ -31,7 +31,6 @@ from api.modules.session_engine.schema import SceneAnalysisPending
 from api.modules.session_engine.service import SessionEngineService
 from api.services.llm_rate_limit import LLMRateLimiter, get_llm_rate_limiter
 
-
 logger = logging.getLogger(__name__)
 
 

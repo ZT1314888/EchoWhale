@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
 
-
 SampleSceneId = Literal["coffee", "office", "street"]
 
 

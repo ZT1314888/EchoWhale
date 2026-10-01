@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -18,8 +18,8 @@ class Session(BaseModel):
     vocab_candidates: list[str] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
     messages: list[Message] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @model_validator(mode="after")
     def fill_compatibility_labels(self) -> "Session":

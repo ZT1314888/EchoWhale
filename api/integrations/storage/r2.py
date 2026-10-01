@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi.concurrency import run_in_threadpool
@@ -39,12 +39,12 @@ class R2StorageService:
                 },
                 ExpiresIn=expires_in,
             )
-            expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-            return (url, expires_at)
+            expires_at = datetime.now(UTC) + timedelta(seconds=expires_in)
         except StorageError:
             raise
         except Exception as exc:  # pragma: no cover - network call
             raise StorageError("Failed to create signed media access URL") from exc
+        return (url, expires_at)
 
     async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
         return await run_in_threadpool(self.create_signed_read_url, key=key, expires_in=expires_in)

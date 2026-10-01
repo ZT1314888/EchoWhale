@@ -5,10 +5,10 @@ from datetime import datetime
 from typing import Protocol
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     and_,
@@ -21,11 +21,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import SessionStatus
 from api.common.exceptions import NotFoundError
-from api.db.database import Base, AsyncSessionFactory, get_async_session_factory
+from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
 from api.models.message_model import Message
-from api.models.runtime_model import SessionEvent
-from api.models.runtime_model import VoiceSessionFact
 from api.models.review_model import PracticeFeedback, SessionReview
+from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
 
 

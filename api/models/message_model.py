@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -11,4 +11,4 @@ class Message(BaseModel):
     role: str
     text: str
     feedback: dict[str, object] | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

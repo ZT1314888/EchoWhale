@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import MediaUploadStatus
 from api.common.exceptions import NotFoundError
-from api.db.database import Base, AsyncSessionFactory, get_async_session_factory
+from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
 from api.models.media_model import Media
 
 

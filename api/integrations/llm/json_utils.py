@@ -4,7 +4,6 @@ import json
 import re
 from typing import Any
 
-
 _FENCED_LANG_TAG = re.compile(r"^[A-Za-z0-9_-]+\s")
 
 
@@ -27,6 +26,5 @@ def _strip_code_fence(text: str) -> str:
         # 去掉行内语言标签（如 ```json），正文以 JSON 起始符开头时不受影响。
         if _FENCED_LANG_TAG.match(body):
             body = body.split(None, 1)[1] if len(body.split(None, 1)) > 1 else ""
-    if body.endswith("```"):
-        body = body[:-3]
+    body = body.removesuffix("```")
     return body.strip()

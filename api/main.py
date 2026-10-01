@@ -11,7 +11,6 @@ from api.common.responses import ApiResponse
 from api.core.config import settings
 from api.routes.v1 import router as v1_router
 
-
 logger = logging.getLogger(__name__)
 
 settings.validate_runtime()

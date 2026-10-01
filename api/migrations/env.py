@@ -5,12 +5,11 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import api.db.auth_db
+import api.db.media_db
+import api.db.session_db  # noqa: F401
 from api.core.config import settings
 from api.db.database import Base
-import api.db.auth_db  # noqa: F401
-import api.db.media_db  # noqa: F401
-import api.db.session_db  # noqa: F401
-
 
 config = context.config
 

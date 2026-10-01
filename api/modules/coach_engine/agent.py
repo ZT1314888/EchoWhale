@@ -1,13 +1,13 @@
 from api.core.config import settings
 from api.integrations.llm.base import TextStream
-from api.integrations.llm.resilience import LLMAttempt
-from api.integrations.llm.resilience import run_llm_with_failover
-from api.integrations.llm.runtime import provider_slot_from_settings
-from api.integrations.llm.runtime import resolve_engine_providers
+from api.integrations.llm.resilience import LLMAttempt, run_llm_with_failover
+from api.integrations.llm.runtime import provider_slot_from_settings, resolve_engine_providers
 from api.integrations.llm.streaming import SingleDeltaTextStream
-from api.modules.coach_engine.providers.chat_provider import ChatProvider
-from api.modules.coach_engine.providers.chat_provider import MockChatProvider
-from api.modules.coach_engine.providers.chat_provider import OpenAICompatibleChatProvider
+from api.modules.coach_engine.providers.chat_provider import (
+    ChatProvider,
+    MockChatProvider,
+    OpenAICompatibleChatProvider,
+)
 from api.modules.coach_engine.schema import CoachReplyInput, CoachReplyResult
 
 

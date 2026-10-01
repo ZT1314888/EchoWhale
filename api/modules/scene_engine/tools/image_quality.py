@@ -5,13 +5,10 @@ from io import BytesIO
 from statistics import pstdev
 
 import httpx
-from PIL import Image
-from PIL import UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
-from api.common.exceptions import ModelProviderError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ModelProviderError, UnsupportedSceneImageError
 from api.modules.scene_engine.schema import SceneAnalysisInput
-
 
 UNSUPPORTED_IMAGE_MESSAGE = "Unsupported scene image"
 

@@ -1,8 +1,7 @@
 """create session runtime tables"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260408_0009"
 down_revision = "20260407_0008"

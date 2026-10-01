@@ -1,19 +1,19 @@
 from pydantic import ValidationError
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import ModelProviderError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import (
+    EchoWhaleError,
+    ModelProviderError,
+    UnsupportedSceneImageError,
+)
 from api.core.config import settings
-from api.integrations.llm.resilience import LLMAttempt
-from api.integrations.llm.resilience import run_llm_with_failover
-from api.integrations.llm.runtime import provider_slot_from_settings
-from api.integrations.llm.runtime import resolve_engine_providers
-from api.modules.scene_engine.providers.vision_provider import MockVisionProvider
-from api.modules.scene_engine.providers.vision_provider import OpenAICompatibleVisionProvider
-from api.modules.scene_engine.providers.vision_provider import VisionProvider
+from api.integrations.llm.resilience import LLMAttempt, run_llm_with_failover
+from api.integrations.llm.runtime import provider_slot_from_settings, resolve_engine_providers
+from api.modules.scene_engine.providers.vision_provider import (
+    MockVisionProvider,
+    OpenAICompatibleVisionProvider,
+    VisionProvider,
+)
 from api.modules.scene_engine.schema import SceneAnalysisInput, SceneAnalysisResult
-
 
 LOW_CONFIDENCE_THRESHOLD = 0.65
 

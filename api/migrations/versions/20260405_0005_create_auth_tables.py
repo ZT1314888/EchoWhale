@@ -1,8 +1,7 @@
 """create auth tables"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260405_0005"
 down_revision = "20260404_0004"

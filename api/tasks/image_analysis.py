@@ -10,18 +10,14 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ConfigurationError, EchoWhaleError, UnsupportedSceneImageError
 from api.core.config import settings
-from api.db.database import create_async_database_engine
-from api.db.database import create_async_session_factory
+from api.db.database import create_async_database_engine, create_async_session_factory
 from api.db.media_db import build_media_repository
 from api.db.scene_analysis_db import build_scene_analysis_store
 from api.integrations.queue.redis import RedisQueue
 from api.integrations.storage.r2 import R2StorageService
 from api.modules.scene_engine.service import SceneEngineService
-
 
 logger = logging.getLogger(__name__)
 
@@ -76,14 +72,14 @@ async def _analyze_and_store(media_id: str) -> dict[str, str]:
                 error_code=SCENE_ANALYSIS_FAILURE_UNSUPPORTED,
             )
             return {"media_id": media_id, "status": "failed"}
-        except EchoWhaleError as exc:
+        except EchoWhaleError:
             await store.save_failure(
                 media_id,
                 prompt_version,
                 error_code=SCENE_ANALYSIS_FAILURE_GENERIC,
             )
             raise
-        except Exception as exc:
+        except Exception:
             logger.exception("scene_analysis_task_crashed media_id=%s", media_id)
             await store.save_failure(
                 media_id,

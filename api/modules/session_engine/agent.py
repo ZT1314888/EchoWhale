@@ -4,15 +4,17 @@ import hashlib
 import hmac
 import logging
 from collections.abc import AsyncIterator, Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from api.common.enums import MediaUploadStatus
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import InvalidStateError
-from api.common.exceptions import ModelProviderError
-from api.common.exceptions import SceneAnalysisUnavailableError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import (
+    EchoWhaleError,
+    InvalidStateError,
+    ModelProviderError,
+    SceneAnalysisUnavailableError,
+    UnsupportedSceneImageError,
+)
 from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
 from api.db.media_db import MediaLookup, build_media_repository
@@ -22,13 +24,11 @@ from api.db.scene_analysis_db import (
     build_scene_analysis_store,
 )
 from api.db.session_db import SessionRepository, build_session_repository
-from api.integrations.deepgram import DeepgramSettingsBuilder
-from api.integrations.deepgram import DeepgramTokenIssuer
+from api.integrations.deepgram import DeepgramSettingsBuilder, DeepgramTokenIssuer
 from api.integrations.storage.r2 import R2StorageService
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
-from api.models.runtime_model import SessionEvent
-from api.models.runtime_model import VoiceSessionFact
+from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
 from api.modules.coach_engine.service import CoachEngineService
 from api.modules.feedback_engine.service import FeedbackEngineService
@@ -44,9 +44,7 @@ from api.modules.session_engine.schema import (
     VoiceCompleteInput,
     VoiceCompleteResult,
 )
-
 from api.tasks.image_analysis import enqueue_scene_analysis
-
 
 logger = logging.getLogger(__name__)
 
@@ -555,7 +553,7 @@ def _message_signature(message: Message) -> tuple[str, str]:
 def _encode_history_cursor(value: tuple[datetime, str]) -> str:
     """把分页游标编码成带签名防篡改的字符串。"""
     updated_at, session_id = value
-    normalized = updated_at.astimezone(timezone.utc)
+    normalized = updated_at.astimezone(UTC)
     payload = f"{normalized.isoformat()}|{session_id}"
     return f"{payload}|{_sign_cursor_payload(payload)}"
 
@@ -578,7 +576,7 @@ def _decode_history_cursor(cursor: str | None) -> tuple[datetime, str] | None:
     except ValueError as exc:
         raise AppValidationError("Validation error") from exc
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
     return (parsed, session_id)
 
 

@@ -1,8 +1,7 @@
 """create scene_analyses cache table"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260930_0010"
 down_revision = "20260408_0009"

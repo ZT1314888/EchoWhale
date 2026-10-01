@@ -10,14 +10,13 @@ prompt_version 随提示词演进，旧版本行自动视为未命中。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, delete, select
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text, delete
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
-
 
 SCENE_ANALYSIS_STATUS_PENDING = "pending"
 SCENE_ANALYSIS_STATUS_READY = "ready"
@@ -166,7 +165,7 @@ class SqlAlchemySceneAnalysisStore:
         confidence: float | None = None,
         error_code: int | None = None,
     ) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with self._session_factory() as db_session:
             record = await db_session.get(SceneAnalysisRecord, media_id)
             if record is None:

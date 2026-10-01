@@ -1,8 +1,7 @@
 """add session reviews and timestamps"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260404_0004"
 down_revision = "20260403_0003"

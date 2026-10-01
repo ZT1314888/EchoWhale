@@ -21,7 +21,6 @@ from api.models.user_model import User
 from api.modules.session_engine.service import SessionEngineService
 from api.routes.v1.sessions import get_session_service
 
-
 router = APIRouter(prefix="/history", tags=["history"])
 
 

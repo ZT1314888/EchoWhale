@@ -14,7 +14,6 @@ from api.db.scene_analysis_db import SceneAnalysisStore, build_scene_analysis_st
 from api.integrations.storage.r2 import R2StorageService
 from api.services.media_service import MediaService
 
-
 router = APIRouter(prefix="/media", tags=["media"])
 
 

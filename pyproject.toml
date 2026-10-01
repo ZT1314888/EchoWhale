@@ -24,8 +24,25 @@ dev = [
     "alembic>=1.16.5",
     "black>=26.5.1",
     "pytest>=9.0.2",
+    "ruff>=0.16.9",
 ]
 
 [[tool.uv.index]]
 url = "https://mirrors.aliyun.com/pypi/simple/"
 default = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "RUF", "SIM", "TRY", "FURB", "DTZ", "BLE"]
+# 仓库既定约定，不做规则级改造：
+# - RUF001/002/003：中文注释/文档/消息里的全角标点是有意为之
+# - TRY003：全仓采用"消息式异常"（AppError/ValidationError 携带用户文案）
+# - UP042/UP046/UP047：str-Enum 与 Generic 老写法为运行时语义敏感的遗留模式，单独批次再迁
+ignore = ["RUF001", "RUF002", "RUF003", "TRY003", "UP042", "UP046", "UP047"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 依赖注入标记在参数默认值里是官方推荐写法，不属于可变默认值。
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]

@@ -9,10 +9,7 @@ from typing import Generic, TypeVar
 
 import httpx
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import ModelProviderError
-
+from api.common.exceptions import ConfigurationError, EchoWhaleError, ModelProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +34,7 @@ def is_retryable_llm_error(exc: Exception) -> bool:
         return False
     if isinstance(exc, httpx.TimeoutException | httpx.TransportError):
         return True
-    if isinstance(exc, ModelProviderError | ValueError):
-        return True
-    return False
+    return isinstance(exc, ModelProviderError | ValueError)
 
 
 async def run_llm_with_failover(
@@ -73,7 +68,7 @@ async def run_llm_with_failover(
             except ConfigurationError:
                 # 配置错误换 provider 或重试都无法恢复，直接上抛。
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - 主备切换需要兜住任意 provider 失败并记录
                 elapsed = time.monotonic() - started
                 failures.append((attempt.name, exc))
                 logger.warning(

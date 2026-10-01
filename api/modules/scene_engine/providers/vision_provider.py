@@ -5,7 +5,6 @@ from typing import Protocol
 
 import httpx
 
-from api.common.exceptions import ConfigurationError
 from api.common.exceptions import ModelProviderError
 from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient

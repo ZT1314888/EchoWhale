@@ -8,11 +8,8 @@ from urllib.parse import urljoin
 
 import httpx
 
-from api.integrations.llm.base import TextCompletionClient
-from api.integrations.llm.base import VisionCompletionClient
-from api.integrations.llm.streaming import HttpxTextStream
-from api.integrations.llm.streaming import SingleDeltaTextStream
-
+from api.integrations.llm.base import TextCompletionClient, VisionCompletionClient
+from api.integrations.llm.streaming import HttpxTextStream, SingleDeltaTextStream
 
 logger = logging.getLogger(__name__)
 

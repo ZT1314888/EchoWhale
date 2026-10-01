@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from api.common.exceptions import ConfigurationError
 from api.core.config import settings
-from api.integrations.queue.redis import _enable_rq_windows_import_compat
-from api.integrations.queue.redis import get_queue_redis_client
+from api.integrations.queue.redis import _enable_rq_windows_import_compat, get_queue_redis_client
+
 
 def main() -> None:
     try:  # pragma: no cover - exercised only in runtime worker process

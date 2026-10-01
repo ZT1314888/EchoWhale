@@ -22,7 +22,7 @@ class HistoryEntryResponse(BaseModel):
     review_summary: str
 
     @classmethod
-    def from_session(cls, session: Session, review: SessionReviewResponse) -> "HistoryEntryResponse":
+    def from_session(cls, session: Session, review: SessionReviewResponse) -> HistoryEntryResponse:
         return cls(
             id=session.id,
             practiced_at=_format_practiced_at(session.updated_at),
@@ -48,7 +48,7 @@ class HistorySessionMetaResponse(BaseModel):
     total_messages: int
 
     @classmethod
-    def from_session(cls, session: Session, *, total_messages: int) -> "HistorySessionMetaResponse":
+    def from_session(cls, session: Session, *, total_messages: int) -> HistorySessionMetaResponse:
         return cls(
             session_id=session.id,
             media_id=session.media_id,
@@ -84,7 +84,7 @@ class HistoryReplayMessageResponse(BaseModel):
     text: str
 
     @classmethod
-    def from_message(cls, message: Message) -> "HistoryReplayMessageResponse":
+    def from_message(cls, message: Message) -> HistoryReplayMessageResponse:
         return cls(
             message_id=message.id,
             role=message.role,

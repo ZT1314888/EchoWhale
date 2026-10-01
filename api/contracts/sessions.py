@@ -19,7 +19,7 @@ class StartSessionRequest(BaseModel):
     sample_scene_id: SampleSceneId | None = None
 
     @model_validator(mode="after")
-    def validate_start_source(self) -> "StartSessionRequest":
+    def validate_start_source(self) -> StartSessionRequest:
         has_media = self.media_id is not None
         has_sample = self.sample_scene_id is not None
         if has_media == has_sample:
@@ -37,7 +37,7 @@ class VoiceCompleteRequest(BaseModel):
     client_diagnostics: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_voice_conversation(self) -> "VoiceCompleteRequest":
+    def validate_voice_conversation(self) -> VoiceCompleteRequest:
         if not self.conversation:
             raise ValueError("Conversation cannot be empty")
         if not any(turn.role == "user" for turn in self.conversation):
@@ -52,7 +52,7 @@ class SessionMessageResponse(BaseModel):
     feedback: dict[str, object] | None = None
 
     @classmethod
-    def from_message(cls, message: Message) -> "SessionMessageResponse":
+    def from_message(cls, message: Message) -> SessionMessageResponse:
         return cls(
             message_id=message.id,
             role=message.role,
@@ -73,7 +73,7 @@ class SessionResponse(BaseModel):
     messages: list[SessionMessageResponse]
 
     @classmethod
-    def from_session(cls, session: Session) -> "SessionResponse":
+    def from_session(cls, session: Session) -> SessionResponse:
         return cls(
             session_id=session.id,
             media_id=session.media_id,
@@ -119,7 +119,7 @@ class SessionReviewResponse(BaseModel):
     feedback: PracticeFeedbackResponse
 
     @classmethod
-    def from_review(cls, review: SessionReview) -> "SessionReviewResponse":
+    def from_review(cls, review: SessionReview) -> SessionReviewResponse:
         return cls(
             session_id=review.session_id,
             title=review.title,
@@ -152,7 +152,7 @@ class SessionReplyResponse(BaseModel):
     feedback: ReplyFeedbackResponse | None = None
 
     @classmethod
-    def from_session(cls, session: Session) -> "SessionReplyResponse":
+    def from_session(cls, session: Session) -> SessionReplyResponse:
         feedback = None
         for message in reversed(session.messages):
             if message.feedback:

@@ -130,7 +130,7 @@ def bootstrap_document(
 
     template_path, output_path = _template_and_output_paths(root, artifact_type, slug)
     template = template_path.read_text(encoding="utf-8")
-    today = date.today().isoformat()
+    today = date.today().isoformat()  # noqa: DTZ011 - 文档日期戳按本地日历日
     replacements = {
         "<feature_name>": slug,
         "<primary_module_name>": module or "platform_foundation",

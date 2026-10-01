@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 LOW_VALUE_VOCAB = {"table", "chair", "furniture", "room"}
 
 ANCHOR_SYNONYMS: dict[str, set[str]] = {

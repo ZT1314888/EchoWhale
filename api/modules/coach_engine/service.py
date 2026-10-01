@@ -1,8 +1,8 @@
 from api.integrations.llm.base import TextStream
+from api.models.message_model import Message
 from api.modules.coach_engine.agent import CoachEngineAgent
 from api.modules.coach_engine.providers.chat_provider import ChatProvider
 from api.modules.coach_engine.schema import CoachReplyInput, CoachReplyResult
-from api.models.message_model import Message
 
 
 class CoachEngineService:

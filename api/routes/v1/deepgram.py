@@ -1,27 +1,23 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
-import logging
 from json import JSONDecodeError
 from typing import Any
 
-from fastapi import APIRouter, Header, Request
-from fastapi.responses import JSONResponse
-from fastapi.responses import Response
-from fastapi.responses import StreamingResponse
 import httpx
-from pydantic import BaseModel
-from pydantic import ValidationError
-from pydantic import field_validator
+from fastapi import APIRouter, Header, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, ValidationError, field_validator
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import ConfigurationError
+from api.common.exceptions import AuthenticationError, ConfigurationError
 from api.core.config import settings
-from api.integrations.deepgram import build_deepgram_think_upstream_url
-from api.integrations.deepgram import DeepgramThinkProxyTokenCodec
-from api.integrations.deepgram import validate_deepgram_think_upstream_settings
-
+from api.integrations.deepgram import (
+    DeepgramThinkProxyTokenCodec,
+    build_deepgram_think_upstream_url,
+    validate_deepgram_think_upstream_settings,
+)
 
 router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 logger = logging.getLogger(__name__)
@@ -121,7 +117,7 @@ async def proxy_deepgram_think_chat_completions(
     try:
         content = response.json()
     except ValueError:
-        logger.error(
+        logger.exception(
             "Deepgram think upstream returned non-JSON response for session=%s status=%s body_bytes=%s",
             session_id,
             response.status_code,

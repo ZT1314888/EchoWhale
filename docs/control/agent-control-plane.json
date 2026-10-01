@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/frontend_wait_ux_feedback_unification/feature.md",
-    "summary": "第六批 P1 体验补齐落地：waitForSceneAnalysis 全链路可取消（AbortSignal 贯穿可中断 sleep、轮询前后检查与 in-flight 状态请求，AbortError 保真上抛）+ onStatus 逐次回调，session start 链路接受 signal；StartupLoadingPage 分析等待期间进度锁在「角色」档并新增「取消等待」出口（卸载自动 abort）；TurnFeedbackCard 增加 compact 变体，落库消息自带 feedback 内联渲染、悬浮卡只覆盖流式窗口，两条入口反馈呈现统一；语音逐轮反馈经源码确认受后端管线限制（仅聚合 review），已文档化边界。顺手补回第四批补丁崩溃时丢失的 PracticeSessionPage 三个页面级测试。",
-    "blockers": "语音逐轮反馈需后端语音管线支持 per-turn feedback；内联分析路径（非 202）进度真实化；vitest coverage 阈值与 lint 接 CI（第五批遗留）；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费；真实依赖的系统级 smoke 仍是既有主阻塞。",
-    "extra_progress": "npx tsc --noEmit 0 error；npx vitest run 108 passed（基线 99 + 新增 9）；uv run pytest tests 224 passed / 2 skipped（后端零改动）。"
+    "latest_record": "docs/features/ci_coverage_lint_gates/feature.md",
+    "summary": "第七批门禁补齐：gh CLI 确认 dev 首跑 Actions 双 job 全绿后，接入 ruff 门禁（extend-select I/B/UP/RUF/SIM/TRY/FURB/DTZ/BLE，FastAPI DI 豁免 + 仓库约定豁免带理由，189→0：154 自动修 + 8 处人工裁决，pytest 全绿验证无副作用）与 vitest coverage 阈值（@vitest/coverage-v8@3.2.4，基线 79.07/76.54/82.15/79.07 下方 2-3 点设防），CI backend 增 Lint 步骤、frontend 改跑 coverage、checkout/setup-node 升 v5 消除弃用注记。决策：black 全量格式化（65 文件漂移）与前端 eslint 引入各自单独排批。",
+    "blockers": "black 格式化批次与 eslint 引入批次待排；内联分析路径进度真实化、语音逐轮反馈（后端管线）、系统级 smoke、PRD 刷新原队列不变；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费。",
+    "extra_progress": "ruff All checks passed；tsc 0 error；vitest 108 passed；coverage Stmts 79.07/Branch 76.54/Funcs 82.15/Lines 79.07 均超阈值；pytest 224 passed / 2 skipped。"
   },
   "modules": [
     {
@@ -230,6 +230,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "CI 覆盖率与 lint 门禁",
+      "scope": "ci_coverage_lint_gates",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
     }
   ],
   "test_layers": [

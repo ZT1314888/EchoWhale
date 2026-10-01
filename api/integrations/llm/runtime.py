@@ -8,7 +8,6 @@ from api.common.exceptions import ConfigurationError
 from api.core.config import settings
 from api.integrations.llm.openai import OpenAICompatibleClient
 
-
 T = TypeVar("T")
 
 

@@ -13,13 +13,16 @@ from api.common.exceptions import UnsupportedSceneImageError
 from api.core.config import settings
 from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient
-from api.modules.scene_engine.evaluation_rules import match_expected_keywords
-from api.modules.scene_engine.evaluation_rules import vocab_candidates_are_valuable
-from api.modules.scene_engine.prompts.scene_prompts import SCENE_INFERENCE_PROMPT
-from api.modules.scene_engine.prompts.scene_prompts import SCENE_PROMPT_VERSION
+from api.modules.scene_engine.evaluation_rules import (
+    match_expected_keywords,
+    vocab_candidates_are_valuable,
+)
+from api.modules.scene_engine.prompts.scene_prompts import (
+    SCENE_INFERENCE_PROMPT,
+    SCENE_PROMPT_VERSION,
+)
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.scene_engine.service import SceneEngineService
-
 
 META_OPENER_TOKENS = (
     "as an ai",
@@ -191,7 +194,7 @@ class SceneOutputJudge:
         )
 
     @classmethod
-    def from_env(cls) -> "SceneOutputJudge | None":
+    def from_env(cls) -> SceneOutputJudge | None:
         """从环境变量解析评测裁判模型，缺省时返回空。"""
         provider = (
             os.getenv("SCENE_EVAL_JUDGE_PROVIDER")
@@ -267,7 +270,7 @@ async def run_scene_evaluation(
                     actual_outcome="unsupported_image",
                     failure_reason=str(exc),
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - 评估台需要兜住任意 judge 失败并记为失败样本
                 return evaluate_scene_output(
                     case=case,
                     output=None,
