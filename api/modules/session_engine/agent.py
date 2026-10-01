@@ -32,6 +32,7 @@ from api.models.review_model import SessionReview
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
 from api.modules.coach_engine.service import CoachEngineService
+from api.modules.feedback_engine.schema import FeedbackResult
 from api.modules.feedback_engine.service import FeedbackEngineService
 from api.modules.scene_engine.schema import SceneAnalysisResult, scene_result_from_snapshot
 from api.modules.scene_engine.service import SceneEngineService
@@ -199,6 +200,8 @@ class SessionEngineAgent:
     async def reply(self, payload: ReplyInput) -> Session:
         """并发生成反馈与教练回复，再把这一轮消息原子化落库。
 
+        失败语义分主次：反馈是增值能力，失败时降级为占位反馈，本轮照常返回与落库；
+        教练回复是主价值，失败时整轮上抛、不落任何消息。
         读路径只取会话头 + 最近窗口消息，避免每轮全量拉取整个消息历史；
         写后的全量重读保留，作为响应契约的一部分。
         """
@@ -225,15 +228,17 @@ class SessionEngineAgent:
         )
         # 反馈和回复互不依赖，并发执行可以显著缩短单轮等待时间；
         # return_exceptions 确保一侧失败时不再取消另一侧已在计费的调用。
-        _log_failed_branch("feedback", feedback_result)
-        _log_failed_branch("coach", coach_result)
-        feedback, coach_reply = _unwrap_gather_results(feedback_result, coach_result)
+        # 先收敛反馈（失败即降级并留 degraded 日志），再检查教练分支：
+        # 两侧同时失败时，教练异常原样上抛交全局处理器，反馈失败也已留在日志里。
+        feedback = _resolve_feedback(feedback_result)
+        if isinstance(coach_result, BaseException):
+            raise coach_result
 
         learner_message, assistant_message, review = _build_reply_turn(
             session_head,
             recent_messages,
             learner_text=payload.learner_message,
-            coach_text=coach_reply.text,
+            coach_text=coach_result.text,
             feedback=feedback,
         )
         return await self.session_repository.save_reply_turn(
@@ -244,10 +249,10 @@ class SessionEngineAgent:
         )
 
     async def stream_reply(self, payload: ReplyInput) -> AsyncIterator[tuple[str, object]]:
-        """流式 reply：先回执 feedback，再逐 token 下发教练回复，全部成功后原子落库。
+        """流式 reply：先回执 feedback，再逐 token 下发教练回复，成功后原子落库。
 
-        语义与 reply() 一致：feedback 与 coach 并发启动，任一分支失败则整轮失败、
-        不落任何消息；区别只在 coach 分支从整段调用换成"打开流 + 增量消费"。
+        反馈分支失败时降级为占位反馈继续：事件序 feedback → delta* → session 不变，
+        本轮照常落库；教练分支失败（打不开流、中途断流、空输出）仍整轮失败、不落任何消息。
         """
         session_head = await self.session_repository.get_session_head(payload.session_id)
         recent_messages = await self.session_repository.list_recent_messages(
@@ -278,7 +283,12 @@ class SessionEngineAgent:
             raise
 
         try:
-            feedback = await feedback_task
+            # 反馈是增值能力：失败时降级为占位反馈，事件序与落库照常。
+            # 只捕获 Exception；CancelledError 等 BaseException 不吞，取消语义保持。
+            try:
+                feedback = await feedback_task
+            except Exception as exc:  # noqa: BLE001 - 反馈失败需降级续轮而非上抛
+                feedback = _degraded_feedback_with_log(exc)
             yield ("feedback", feedback)
 
             coach_chunks: list[str] = []
@@ -463,7 +473,7 @@ def _build_reply_turn(
     *,
     learner_text: str,
     coach_text: str,
-    feedback: object,
+    feedback: FeedbackResult,
 ) -> tuple[Message, Message, SessionReview]:
     """组装一轮对话的两条消息与复盘；coach 文本为空按模型失败处理。"""
     coach_text = coach_text.strip()
@@ -483,27 +493,44 @@ def _build_reply_turn(
     return (learner_message, assistant_message, review)
 
 
-def _log_failed_branch(branch: str, result: object) -> None:
-    """记录 gather 中失败分支的异常，避免静默吞掉可观测信息。"""
+def _degraded_feedback() -> FeedbackResult:
+    """构造反馈降级占位结果。
+
+    每次新建实例而非共享单例，避免调用方意外改动可变字段互相影响；
+    文案诚实标注本轮失败并预告下一轮恢复，前端按普通反馈卡片渲染即可。
+    """
+    return FeedbackResult(
+        grammar="本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
+        more_natural="（本轮没有更自然表达建议）",
+        useful_words=[],
+    )
+
+
+def _degraded_feedback_with_log(exc: Exception) -> FeedbackResult:
+    """反馈分支失败的单一降级转换点：记 degraded warning 后返回占位反馈。
+
+    沿用 session_reply_branch_failed 事件名并补充 degraded=true，
+    运维可凭该标记区分"降级成功"与"正常生成"。
+    """
+    logger.warning(
+        "session_reply_branch_failed branch=feedback degraded=true error=%s: %s",
+        type(exc).__name__,
+        exc,
+    )
+    return _degraded_feedback()
+
+
+def _resolve_feedback(result: object) -> FeedbackResult:
+    """把 gather 的 return_exceptions 结果收敛成 FeedbackResult。
+
+    成功原样返回；Exception 降级为占位反馈让本轮继续；
+    CancelledError 等 BaseException 原样上抛，不吞取消语义。
+    """
+    if isinstance(result, Exception):
+        return _degraded_feedback_with_log(result)
     if isinstance(result, BaseException):
-        logger.warning(
-            "session_reply_branch_failed branch=%s error=%s: %s",
-            branch,
-            type(result).__name__,
-            result,
-        )
-
-
-def _unwrap_gather_results(*results: object) -> tuple:
-    """从 return_exceptions 的 gather 结果中提取首个异常并统一上抛。"""
-    errors = [result for result in results if isinstance(result, BaseException)]
-    if not errors:
-        return tuple(results)
-    # 优先上抛业务异常，保持与全局异常处理器的既有契约一致。
-    for error in errors:
-        if isinstance(error, EchoWhaleError):
-            raise error
-    raise errors[0]
+        raise result
+    return result
 
 
 def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list[Message]:

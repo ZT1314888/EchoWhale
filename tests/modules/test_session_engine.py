@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -513,6 +514,60 @@ def test_reply_does_not_persist_partial_turn_when_generation_fails(
 
     stored = asyncio.run(fake_session_repository.get_session("sess_123"))
     assert [message.id for message in stored.messages] == ["msg_1"]
+
+
+def test_reply_degrades_feedback_and_persists_when_feedback_fails(
+    fake_session_repository: FakeSessionRepository,
+    caplog,
+) -> None:
+    """反馈引擎故障只降级反馈：教练回复照常返回与落库，复盘用占位反馈构建。"""
+    session = Session(
+        id="sess_feedback_fail",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    asyncio.run(fake_session_repository.save_session(session))
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FailingFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(session_id="sess_feedback_fail", learner_message="I would like a latte")
+            )
+        )
+
+    # 教练回复完整返回，反馈为占位文案。
+    assert updated.messages[-1].text == "Let's keep practicing with counter."
+    assert updated.messages[-1].feedback == {
+        "grammar": "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
+        "more_natural": "（本轮没有更自然表达建议）",
+        "useful_words": [],
+    }
+    # 落库侧本轮两条消息都在，复盘也基于占位反馈正常构建。
+    stored = asyncio.run(fake_session_repository.get_session("sess_feedback_fail"))
+    assert [message.text for message in stored.messages[-2:]] == [
+        "I would like a latte",
+        "Let's keep practicing with counter.",
+    ]
+    review = fake_session_repository.reviews["sess_feedback_fail"]
+    assert review.feedback.grammar.body == "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。"
+    # 降级必须留运维痕迹：沿用 session_reply_branch_failed 事件名并带 degraded=true。
+    assert "session_reply_branch_failed" in caplog.text
+    assert "degraded=true" in caplog.text
 
 
 def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(

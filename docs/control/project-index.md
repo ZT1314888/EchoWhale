@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/session_media_ownership_check/feature.md`
-- 本轮结论：审计 Finding 4 修复：SessionEngineAgent.start() 的 media 分支补归属校验（media.user_id != payload.user_id 即NotFoundError），位置有意前置到 upload-status 检查、缓存查询与场景分析派发之前——跨用户请求不得探测上传状态、命中共享场景缓存或触发视觉调用。变异验证：移除校验新测试即红。
-- 当前主要阻塞：仓储级强制归属（get_media 按 owner 过滤）另行立项；Fix Immediately 仅剩 Finding 6 反馈降级；系统级 smoke、PRD 刷新原队列不变。
-- 补充进展：uv run pytest tests 387 passed / 2 skipped；ruff/black 全绿；agent_ops check 与 render 通过。
+- 最新归档：`docs/features/feedback_failure_degradation/feature.md`
+- 本轮结论：审计 Finding 6 修复：确立编排失败策略——主价值分支（教练）失败才整轮失败，增强分支（反馈）失败显式降级（单一转换点构造诚实占位 FeedbackResult + degraded=true warning，契约模型与前端零改动，SSE 事件序不变）。reply()/stream_reply() 落地；complete_voice_session 留待后续对齐。至此审计 Fix Immediately 五项全部完成。
+- 当前主要阻塞：voice 收口反馈降级对齐、反馈异步补写、分支 criticality 机制归后续批次；Fix Before Stable Release 队列开启（position 唯一约束、语音收口追加语义、auth 限流 Redis 化、LLM max_tokens+usage 落库等）。
+- 补充进展：uv run pytest tests 388 passed / 2 skipped；ruff/black 全绿；mock 模式 uvicorn 冒烟 /health 200。
 
 ## 模块看板
 
@@ -69,6 +69,7 @@
 | 上传流式校验与请求体大小门 | `media_upload_stream_guard` | `feature_test_passed` | `feature_test_passed` | `module/media_upload` |
 | 生产配置门控反转与清单补全 | `production_config_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 会话启动媒体归属校验 | `session_media_ownership_check` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 反馈失败降级不拖垮整轮对话 | `feedback_failure_degradation` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 

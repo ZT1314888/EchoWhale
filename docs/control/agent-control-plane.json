@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/session_media_ownership_check/feature.md",
-    "summary": "审计 Finding 4 修复：SessionEngineAgent.start() 的 media 分支补归属校验（media.user_id != payload.user_id 即NotFoundError），位置有意前置到 upload-status 检查、缓存查询与场景分析派发之前——跨用户请求不得探测上传状态、命中共享场景缓存或触发视觉调用。变异验证：移除校验新测试即红。",
-    "blockers": "仓储级强制归属（get_media 按 owner 过滤）另行立项；Fix Immediately 仅剩 Finding 6 反馈降级；系统级 smoke、PRD 刷新原队列不变。",
-    "extra_progress": "uv run pytest tests 387 passed / 2 skipped；ruff/black 全绿；agent_ops check 与 render 通过。"
+    "latest_record": "docs/features/feedback_failure_degradation/feature.md",
+    "summary": "审计 Finding 6 修复：确立编排失败策略——主价值分支（教练）失败才整轮失败，增强分支（反馈）失败显式降级（单一转换点构造诚实占位 FeedbackResult + degraded=true warning，契约模型与前端零改动，SSE 事件序不变）。reply()/stream_reply() 落地；complete_voice_session 留待后续对齐。至此审计 Fix Immediately 五项全部完成。",
+    "blockers": "voice 收口反馈降级对齐、反馈异步补写、分支 criticality 机制归后续批次；Fix Before Stable Release 队列开启（position 唯一约束、语音收口追加语义、auth 限流 Redis 化、LLM max_tokens+usage 落库等）。",
+    "extra_progress": "uv run pytest tests 388 passed / 2 skipped；ruff/black 全绿；mock 模式 uvicorn 冒烟 /health 200。"
   },
   "modules": [
     {
@@ -269,6 +269,13 @@
     {
       "name": "会话启动媒体归属校验",
       "scope": "session_media_ownership_check",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "反馈失败降级不拖垮整轮对话",
+      "scope": "feedback_failure_degradation",
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/session_orchestration"

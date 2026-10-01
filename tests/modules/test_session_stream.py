@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -92,6 +93,15 @@ def _feedback() -> FeedbackResult:
     )
 
 
+def _degraded_feedback_payload() -> dict[str, object]:
+    """反馈降级占位文案的契约快照，供流式事件载荷与落库消息双处断言。"""
+    return {
+        "grammar": "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
+        "more_natural": "（本轮没有更自然表达建议）",
+        "useful_words": [],
+    }
+
+
 def _agent(repository, feedback_engine, coach_engine) -> SessionEngineAgent:
     agent = SessionEngineAgent(session_repository=repository)
     agent.feedback_engine = feedback_engine
@@ -118,21 +128,34 @@ async def test_stream_reply_emits_feedback_then_deltas_then_session() -> None:
 
 
 @pytest.mark.anyio
-async def test_stream_reply_aborts_without_persisting_when_feedback_fails() -> None:
+async def test_stream_reply_degrades_feedback_and_persists_when_feedback_fails(caplog) -> None:
     repository = RecordingSessionRepository(_session())
-    stream = StubCoachStream(["Sure,"])
+    stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(
         repository,
         StubFeedbackEngine(RuntimeError("feedback provider down")),
         StubCoachEngine(stream),
     )
 
-    with pytest.raises(RuntimeError, match="feedback provider down"):
-        _ = [event async for event in agent.stream_reply(ReplyInput(session_id="sess_stream", learner_message="latte please"))]
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        events = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
 
-    assert repository.saved_turns == []
-    assert len(repository.session.messages) == 1
+    # 反馈失败只降级反馈本身：事件序完整，教练回复照常下发、本轮照常落库。
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    assert events[0][1].model_dump() == _degraded_feedback_payload()
+    final_session = events[-1][1]
+    assert final_session.messages[-1].text == "Sure, one latte."
+    assert final_session.messages[-1].feedback == _degraded_feedback_payload()
+    assert len(repository.saved_turns) == 1
     assert stream.closed is True
+    # 降级必须留运维痕迹：沿用 session_reply_branch_failed 事件名并带 degraded=true。
+    assert "session_reply_branch_failed" in caplog.text
+    assert "degraded=true" in caplog.text
 
 
 @pytest.mark.anyio
