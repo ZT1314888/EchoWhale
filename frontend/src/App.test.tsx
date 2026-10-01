@@ -197,7 +197,10 @@ describe("App", () => {
     vi.useRealTimers();
     fireEvent.click(enterButton);
     expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
-    expect(sessionApi.createSamplePracticeSession).toHaveBeenCalledWith("coffee");
+    expect(sessionApi.createSamplePracticeSession).toHaveBeenCalledWith(
+      "coffee",
+      expect.anything(),
+    );
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
     expect(screen.getByText(/咖啡店柜台点单/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /发送/i })).toBeInTheDocument();
@@ -238,7 +241,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /进入练习/i }));
 
     await waitFor(() => {
-      expect(sessionApi.createPracticeSession).toHaveBeenCalledWith("med_upload");
+      expect(sessionApi.createPracticeSession).toHaveBeenCalledWith(
+      "med_upload",
+      expect.anything(),
+    );
     });
     expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_real");
@@ -977,7 +983,13 @@ describe("App", () => {
     });
     expect(await screen.findByRole("button", { name: /start voice practice/i })).toBeInTheDocument();
     expect(createSpy).toHaveBeenCalledTimes(2);
-    expect(mediaApi.waitForSceneAnalysis).toHaveBeenCalledWith("med_async");
+    expect(mediaApi.waitForSceneAnalysis).toHaveBeenCalledWith(
+      "med_async",
+      expect.objectContaining({
+        signal: expect.anything(),
+        onStatus: expect.any(Function),
+      }),
+    );
     expect(sessionApi.getPracticeSession).toHaveBeenCalledWith("sess_async");
   });
 
@@ -1022,5 +1034,46 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /换一张图片/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: /练习暂时不可用/i })).not.toBeInTheDocument();
   });
-});
 
+  it("lets the learner cancel the analysis wait and return home", async () => {
+    installSpeechRecognitionMock();
+    vi.spyOn(mediaApi, "uploadMedia").mockResolvedValue({
+      mediaId: "med_cancel",
+      filename: "counter.png",
+      contentType: "image/png",
+      fileSize: 5,
+      storageKey: "media/demo-user/med_cancel-counter.png",
+      previewUrl: "https://signed.test/med_cancel",
+      previewUrlExpiresAt: "2026-04-02T12:00:00Z",
+      uploadStatus: "uploaded",
+    });
+    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({
+      kind: "analyzing",
+      mediaId: "med_cancel",
+    });
+    vi.spyOn(mediaApi, "waitForSceneAnalysis").mockImplementation(
+      () => new Promise(() => {}),
+    );
+
+    await renderApp();
+
+    const input = screen.getByLabelText(/点击上传，或把图片拖到这里/i, {
+      selector: "input",
+    });
+    const file = new File(["hello"], "counter.png", { type: "image/png" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /进入练习/i })).toBeEnabled();
+    }, { timeout: 4000 });
+    fireEvent.click(screen.getByRole("button", { name: /进入练习/i }));
+
+    expect(await screen.findByText(/场景分析排队中/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /取消等待/i }));
+
+    expect(
+      await screen.findByRole("heading", { name: /上传一个场景，马上开口练习/i }),
+    ).toBeInTheDocument();
+  });
+
+});

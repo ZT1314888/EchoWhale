@@ -76,11 +76,16 @@ export async function uploadMedia(file: File): Promise<UploadedMedia> {
   };
 }
 
-export async function getSceneAnalysisStatus(mediaId: string): Promise<SceneAnalysisStatus> {
+export async function getSceneAnalysisStatus(
+  mediaId: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<SceneAnalysisStatus> {
   let response: Response;
 
   try {
-    response = await apiFetch(`/api/v1/media/${mediaId}/scene-analysis`);
+    response = await apiFetch(`/api/v1/media/${mediaId}/scene-analysis`, {
+      signal: options.signal,
+    });
   } catch {
     throw toSceneError("查询场景分析状态失败，请稍后重试。");
   }
@@ -112,30 +117,58 @@ function toSceneError(message: string, code = "SCENE_ANALYSIS_STATUS_FAILED"): A
   return { code, message };
 }
 
-function waitMilliseconds(ms: number): Promise<void> {
+function toAbortError(): Error {
+  const error = new Error("场景分析等待已取消");
+  error.name = "AbortError";
+  return error;
+}
+
+function waitMilliseconds(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
+    const timerId = window.setTimeout(finish, ms);
+    function finish() {
+      window.clearTimeout(timerId);
+      signal?.removeEventListener("abort", finish);
+      resolve();
+    }
+    signal?.addEventListener("abort", finish, { once: true });
   });
 }
 
 export async function waitForSceneAnalysis(
   mediaId: string,
-  options: { intervalMs?: number; timeoutMs?: number } = {},
+  options: {
+    intervalMs?: number;
+    timeoutMs?: number;
+    signal?: AbortSignal;
+    onStatus?: (status: SceneAnalysisStatusValue) => void;
+  } = {},
 ): Promise<void> {
   const intervalMs = options.intervalMs ?? SCENE_ANALYSIS_POLL_INTERVAL_MS;
   const timeoutMs = options.timeoutMs ?? SCENE_ANALYSIS_POLL_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    await waitMilliseconds(intervalMs);
+    if (options.signal?.aborted) {
+      throw toAbortError();
+    }
+    await waitMilliseconds(intervalMs, options.signal);
+    if (options.signal?.aborted) {
+      throw toAbortError();
+    }
 
     let snapshot: SceneAnalysisStatus;
     try {
-      snapshot = await getSceneAnalysisStatus(mediaId);
+      snapshot = await getSceneAnalysisStatus(mediaId, { signal: options.signal });
     } catch {
+      if (options.signal?.aborted) {
+        throw toAbortError();
+      }
       // 单次轮询失败（网络抖动等）继续等待，由总超时兑底。
       continue;
     }
+
+    options.onStatus?.(snapshot.status);
 
     if (snapshot.status === "ready") {
       return;

@@ -166,4 +166,42 @@ describe("mediaApi", () => {
     );
     await expectation;
   });
+
+  it("aborts the wait before the next poll when the signal fires", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const controller = new AbortController();
+
+    const pending = waitForSceneAnalysis("med_cancel", { signal: controller.signal });
+    const expectation = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS);
+    await expectation;
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("propagates abort when an in-flight status request is cancelled", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    globalThis.fetch = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const abortError = new Error("aborted");
+            abortError.name = "AbortError";
+            reject(abortError);
+          });
+        }),
+    ) as typeof fetch;
+
+    const pending = waitForSceneAnalysis("med_cancel", { signal: controller.signal });
+    const expectation = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS);
+    controller.abort();
+    await expectation;
+  });
+
 });

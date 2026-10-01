@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Logo } from "../components/Logo";
@@ -139,6 +139,8 @@ export function PracticeSessionPage() {
       setSession((current) => (current ? { ...current, messages: result.messages } : current));
       setLiveLearnerContent("");
       setStreamText("");
+      // 落库后由消息自带 feedback 的内联卡片接棒，悬浮卡只负责流式期间。
+      setTurnFeedback(null);
     } catch (reason) {
       const typed = reason as { name?: string; message?: string };
       if (typed?.name === "AbortError") {
@@ -256,17 +258,19 @@ export function PracticeSessionPage() {
 
           <div className="session-thread" role="log" aria-live="polite">
             {session.messages.map((message) => (
-              <article
-                key={message.id}
-                className={
-                  message.role === "learner"
-                    ? "session-bubble session-bubble--learner"
-                    : "session-bubble session-bubble--coach"
-                }
-              >
-                <p className="eyebrow">{message.label}</p>
-                <p>{message.content}</p>
-              </article>
+              <Fragment key={message.id}>
+                <article
+                  className={
+                    message.role === "learner"
+                      ? "session-bubble session-bubble--learner"
+                      : "session-bubble session-bubble--coach"
+                  }
+                >
+                  <p className="eyebrow">{message.label}</p>
+                  <p>{message.content}</p>
+                </article>
+                {message.feedback ? <TurnFeedbackCard feedback={message.feedback} compact /> : null}
+              </Fragment>
             ))}
             {voice.transcript.map((message, index) => (
               <article

@@ -1,10 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { StartupAnalysisOrb } from "../components/StartupAnalysisOrb";
 import { uploadMedia } from "../services/mediaApi";
 import { createPracticeSession } from "../services/practiceApi";
-import type { AppError, UploadDraft, UploadedMedia } from "../types/app";
+import type {
+  AppError,
+  SceneAnalysisStatusValue,
+  UploadDraft,
+  UploadedMedia,
+} from "../types/app";
 
 type LoadingState = {
   draft?: UploadDraft;
@@ -15,6 +20,9 @@ const ANALYSIS_STAGES = [
   { key: "role", label: "角色" },
   { key: "ready", label: "准备完成" },
 ] as const;
+
+// 异步分析进行中把假进度锁在"角色"档，等轮询真实 ready 再放行。
+const ANALYSIS_HOLD_STAGE = 1;
 
 export function StartupLoadingPage() {
   const navigate = useNavigate();
@@ -28,6 +36,10 @@ export function StartupLoadingPage() {
   const [uploadedMedia, setUploadedMedia] = useState<UploadedMedia | undefined>(draft?.uploadedMedia);
   const [retryKey, setRetryKey] = useState(0);
   const [analysisPending, setAnalysisPending] = useState(false);
+  const [latestAnalysisStatus, setLatestAnalysisStatus] = useState<SceneAnalysisStatusValue | null>(
+    null,
+  );
+  const analysisAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const timers = ANALYSIS_STAGES.slice(1).map((_, index) =>
@@ -38,6 +50,13 @@ export function StartupLoadingPage() {
 
     return () => {
       timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      // 离开页面时中止仍在进行的分析等待轮询。
+      analysisAbortRef.current?.abort();
     };
   }, []);
 
@@ -87,8 +106,10 @@ export function StartupLoadingPage() {
     };
   }, [draft, retryKey]);
 
-  const isComplete = stageIndex === ANALYSIS_STAGES.length - 1;
-  const currentStage = ANALYSIS_STAGES[stageIndex].key;
+  const holdingForAnalysis = analysisPending && latestAnalysisStatus !== "ready";
+  const displayStage = holdingForAnalysis ? Math.min(stageIndex, ANALYSIS_HOLD_STAGE) : stageIndex;
+  const isComplete = displayStage === ANALYSIS_STAGES.length - 1;
+  const currentStage = ANALYSIS_STAGES[displayStage].key;
   const readyToEnter = isComplete && !uploading && !uploadError && !startingSession;
   const nextDraft =
     draft?.source === "file" ? { ...draft, uploadedMedia } : (draft ?? { source: "sample", sampleSceneId: "coffee" });
@@ -98,17 +119,26 @@ export function StartupLoadingPage() {
       return;
     }
 
+    const controller = new AbortController();
+    analysisAbortRef.current = controller;
     setStartingSession(true);
     setAnalysisPending(false);
+    setLatestAnalysisStatus(null);
     setSessionError(null);
     try {
       const created = await createPracticeSession(nextDraft, {
         onAnalysisPending: () => setAnalysisPending(true),
+        onAnalysisStatus: (status) => setLatestAnalysisStatus(status),
+        signal: controller.signal,
       });
       navigate(`/session/${created.sessionId}`, {
         state: { draft: nextDraft },
       });
     } catch (reason) {
+      if ((reason as { name?: string } | null)?.name === "AbortError") {
+        navigate("/");
+        return;
+      }
       const error = (reason as AppError | null) ?? {
         code: "SESSION_START_FAILED",
         message: "创建练习会话失败，请稍后重试。",
@@ -125,6 +155,11 @@ export function StartupLoadingPage() {
   }
 
   function returnHome() {
+    navigate("/");
+  }
+
+  function cancelAnalysisWait() {
+    analysisAbortRef.current?.abort();
     navigate("/");
   }
 
@@ -160,8 +195,8 @@ export function StartupLoadingPage() {
 
             <div className="loading-progress" aria-label="分析进度">
               {ANALYSIS_STAGES.map((item, index) => {
-                const isActive = index === stageIndex;
-                const isDone = index < stageIndex || isComplete;
+                const isActive = index === displayStage;
+                const isDone = index < displayStage || isComplete;
 
                 return (
                   <span
@@ -208,18 +243,29 @@ export function StartupLoadingPage() {
                 </button>
               </div>
             ) : (
-              <button
-                className="primary-button loading-cta"
-                type="button"
-                onClick={enterPractice}
-                disabled={!readyToEnter}
-              >
-                {startingSession
-                  ? analysisPending
-                    ? "正在分析场景…"
-                    : "正在创建练习…"
-                  : "进入练习"}
-              </button>
+              <div className="action-row">
+                <button
+                  className="primary-button loading-cta"
+                  type="button"
+                  onClick={enterPractice}
+                  disabled={!readyToEnter}
+                >
+                  {startingSession
+                    ? analysisPending
+                      ? "正在分析场景…"
+                      : "正在创建练习…"
+                    : "进入练习"}
+                </button>
+                {analysisPending ? (
+                  <button
+                    className="ghost-button loading-cta"
+                    type="button"
+                    onClick={cancelAnalysisWait}
+                  >
+                    取消等待
+                  </button>
+                ) : null}
+              </div>
             )}
           </section>
         </main>

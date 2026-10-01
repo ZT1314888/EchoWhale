@@ -124,6 +124,7 @@ function toPracticeMessage(message: BackendSessionMessage): PracticeMessage {
     role: isLearner ? "learner" : "coach",
     label: isLearner ? "你 · 本轮回答" : "教练 · 追问",
     content: message.text,
+    feedback: message.feedback ? toPracticeFeedback(message.feedback) : undefined,
   };
 }
 
@@ -202,18 +203,21 @@ export type SessionStartOutcome =
 
 export async function createPracticeSession(
   mediaId: string,
+  signal?: AbortSignal,
 ): Promise<SessionStartOutcome> {
-  return createSession({ media_id: mediaId });
+  return createSession({ media_id: mediaId }, signal);
 }
 
 export async function createSamplePracticeSession(
   sampleSceneId: "coffee" | "office" | "street",
+  signal?: AbortSignal,
 ): Promise<SessionStartOutcome> {
-  return createSession({ sample_scene_id: sampleSceneId });
+  return createSession({ sample_scene_id: sampleSceneId }, signal);
 }
 
 async function createSession(
   payloadBody: { media_id: string } | { sample_scene_id: "coffee" | "office" | "street" },
+  signal?: AbortSignal,
 ): Promise<SessionStartOutcome> {
   let response: Response;
 
@@ -222,8 +226,12 @@ async function createSession(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payloadBody),
+      signal,
     });
-  } catch {
+  } catch (reason) {
+    if ((reason as { name?: string })?.name === "AbortError") {
+      throw reason;
+    }
     throw toError("创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
   }
 

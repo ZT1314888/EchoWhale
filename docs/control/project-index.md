@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/frontend_quality_gates/feature.md`
-- 本轮结论：第五批质量门禁落地：tsc --noEmit 清零（lib ES2022 / vite-env.d.ts / apiClient credentials as const / streamState holder 修 never 收窄 / 示例场景白名单守卫），package.json 新增 typecheck 脚本；consumeSseResponse 包 try/finally 并在退出时 reader.cancel，中途取消/断流不再泄漏读取器（含中途失败 spy 测试）；新增仓库首个 CI（backend：uv sync --frozen + sqlite 建表 + pytest；frontend：npm ci + typecheck + vitest）。CI 配方逼出并修复测试密闭性缺口：无 .env 时 38 failed（DATABASE_URL 必填 + live 用例隐式依赖本机供应商密钥），live 用例改为 dummy 槽位 monkeypatch、CI 用 sqlite + create_all 预建表，配方逐字本地验证。
-- 当前主要阻塞：vitest coverage 阈值与 lint 接入 CI 待下一批；上传页真实进度与取消等待、语音回合反馈卡统一为 P1 体验项；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费；真实依赖的系统级 smoke 仍是既有主阻塞。
-- 补充进展：npx tsc --noEmit 0 error（批前 13）；npx vitest run 99 passed（基线 98 + 新增 1）；uv run pytest tests 224 passed / 2 skipped（本地与模拟 CI 环境均为全绿）；uv lock --check 通过。
+- 最新归档：`docs/features/frontend_wait_ux_feedback_unification/feature.md`
+- 本轮结论：第六批 P1 体验补齐落地：waitForSceneAnalysis 全链路可取消（AbortSignal 贯穿可中断 sleep、轮询前后检查与 in-flight 状态请求，AbortError 保真上抛）+ onStatus 逐次回调，session start 链路接受 signal；StartupLoadingPage 分析等待期间进度锁在「角色」档并新增「取消等待」出口（卸载自动 abort）；TurnFeedbackCard 增加 compact 变体，落库消息自带 feedback 内联渲染、悬浮卡只覆盖流式窗口，两条入口反馈呈现统一；语音逐轮反馈经源码确认受后端管线限制（仅聚合 review），已文档化边界。顺手补回第四批补丁崩溃时丢失的 PracticeSessionPage 三个页面级测试。
+- 当前主要阻塞：语音逐轮反馈需后端语音管线支持 per-turn feedback；内联分析路径（非 202）进度真实化；vitest coverage 阈值与 lint 接 CI（第五批遗留）；SCENE_ANALYSIS_ASYNC_ENABLED 生产开启前确认 worker 消费；真实依赖的系统级 smoke 仍是既有主阻塞。
+- 补充进展：npx tsc --noEmit 0 error；npx vitest run 108 passed（基线 99 + 新增 9）；uv run pytest tests 224 passed / 2 skipped（后端零改动）。
 
 ## 模块看板
 
@@ -62,6 +62,7 @@
 | 场景分析缓存 | `scene_analysis_caching` | `feature_test_passed` | `feature_test_passed` | `module/scene_engine` |
 | 前端流式与轮询接线 | `frontend_stream_ui_wiring` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 | 前端质量门禁 | `frontend_quality_gates` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| 等待体验与反馈统一 | `frontend_wait_ux_feedback_unification` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 
 ## 测试门
 

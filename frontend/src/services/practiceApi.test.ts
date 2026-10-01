@@ -22,7 +22,7 @@ describe("practiceApi", () => {
     });
 
     expect(result).toEqual({ sessionId: "sess_sample" });
-    expect(createSampleSpy).toHaveBeenCalledWith("coffee");
+    expect(createSampleSpy).toHaveBeenCalledWith("coffee", undefined);
     expect(mockCreateSpy).not.toHaveBeenCalled();
   });
 
@@ -100,7 +100,8 @@ describe("practiceApi", () => {
     );
 
     expect(onAnalysisPending).toHaveBeenCalledTimes(1);
-    expect(waitSpy).toHaveBeenCalledWith("med_wait");
+    expect(waitSpy).toHaveBeenCalled();
+    expect(waitSpy.mock.calls[0]?.[0]).toBe("med_wait");
     expect(createMediaSpy).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ sessionId: "sess_wait" });
   });
@@ -119,6 +120,32 @@ describe("practiceApi", () => {
       createPracticeSession({ source: "file", uploadedMedia: uploadedMedia("med_failed") }),
     ).rejects.toMatchObject({ code: "SCENE_ANALYSIS_FAILED" });
   });
+
+  it("threads the abort signal and status callback through the analysis wait", async () => {
+    const controller = new AbortController();
+    const onStatus = vi.fn();
+    vi.spyOn(sessionApi, "createPracticeSession").mockResolvedValue({
+      kind: "analyzing",
+      mediaId: "med_signal",
+    });
+    const waitSpy = vi
+      .spyOn(mediaApi, "waitForSceneAnalysis")
+      .mockRejectedValue(Object.assign(new Error("aborted"), { name: "AbortError" }));
+
+    await expect(
+      createPracticeSession(
+        { source: "file", uploadedMedia: uploadedMedia("med_signal") },
+        { signal: controller.signal, onAnalysisStatus: onStatus },
+      ),
+    ).rejects.toMatchObject({ name: "AbortError" });
+
+    expect(waitSpy.mock.calls[0]?.[0]).toBe("med_signal");
+    expect(waitSpy.mock.calls[0]?.[1]).toMatchObject({
+      signal: controller.signal,
+      onStatus,
+    });
+  });
+
 });
 
 function uploadedMedia(mediaId: string) {

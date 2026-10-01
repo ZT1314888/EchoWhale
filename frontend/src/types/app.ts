@@ -48,6 +48,7 @@ export type PracticeMessage = {
   role: MessageRole;
   label: string;
   content: string;
+  feedback?: PracticeFeedback;
 };
 
 export type FeedbackMetric = {

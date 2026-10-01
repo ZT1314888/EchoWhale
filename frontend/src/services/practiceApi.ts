@@ -1,4 +1,10 @@
-import type { PracticeTurnInput, SessionSummary, SubmitPracticeTurnResult, UploadDraft } from "../types/app";
+import type {
+  PracticeTurnInput,
+  SceneAnalysisStatusValue,
+  SessionSummary,
+  SubmitPracticeTurnResult,
+  UploadDraft,
+} from "../types/app";
 
 import { waitForSceneAnalysis } from "./mediaApi";
 import * as sessionApi from "./sessionApi";
@@ -15,16 +21,23 @@ function isSampleSceneId(value: string | undefined): value is SampleSceneId {
 
 export async function createPracticeSession(
   draft: UploadDraft,
-  options: { onAnalysisPending?: () => void } = {},
+  options: {
+    onAnalysisPending?: () => void;
+    onAnalysisStatus?: (status: SceneAnalysisStatusValue) => void;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<{ sessionId: string }> {
-  let outcome = await startPracticeSession(draft);
+  let outcome = await startPracticeSession(draft, options.signal);
 
   if (outcome.kind === "analyzing") {
     options.onAnalysisPending?.();
     let pendingMediaId = outcome.mediaId;
     for (let attempt = 0; attempt < MAX_START_ATTEMPTS_AFTER_PENDING; attempt += 1) {
-      await waitForSceneAnalysis(pendingMediaId);
-      outcome = await startPracticeSession(draft);
+      await waitForSceneAnalysis(pendingMediaId, {
+        signal: options.signal,
+        onStatus: options.onAnalysisStatus,
+      });
+      outcome = await startPracticeSession(draft, options.signal);
       if (outcome.kind === "created") {
         return { sessionId: outcome.sessionId };
       }
@@ -39,7 +52,10 @@ export async function createPracticeSession(
   return { sessionId: outcome.sessionId };
 }
 
-async function startPracticeSession(draft: UploadDraft): Promise<sessionApi.SessionStartOutcome> {
+async function startPracticeSession(
+  draft: UploadDraft,
+  signal?: AbortSignal,
+): Promise<sessionApi.SessionStartOutcome> {
   if (draft.source === "file") {
     const mediaId = draft.uploadedMedia?.mediaId;
     if (!mediaId) {
@@ -48,7 +64,7 @@ async function startPracticeSession(draft: UploadDraft): Promise<sessionApi.Sess
         message: "图片上传结果缺失，请返回首页重新选择。",
       };
     }
-    return sessionApi.createPracticeSession(mediaId);
+    return sessionApi.createPracticeSession(mediaId, signal);
   }
 
   const sampleSceneId = draft.sampleSceneId;
@@ -58,7 +74,7 @@ async function startPracticeSession(draft: UploadDraft): Promise<sessionApi.Sess
       message: "示例场景缺失，请返回首页重新选择。",
     };
   }
-  return sessionApi.createSamplePracticeSession(sampleSceneId);
+  return sessionApi.createSamplePracticeSession(sampleSceneId, signal);
 }
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {

@@ -1,9 +1,19 @@
 import type { PracticeFeedback } from "../types/app";
 
-export function TurnFeedbackCard({ feedback }: { feedback: PracticeFeedback }) {
+type TurnFeedbackCardProps = {
+  feedback: PracticeFeedback;
+  compact?: boolean;
+};
+
+export function TurnFeedbackCard({ feedback, compact = false }: TurnFeedbackCardProps) {
   return (
-    <aside className="session-feedback-card" data-testid="turn-feedback-card">
-      <p className="eyebrow">本轮反馈</p>
+    <aside
+      className={
+        compact ? "session-feedback-card session-feedback-card--compact" : "session-feedback-card"
+      }
+      data-testid={compact ? "message-feedback-card" : "turn-feedback-card"}
+    >
+      {compact ? null : <p className="eyebrow">本轮反馈</p>}
       <div className="session-feedback-card__item">
         <p className="session-feedback-card__label">{feedback.grammar.title}</p>
         <p className="session-feedback-card__body">{feedback.grammar.body}</p>
