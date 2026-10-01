@@ -10,6 +10,7 @@ from api.common.exceptions import NotFoundError
 from api.common.exceptions import SceneAnalysisUnavailableError
 from api.common.exceptions import UnsupportedSceneImageError
 from api.common.exceptions import ValidationError as AppValidationError
+from api.core.config import settings
 from api.models.media_model import Media
 from api.models.message_model import Message
 from api.models.runtime_model import SessionEvent
@@ -264,6 +265,77 @@ def test_start_session_propagates_unsupported_scene_image_without_creating_sessi
         "reason": "image_too_uniform",
         "retryable": False,
     }
+    assert fake_session_repository.sessions == {}
+
+
+class RecordingSceneAnalysisStore:
+    """记录缓存全部读写的假仓储，供跨用户回归测试断言零交互。"""
+
+    def __init__(self) -> None:
+        self.get_calls: list[str] = []
+        self.pending_saves: list[str] = []
+        self.result_saves: list[str] = []
+        self.failure_saves: list[str] = []
+
+    async def get(self, media_id: str):
+        self.get_calls.append(media_id)
+        return None
+
+    async def save_pending(self, media_id: str, prompt_version: str) -> None:
+        self.pending_saves.append(media_id)
+
+    async def save_result(self, media_id: str, prompt_version: str, **payload) -> None:
+        self.result_saves.append(media_id)
+
+    async def save_failure(self, media_id: str, prompt_version: str, *, error_code: int) -> None:
+        self.failure_saves.append(media_id)
+
+
+def _explode_scene_dispatch(media_id: str) -> bool:
+    raise AssertionError("跨用户请求不得派发场景分析任务")
+
+
+@pytest.fixture
+def cache_enabled_mock_runtime(monkeypatch) -> None:
+    """固定 mock 运行时并强制打开缓存开关，保证"缓存零读取"断言有拦截力。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    monkeypatch.setattr(settings, "scene_analysis_cache_enabled", True)
+
+
+def test_start_session_rejects_cross_user_media_before_cache_or_analysis(
+    fake_session_repository: FakeSessionRepository,
+    cache_enabled_mock_runtime: None,
+) -> None:
+    media = Media(
+        id="med_foreign",
+        user_id="user:owner",
+        filename="private-photo.png",
+        content_type="image/png",
+        file_size=128,
+        storage_key="media/user-owner/2026/04/01/med_foreign-private-photo.png",
+        upload_status=MediaUploadStatus.uploaded,
+    )
+    signer = FakeReadUrlSigner()
+    store = RecordingSceneAnalysisStore()
+    agent = SessionEngineAgent(
+        media_lookup=FakeMediaLookup(media),
+        session_repository=fake_session_repository,
+        read_url_signer=signer,
+        scene_analysis_store=store,
+        scene_dispatcher=_explode_scene_dispatch,
+    )
+    agent.scene_engine = ExplodingSceneEngine()
+
+    with pytest.raises(NotFoundError, match="Media med_foreign not found"):
+        asyncio.run(agent.start(StartSessionInput(user_id="user:attacker", media_id=media.id)))
+
+    # upload_status 已是 uploaded 仍被拒：拦截只看归属，与上传状态无关；
+    # 且缓存零读取、零写入，视觉分析零派发，签名 URL 也未生成。
+    assert store.get_calls == []
+    assert store.pending_saves == []
+    assert store.result_saves == []
+    assert store.failure_saves == []
+    assert signer.requested_keys == []
     assert fake_session_repository.sessions == {}
 
 

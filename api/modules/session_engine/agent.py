@@ -12,6 +12,7 @@ from api.common.exceptions import (
     EchoWhaleError,
     InvalidStateError,
     ModelProviderError,
+    NotFoundError,
     SceneAnalysisUnavailableError,
     UnsupportedSceneImageError,
 )
@@ -90,6 +91,11 @@ class SessionEngineAgent:
         if payload.media_id is None:
             raise AppValidationError("media_id is required to start an image session")
         media = await self.media_lookup.get_media(payload.media_id)
+        # 归属校验必须先于上传状态检查、缓存查询与场景分析派发：
+        # 跨用户请求一律收敛成 404 防存在性探测，且不得读场景缓存、
+        # 不得触发视觉分析——否则会用他人图片泄漏场景描述并转嫁调用成本。
+        if media.user_id != payload.user_id:
+            raise NotFoundError(f"Media {media.id} not found")
         if media.upload_status != MediaUploadStatus.uploaded:
             raise InvalidStateError(f"Media {media.id} is not uploaded")
 

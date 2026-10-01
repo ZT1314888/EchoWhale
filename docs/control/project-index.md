@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/production_config_gate/feature.md`
-- 本轮结论：审计 Finding 3 修复（含 Finding 18 最小修复）：validate_runtime 门控反转——APP_ENV 从精确匹配 production 改为白名单 {development,dev,test,testing,local} 外一律按生产校验（空串/拼写错误/localhost 均不豁免）；生产清单补至 17 项：JWT ≥32 字符且非默认、DATABASE_URL、REDIS_URL、MODEL_RUNTIME_MODE=live、R2 三凭证、SMTP 四字段全配，缺失项聚合进一条 ConfigurationError；校验通过打非敏感生效模式日志；删除死配置 llm_provider。
-- 当前主要阻塞：Finding 18 队列 payload 验证码哈希化待排；生产清单写入部署 runbook 归 Dockerfile/runbook 批次；审计 Finding 4 密钥分离、Finding 5 auth 限流反代头待排；系统级 smoke、PRD 刷新原队列不变。
-- 补充进展：uv run pytest tests 386 passed / 2 skipped（新增 119：108 fail-closed 参数化 + 豁免矩阵 + 弱密钥边界 + mock 上线 + 日志脱敏）；ruff/black 全绿；冒烟：默认 env /health 200，APP_ENV=prod import 失败并逐项点名。
+- 最新归档：`docs/features/session_media_ownership_check/feature.md`
+- 本轮结论：审计 Finding 4 修复：SessionEngineAgent.start() 的 media 分支补归属校验（media.user_id != payload.user_id 即NotFoundError），位置有意前置到 upload-status 检查、缓存查询与场景分析派发之前——跨用户请求不得探测上传状态、命中共享场景缓存或触发视觉调用。变异验证：移除校验新测试即红。
+- 当前主要阻塞：仓储级强制归属（get_media 按 owner 过滤）另行立项；Fix Immediately 仅剩 Finding 6 反馈降级；系统级 smoke、PRD 刷新原队列不变。
+- 补充进展：uv run pytest tests 387 passed / 2 skipped；ruff/black 全绿；agent_ops check 与 render 通过。
 
 ## 模块看板
 
@@ -68,6 +68,7 @@
 | 访客身份与限流加固 | `visitor_ratelimit_hardening` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 上传流式校验与请求体大小门 | `media_upload_stream_guard` | `feature_test_passed` | `feature_test_passed` | `module/media_upload` |
 | 生产配置门控反转与清单补全 | `production_config_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 会话启动媒体归属校验 | `session_media_ownership_check` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 
