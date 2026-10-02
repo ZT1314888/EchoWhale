@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/request_id_and_readiness/feature.md",
-    "summary": "审计 Finding 15 最小集修复：RequestContextMiddleware（纯 ASGI 管线最内层，入站 X-Request-ID 校验复用/生成，ContextVar 贯穿异步链路 + RequestIdFilter 挂 root 全部 handler，响应头回写含 SSE）；/readyz 三探针依赖注入（DB SELECT 1 实测 / Redis PING 带 2s 硬超时与 unconfigured 跳过 / R2 零网络配置检查），只有实测失败才 503，轻量 JSON 不走信封；/health 保持 liveness。body 门 413 无 request id 属有意盲区（已注释）。",
-    "blockers": "uvicorn 自有日志不带 request id（应用日志已够）；JSON 日志开关、OTel/Langfuse、usage 表 owner/session 归因（ContextVar 贯穿）归后续批次；本批次最后一项：交付门禁与部署（E）。",
-    "extra_progress": "uv run pytest tests 456 passed / 2 skipped（+27）；ruff/black 全绿。"
+    "latest_record": "docs/features/delivery_gates_and_deployment/feature.md",
+    "summary": "审计 Release 维度 + Finding 13/14：后端覆盖率门禁（pytest-cov 入 dev 组，pyproject fail_under=87，基线实测 88.12%，CI pytest --cov=api）；前端 build 接 tsc --noEmit；requirements.txt 删除（uv.lock 单事实源）；infra/docker/Dockerfile（uv frozen，api+worker 共用镜像）+ compose 参考编排（迁移前置、健康检查依赖序）+ docs/deployment.md 运行手册（17 项清单/迁移/worker 确认/proxy-headers/回滚）；CI 新增 docker 构建 job（不推送）；gitignore 治理（tests/* 删除、docs features/versions/bugs/modules 与 deployment.md 放行、infra/* + !infra/docker/），新文件对 git status 默认可见，force-add 时代结束。",
+    "blockers": "镜像 registry 推送与正式发布流水线另行接入；CI 加 PG service 容器批次待排；本地 Docker 引擎未运行，镜像构建由 CI docker job 实测。",
+    "extra_progress": "覆盖率门禁本地实测通过；npm run build（tsc+vite）通过；compose config 校验通过；pytest 456 passed / 2 skipped。"
   },
   "modules": [
     {
@@ -307,6 +307,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "交付门禁与部署收口",
+      "scope": "delivery_gates_and_deployment",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/infra_delivery"
     }
   ],
   "test_layers": [

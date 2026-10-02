@@ -173,6 +173,10 @@ uv run alembic upgrade head
 - 后端健康检查：http://localhost:8001/health
 - API 文档：http://localhost:8001/docs
 
+## 部署
+
+单机/生产部署（Docker 镜像、compose 参考编排、生产环境 17 项清单、迁移与回滚、反代 `--proxy-headers` 要求）见 **[docs/deployment.md](docs/deployment.md)**。`APP_ENV` 在 `development/dev/test/testing/local` 之外的任何取值都会按生产标准逐项校验，缺一即拒绝启动。
+
 ## 环境变量
 
 完整变量列表见 [.env.example](.env.example)，以下为关键分组：

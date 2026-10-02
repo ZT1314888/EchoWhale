@@ -218,6 +218,13 @@ demo2.html
 design/
 designs/
 docs/*
+# docs 下的追踪目录逐个放行：features/versions 是主追踪系统的常驻新增区，
+# 新文件必须默认对 git status 可见（force-add 摩擦治理，见 audit F 批次）。
+!docs/features/
+!docs/versions/
+!docs/bugs/
+!docs/modules/
+!docs/deployment.md
 !docs/interview/
 docs/interview/*
 !docs/interview/*.md
@@ -230,11 +237,11 @@ docs/screenshots/*
 !docs/screenshots/home-upload.png
 !docs/screenshots/practice-session.png
 !docs/screenshots/post-review.png
-infra/
-tests/*
-!tests/tools/
-tests/tools/*
-!tests/tools/test_agent_ops.py
+# infra/* 逐项放行（目录级排除会挡住子目录反选）：docker/ 交付物入库。
+infra/*
+!infra/docker/
+# tests 全目录追踪：垃圾文件（缓存/临时库）由全局 __pycache__、*.db 等规则兜底；
+# 新测试文件对 git status 可见是门禁的一部分（此前 tests/* 曾让新测试静默漏提交）。
 tmp/
 .codex/
 .superpowers/

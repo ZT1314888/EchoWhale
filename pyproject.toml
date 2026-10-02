@@ -24,6 +24,7 @@ dev = [
     "alembic>=1.16.5",
     "black>=26.5.1",
     "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
     "ruff>=0.16.9",
 ]
 
@@ -50,3 +51,12 @@ extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
 [tool.black]
 # 与 [tool.ruff] 的 line-length 对齐，减少两者互相重排的 diff。
 line-length = 100
+
+[tool.coverage.run]
+# 覆盖率口径与 CI 门禁一致：只统计 api 包（tests/tools 不计入分母）。
+source = ["api"]
+
+[tool.coverage.report]
+# 基线锁定 2026-10-02 实测值 88%（4656 语句 / 553 未覆盖）；门禁取 87 留
+# 环境波动缓冲，新代码只允许抬高不允许拉低。阈值提升随批次推进。
+fail_under = 87

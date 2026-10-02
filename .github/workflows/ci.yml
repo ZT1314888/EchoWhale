@@ -55,7 +55,23 @@ jobs:
           PY
 
       - name: Run backend tests
-        run: uv run pytest tests
+        # 覆盖率门禁阈值在 pyproject [tool.coverage.report]（当前 87）：
+        # 阈值与口径集中在 pyproject，CI 与本地 `uv run pytest --cov` 同源。
+        run: uv run pytest tests --cov=api
+
+  docker:
+    name: docker (image build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # 构建但不推送：交付物可复现性进入门禁，发布推送另行接入（需 registry 凭证）。
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile
+          push: false
 
   frontend:
     name: frontend (typecheck + vitest)

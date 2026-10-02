@@ -1,0 +1,66 @@
+# EchoWhale 本地/单机生产参考编排：postgres + redis + api + worker。
+# 生产部署清单（17 项校验、--proxy-headers 等）见 docs/deployment.md；
+# 此文件是可运行的最小拓扑，不是最终生产编排（无 TLS/资源限制/持久化调优）。
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: echowhale
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d echowhale"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile
+    # 迁移先行：alembic upgrade head 成功后才启动 API（失败即退出，避免假就绪）。
+    command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/echowhale
+      REDIS_URL: redis://redis:6379/0
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET}
+      # 生产其余必填项（AUTH_COOKIE_SECURE / ALLOWED_ORIGINS / SMTP / R2 /
+      # DEEPGRAM_*) 由启动校验清单逐项点名，缺一不启动——docs/deployment.md。
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/docker/Dockerfile
+    # RQ worker 消费 auth-mail 与 scene-analysis 队列；
+    # SCENE_ANALYSIS_ASYNC_ENABLED=true 开启前必须确认本服务在跑（docs/deployment.md）。
+    command: python -m api.tasks.worker
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/echowhale
+      REDIS_URL: redis://redis:6379/0
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

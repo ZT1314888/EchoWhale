@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/request_id_and_readiness/feature.md`
-- 本轮结论：审计 Finding 15 最小集修复：RequestContextMiddleware（纯 ASGI 管线最内层，入站 X-Request-ID 校验复用/生成，ContextVar 贯穿异步链路 + RequestIdFilter 挂 root 全部 handler，响应头回写含 SSE）；/readyz 三探针依赖注入（DB SELECT 1 实测 / Redis PING 带 2s 硬超时与 unconfigured 跳过 / R2 零网络配置检查），只有实测失败才 503，轻量 JSON 不走信封；/health 保持 liveness。body 门 413 无 request id 属有意盲区（已注释）。
-- 当前主要阻塞：uvicorn 自有日志不带 request id（应用日志已够）；JSON 日志开关、OTel/Langfuse、usage 表 owner/session 归因（ContextVar 贯穿）归后续批次；本批次最后一项：交付门禁与部署（E）。
-- 补充进展：uv run pytest tests 456 passed / 2 skipped（+27）；ruff/black 全绿。
+- 最新归档：`docs/features/delivery_gates_and_deployment/feature.md`
+- 本轮结论：审计 Release 维度 + Finding 13/14：后端覆盖率门禁（pytest-cov 入 dev 组，pyproject fail_under=87，基线实测 88.12%，CI pytest --cov=api）；前端 build 接 tsc --noEmit；requirements.txt 删除（uv.lock 单事实源）；infra/docker/Dockerfile（uv frozen，api+worker 共用镜像）+ compose 参考编排（迁移前置、健康检查依赖序）+ docs/deployment.md 运行手册（17 项清单/迁移/worker 确认/proxy-headers/回滚）；CI 新增 docker 构建 job（不推送）；gitignore 治理（tests/* 删除、docs features/versions/bugs/modules 与 deployment.md 放行、infra/* + !infra/docker/），新文件对 git status 默认可见，force-add 时代结束。
+- 当前主要阻塞：镜像 registry 推送与正式发布流水线另行接入；CI 加 PG service 容器批次待排；本地 Docker 引擎未运行，镜像构建由 CI docker job 实测。
+- 补充进展：覆盖率门禁本地实测通过；npm run build（tsc+vite）通过；compose config 校验通过；pytest 456 passed / 2 skipped。
 
 ## 模块看板
 
@@ -74,6 +74,7 @@
 | 限流体系收口 | `ratelimit_closing` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | LLM成本与输入边界 | `llm_cost_and_input_bounds` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 请求关联ID与就绪探针 | `request_id_and_readiness` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 交付门禁与部署收口 | `delivery_gates_and_deployment` | `feature_test_passed` | `feature_test_passed` | `module/infra_delivery` |
 
 ## 测试门
 
