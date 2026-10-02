@@ -9,14 +9,13 @@ from __future__ import annotations
 import logging
 
 import pytest
+from redis.exceptions import RedisError
 
 from api.common.exceptions import TooManyRequestsError
 from api.core.config import settings
-from redis.exceptions import RedisError
-
 from api.services.auth_rate_limit import (
-    AuthRateLimitRule,
     AuthRateLimiter,
+    AuthRateLimitRule,
     RedisAuthRateLimiter,
     get_auth_rate_limiter,
 )

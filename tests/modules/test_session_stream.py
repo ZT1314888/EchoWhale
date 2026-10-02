@@ -8,10 +8,12 @@ import logging
 import pytest
 
 from api.common.exceptions import ModelProviderError
+from api.core.config import settings
 from api.models.message_model import Message
 from api.models.session_model import Session
 from api.modules.feedback_engine.schema import FeedbackResult
 from api.modules.session_engine.agent import SessionEngineAgent
+from api.modules.session_engine.review_builder import ReviewCopy
 from api.modules.session_engine.schema import ReplyInput
 
 
@@ -99,6 +101,8 @@ def _degraded_feedback_payload() -> dict[str, object]:
         "grammar": "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
         "more_natural": "（本轮没有更自然表达建议）",
         "useful_words": [],
+        "errors": [],
+        "cefr_level": None,
     }
 
 
@@ -110,12 +114,19 @@ def _agent(repository, feedback_engine, coach_engine) -> SessionEngineAgent:
 
 
 @pytest.mark.anyio
-async def test_stream_reply_emits_feedback_then_deltas_then_session() -> None:
+async def test_stream_reply_emits_feedback_then_deltas_then_session(monkeypatch) -> None:
+    # 固定 mock 模式：本测试只关心事件序契约，复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
 
-    events = [event async for event in agent.stream_reply(ReplyInput(session_id="sess_stream", learner_message="latte please"))]
+    events = [
+        event
+        async for event in agent.stream_reply(
+            ReplyInput(session_id="sess_stream", learner_message="latte please")
+        )
+    ]
 
     assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
     assert events[0][1].grammar == "Clear enough."
@@ -168,32 +179,223 @@ async def test_stream_reply_aborts_without_persisting_when_coach_open_fails() ->
     )
 
     with pytest.raises(RuntimeError, match="coach open failed"):
-        _ = [event async for event in agent.stream_reply(ReplyInput(session_id="sess_stream", learner_message="latte please"))]
+        _ = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
 
     assert repository.saved_turns == []
     assert len(repository.session.messages) == 1
 
 
 @pytest.mark.anyio
-async def test_stream_reply_aborts_without_persisting_when_stream_breaks_midway() -> None:
+async def test_stream_reply_aborts_without_persisting_when_stream_breaks_midway(
+    monkeypatch,
+) -> None:
+    # 固定 mock 模式：中途断流时的复盘任务必须被清理，且不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure,", "one latte."], fail_after=1)
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
 
     with pytest.raises(RuntimeError, match="stream broke mid-reply"):
-        _ = [event async for event in agent.stream_reply(ReplyInput(session_id="sess_stream", learner_message="latte please"))]
+        _ = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
 
     assert repository.saved_turns == []
     assert stream.closed is True
 
 
 @pytest.mark.anyio
-async def test_stream_reply_rejects_empty_coach_output() -> None:
+async def test_stream_reply_rejects_empty_coach_output(monkeypatch) -> None:
+    # 固定 mock 模式：空回复失败路径的复盘任务必须被清理，且不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["  "])
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
 
     with pytest.raises(ModelProviderError):
-        _ = [event async for event in agent.stream_reply(ReplyInput(session_id="sess_stream", learner_message="latte please"))]
+        _ = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
 
     assert repository.saved_turns == []
+
+
+class FakeReviewSummarizer:
+    """返回固定 ReviewCopy 的替身，记录调用入参；异常时原样上抛。"""
+
+    def __init__(self, copy: ReviewCopy | Exception) -> None:
+        self._copy = copy
+        self.calls: list[dict[str, str]] = []
+
+    async def summarize(
+        self,
+        *,
+        scene: str,
+        role: str,
+        learner_message: str,
+        feedback,
+    ) -> ReviewCopy:
+        self.calls.append(
+            {
+                "scene": scene,
+                "role": role,
+                "learner_message": learner_message,
+            }
+        )
+        if isinstance(self._copy, Exception):
+            raise self._copy
+        return self._copy
+
+
+class SlowReviewSummarizer:
+    """超过有界等待上限的替身：验证超时取消与降级模板复盘。"""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+
+    async def summarize(self, **_: object) -> ReviewCopy:
+        try:
+            await asyncio.sleep(5)
+        except asyncio.CancelledError:
+            self.cancelled = True
+            raise
+        return ReviewCopy(
+            scene_title="x",
+            role_label="x",
+            highlight="x",
+            next_try="x",
+            next_step="x",
+        )
+
+
+@pytest.mark.anyio
+async def test_stream_reply_builds_review_from_llm_copy(monkeypatch) -> None:
+    """流式路径复盘与 delta 并行：session 事件与落库 review 消费 LLM 文案。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    repository = RecordingSessionRepository(_session())
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
+    summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="咖啡店柜台点单",
+            role_label="店员对话",
+            highlight="这轮你把主需求说完整了。",
+            next_try="下一轮补一句杯型或口味细节。",
+            next_step="把 useful_words 里的词带进下一轮回答。",
+        )
+    )
+    agent.review_summarizer = summarizer
+
+    events = [
+        event
+        async for event in agent.stream_reply(
+            ReplyInput(session_id="sess_stream", learner_message="latte please")
+        )
+    ]
+
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    review = repository.saved_turns[0][3]
+    assert review.highlight == "这轮你把主需求说完整了。"
+    assert review.next_try == "下一轮补一句杯型或口味细节。"
+    assert review.feedback.next_step.body == "把 useful_words 里的词带进下一轮回答。"
+    assert summarizer.calls[0]["scene"] == "coffee_shop"
+
+
+@pytest.mark.anyio
+async def test_stream_reply_degrades_review_when_summarizer_fails(monkeypatch, caplog) -> None:
+    """复盘 LLM 失败只降级模板复盘：事件序完整、本轮照常落库并留 degraded 日志。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    repository = RecordingSessionRepository(_session())
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
+    agent.review_summarizer = FakeReviewSummarizer(RuntimeError("review provider down"))
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        events = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
+
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    review = repository.saved_turns[0][3]
+    assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”")
+    assert "session_review_copy_failed" in caplog.text
+    assert "degraded=true" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_stream_reply_cancels_slow_review_task_and_degrades(monkeypatch, caplog) -> None:
+    """复盘超过 llm_review_wait_seconds 未返回：取消任务并降级模板复盘。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    monkeypatch.setattr(settings, "llm_review_wait_seconds", 0.05)
+    repository = RecordingSessionRepository(_session())
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
+    summarizer = SlowReviewSummarizer()
+    agent.review_summarizer = summarizer
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        events = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
+
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    review = repository.saved_turns[0][3]
+    assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”")
+    assert "session_review_copy_failed" in caplog.text
+    # 给事件循环几个 tick，让取消请求在慢速任务内落地。
+    for _ in range(10):
+        if summarizer.cancelled:
+            break
+        await asyncio.sleep(0)
+    assert summarizer.cancelled is True
+
+
+@pytest.mark.anyio
+async def test_stream_reply_skips_review_task_when_feedback_degraded(monkeypatch) -> None:
+    """feedback 已降级时不起复盘任务：summarizer 不得被调用。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    repository = RecordingSessionRepository(_session())
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = _agent(
+        repository,
+        StubFeedbackEngine(RuntimeError("feedback provider down")),
+        StubCoachEngine(stream),
+    )
+    summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="x",
+            role_label="x",
+            highlight="x",
+            next_try="x",
+            next_step="x",
+        )
+    )
+    agent.review_summarizer = summarizer
+
+    events = [
+        event
+        async for event in agent.stream_reply(
+            ReplyInput(session_id="sess_stream", learner_message="latte please")
+        )
+    ]
+
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    assert summarizer.calls == []
+    assert events[0][1].model_dump() == _degraded_feedback_payload()

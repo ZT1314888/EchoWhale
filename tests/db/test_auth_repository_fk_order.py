@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import event
 
 from api.db.auth_db import SqlAlchemyAuthRepository
 from api.db.database import create_all_tables, create_database_engine, create_session_factory
-from api.models.user_model import RefreshTokenRecordModel
-from api.models.user_model import User
+from api.models.user_model import RefreshTokenRecordModel, User
 
 
 def test_create_user_persists_parent_before_credentials_when_foreign_keys_are_enforced() -> None:
@@ -57,7 +56,7 @@ def test_rotate_refresh_token_consumes_old_token_only_once() -> None:
         password_hash="hashed-password",
     )
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     repository.save_refresh_token(
         RefreshTokenRecordModel(
             id="rt_old",

@@ -3,8 +3,9 @@ from __future__ import annotations
 import pytest
 
 from api.common.exceptions import ConfigurationError
-from api.models.message_model import Message
 from api.core.config import settings
+from api.models.message_model import Message
+from api.modules.coach_engine.prompts.coach_prompts import COACH_LEARNER_LEVEL, COACH_SYSTEM_PROMPT
 from api.modules.coach_engine.providers.chat_provider import OpenAICompatibleChatProvider
 from api.modules.coach_engine.schema import CoachReplyInput
 from api.modules.coach_engine.service import CoachEngineService
@@ -80,3 +81,13 @@ def test_live_coach_engine_requires_real_provider_configuration(monkeypatch) -> 
 
     with pytest.raises(ConfigurationError, match="real text provider"):
         CoachEngineService()
+
+
+def test_coach_system_prompt_declares_learner_level_and_constraints() -> None:
+    """提示词守卫：水平注入位、仅英语约束与长度约束必须显式存在（审计 Finding 20）。"""
+    assert COACH_LEARNER_LEVEL == "intermediate (CEFR B1)"
+    # 注入位常量必须出现在系统提示词中（后续任务只改常量为动态取值）。
+    assert COACH_LEARNER_LEVEL in COACH_SYSTEM_PROMPT
+    assert "CEFR" in COACH_SYSTEM_PROMPT
+    assert "English only" in COACH_SYSTEM_PROMPT
+    assert "at most 3 short sentences" in COACH_SYSTEM_PROMPT

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from api.modules.scene_engine.evaluation import SceneEvaluationCase
-from api.modules.scene_engine.evaluation import evaluate_scene_output
+from api.modules.scene_engine.evaluation import SceneEvaluationCase, evaluate_scene_output
 from api.modules.scene_engine.schema import SceneAnalysisResult
 
 

@@ -45,7 +45,7 @@ def test_verify_signed_value_rejects_wrong_secret() -> None:
 
 def test_verify_signed_value_rejects_truncated_signature() -> None:
     signed = sign_value("visitor_abc", secret=SECRET)
-    truncated = signed[: -8]
+    truncated = signed[:-8]
 
     assert verify_signed_value(truncated, secret=SECRET) is None
 

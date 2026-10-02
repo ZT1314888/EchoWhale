@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import httpx
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from api.common.exceptions import NotFoundError
 from api.core.config import settings
@@ -83,7 +83,9 @@ def test_deepgram_think_proxy_forwards_chat_completion_request(
     captured: dict[str, object] = {}
 
     class FakeHttpxClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             captured["url"] = url
             captured["headers"] = headers
             captured["json"] = json
@@ -175,7 +177,9 @@ def test_deepgram_think_proxy_preserves_upstream_json_error_body(
     )
 
     class FakeHttpxClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             return httpx.Response(
                 429,
                 json={
@@ -290,7 +294,9 @@ def test_deepgram_think_proxy_handles_non_json_upstream_response(
     )
 
     class FakeHttpxClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             return httpx.Response(502, text="<html>gateway failure</html>")
 
     monkeypatch.setattr(
@@ -331,10 +337,7 @@ def test_deepgram_think_proxy_streams_sse_upstream_response(
         "qwen-plus",
     )
     captured: dict[str, object] = {}
-    stream_body = (
-        b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'
-        b"data: [DONE]\n\n"
-    )
+    stream_body = b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n' b"data: [DONE]\n\n"
 
     class FakeHttpxClient:
         def build_request(
@@ -472,7 +475,9 @@ def test_deepgram_think_proxy_rejects_unknown_session_with_401(
     captured: dict[str, object] = {}
 
     class RecordingHttpxClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             captured["called"] = True
             return httpx.Response(200, json={"choices": []})
 
@@ -525,7 +530,9 @@ def test_deepgram_think_proxy_rate_limits_per_session(
     app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
 
     class FakeHttpxClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             return httpx.Response(200, json={"choices": []})
 
     monkeypatch.setattr(

@@ -7,14 +7,13 @@ from collections.abc import AsyncIterator
 import pytest
 from fastapi.testclient import TestClient
 
-from api.common.exceptions import ModelProviderError, NotFoundError, TooManyRequestsError
+from api.common.exceptions import ModelProviderError, NotFoundError
 from api.main import app
-from api.modules.feedback_engine.schema import FeedbackResult
 from api.models.message_model import Message
 from api.models.session_model import Session
+from api.modules.feedback_engine.schema import FeedbackResult
 from api.routes.v1.sessions import get_llm_rate_limiter, get_session_service
-from api.services.llm_rate_limit import InMemoryLLMRateLimiter
-from api.services.llm_rate_limit import LLMRateLimitRule
+from api.services.llm_rate_limit import InMemoryLLMRateLimiter, LLMRateLimitRule
 
 
 def _session() -> Session:
@@ -50,18 +49,14 @@ class FakeReplyStreamService:
     async def _events(self) -> AsyncIterator[tuple[str, object]]:
         yield (
             "feedback",
-            FeedbackResult(
-                grammar="Clear.", more_natural="Latte, please.", useful_words=["latte"]
-            ),
+            FeedbackResult(grammar="Clear.", more_natural="Latte, please.", useful_words=["latte"]),
         )
         yield ("delta", "Sure, ")
         if self.fail_after == "delta":
             raise ModelProviderError("Coach provider exploded")
         yield ("delta", "one latte.")
         session = _session()
-        session.messages.append(
-            Message(id="msg_2", role="user", text="latte please")
-        )
+        session.messages.append(Message(id="msg_2", role="user", text="latte please"))
         session.messages.append(
             Message(
                 id="msg_3",
@@ -126,9 +121,9 @@ def _parse_sse(text: str) -> list[tuple[str, dict]]:
         data_lines: list[str] = []
         for line in frame.split("\n"):
             if line.startswith("event:"):
-                event_name = line[len("event:"):].strip()
+                event_name = line[len("event:") :].strip()
             elif line.startswith("data:"):
-                data_lines.append(line[len("data:"):].strip())
+                data_lines.append(line[len("data:") :].strip())
         assert data_lines, f"frame without data: {frame!r}"
         import json
 
@@ -215,7 +210,7 @@ def test_reply_stream_rate_limit_returns_envelope_before_streaming(client) -> No
 
 
 def test_legacy_json_reply_endpoint_still_works(client) -> None:
-    test_client, service = client
+    test_client, _service = client
 
     response = test_client.post(
         "/api/v1/sessions/sess_stream/reply",

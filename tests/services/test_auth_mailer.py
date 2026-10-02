@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import smtplib
+from typing import Self
 
 import pytest
 
 from api.common.exceptions import EchoWhaleError
+from api.models.user_model import User
 from api.services import auth_mailer
 from api.services.auth_mailer import SmtpAuthMailer
-from api.models.user_model import User
 
 
 def _build_user() -> User:
@@ -41,7 +42,7 @@ def test_send_verification_email_translates_smtp_authentication_error(
             self.port = port
             self.timeout = timeout
 
-        def __enter__(self) -> "FakeSmtpClient":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -74,7 +75,7 @@ def test_send_verification_email_translates_smtp_transport_error(
             self.port = port
             self.timeout = timeout
 
-        def __enter__(self) -> "FakeSmtpClient":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:
@@ -109,7 +110,7 @@ def test_send_password_reset_email_contains_reset_link_instead_of_raw_token(
             self.port = port
             self.timeout = timeout
 
-        def __enter__(self) -> "FakeSmtpClient":
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, exc_type, exc, tb) -> None:

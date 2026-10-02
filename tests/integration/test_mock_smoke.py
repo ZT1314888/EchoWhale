@@ -16,7 +16,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.common.enums import MediaUploadStatus
+from api.common.ownership import build_visitor_owner
 from api.core.config import settings
+from api.core.security import sign_value
 from api.db.database import (
     create_all_tables_async,
     create_async_database_engine,
@@ -26,8 +28,6 @@ from api.db.media_db import SqlAlchemyMediaRepository
 from api.db.scene_analysis_db import SqlAlchemySceneAnalysisStore
 from api.db.session_db import SqlAlchemySessionRepository
 from api.main import app
-from api.common.ownership import build_visitor_owner
-from api.core.security import sign_value
 from api.models.media_model import Media
 from api.modules.scene_engine.service import SceneEngineService
 from api.modules.session_engine.service import SessionEngineService
@@ -131,9 +131,9 @@ def _parse_sse(text: str) -> list[tuple[str, dict]]:
         data_lines: list[str] = []
         for line in frame.split("\n"):
             if line.startswith("event:"):
-                event_name = line[len("event:"):].strip()
+                event_name = line[len("event:") :].strip()
             elif line.startswith("data:"):
-                data_lines.append(line[len("data:"):].strip())
+                data_lines.append(line[len("data:") :].strip())
         if data_lines:
             frames.append((event_name, json.loads("\n".join(data_lines))))
     return frames

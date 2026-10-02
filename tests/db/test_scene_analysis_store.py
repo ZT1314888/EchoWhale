@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import event as sa_event
@@ -134,9 +134,13 @@ async def test_store_upsert_keeps_single_row_per_media(engine_url) -> None:
     from sqlalchemy import func, select
 
     async with create_async_session_factory(engine)() as db_session:
-        total = await db_session.scalar(select(func.count()).select_from(
-            __import__("api.db.scene_analysis_db", fromlist=["SceneAnalysisRecord"]).SceneAnalysisRecord
-        ))
+        total = await db_session.scalar(
+            select(func.count()).select_from(
+                __import__(
+                    "api.db.scene_analysis_db", fromlist=["SceneAnalysisRecord"]
+                ).SceneAnalysisRecord
+            )
+        )
     assert total == 1
     latest = await store.get("med_cache")
     assert latest is not None
@@ -181,11 +185,13 @@ async def test_store_snapshot_carries_updated_at(engine_url) -> None:
     await create_all_tables_async(engine)
     store = build_scene_analysis_store(create_async_session_factory(engine))
 
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     await asyncio.sleep(0)
     await store.save_pending("med_cache", "v1")
     snapshot = await store.get("med_cache")
     assert snapshot is not None
     assert snapshot.updated_at is not None
-    assert snapshot.updated_at >= before.replace(tzinfo=None) or snapshot.updated_at.tzinfo is not None
+    assert (
+        snapshot.updated_at >= before.replace(tzinfo=None) or snapshot.updated_at.tzinfo is not None
+    )
     await engine.dispose()

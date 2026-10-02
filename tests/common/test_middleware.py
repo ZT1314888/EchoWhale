@@ -60,9 +60,7 @@ async def collect_send() -> tuple[list[dict[str, Any]], Any]:
 
 def response_body_json(sent: list[dict[str, Any]]) -> dict[str, Any]:
     body = b"".join(
-        message.get("body", b"")
-        for message in sent
-        if message["type"] == "http.response.body"
+        message.get("body", b"") for message in sent if message["type"] == "http.response.body"
     )
     return json.loads(body)
 

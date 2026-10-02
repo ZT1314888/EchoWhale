@@ -3,10 +3,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import VoiceTokenError
-from api.integrations.deepgram.voice_agent import DeepgramSettingsBuilder
-from api.integrations.deepgram.voice_agent import DeepgramTokenIssuer
+from api.common.exceptions import ConfigurationError, VoiceTokenError
+from api.integrations.deepgram.voice_agent import DeepgramSettingsBuilder, DeepgramTokenIssuer
 from api.models.message_model import Message
 from api.models.session_model import Session
 

@@ -15,7 +15,9 @@ from api.models.session_model import Session
 
 
 @pytest.mark.anyio
-async def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced() -> None:
+async def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced() -> (
+    None
+):
     engine: AsyncEngine = create_async_database_engine("sqlite+aiosqlite:///:memory:")
 
     @event.listens_for(engine.sync_engine, "connect")

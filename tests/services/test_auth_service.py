@@ -8,12 +8,13 @@ import pytest
 from sqlalchemy import event
 from sqlalchemy.exc import IntegrityError
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import PermissionDeniedError
-from api.common.exceptions import TooManyRequestsError
-from api.common.exceptions import ValidationError
-from api.core.security import hash_password
-from api.core.security import hash_refresh_token
+from api.common.exceptions import (
+    AuthenticationError,
+    PermissionDeniedError,
+    TooManyRequestsError,
+    ValidationError,
+)
+from api.core.security import hash_password, hash_refresh_token
 from api.db.auth_db import SqlAlchemyAuthRepository
 from api.db.database import create_all_tables, create_database_engine, create_session_factory
 from api.models.user_model import User
@@ -133,7 +134,9 @@ def _build_service(
 
 
 def test_register_persists_user_without_issuing_session(tmp_path: Path) -> None:
-    service, repository, publisher, verification_store = _build_service(tmp_path / "auth-register.db")
+    service, repository, publisher, verification_store = _build_service(
+        tmp_path / "auth-register.db"
+    )
 
     user = service.register(
         nickname="Echo Learner",
@@ -267,7 +270,9 @@ def test_login_rejects_disabled_user(tmp_path: Path) -> None:
 
 
 def test_verify_email_activates_user_and_consumes_token(tmp_path: Path) -> None:
-    service, repository, publisher, verification_store = _build_service(tmp_path / "auth-verify-email.db")
+    service, repository, publisher, verification_store = _build_service(
+        tmp_path / "auth-verify-email.db"
+    )
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -322,8 +327,12 @@ def test_resend_verification_raises_when_frequency_limit_exceeded(tmp_path: Path
         service.resend_verification(email="learner@example.com", ip_address="127.0.0.1")
 
 
-def test_reset_password_rotates_credentials_and_revokes_existing_refresh_tokens(tmp_path: Path) -> None:
-    service, repository, publisher, verification_store = _build_service(tmp_path / "auth-reset-password.db")
+def test_reset_password_rotates_credentials_and_revokes_existing_refresh_tokens(
+    tmp_path: Path,
+) -> None:
+    service, repository, publisher, verification_store = _build_service(
+        tmp_path / "auth-reset-password.db"
+    )
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",

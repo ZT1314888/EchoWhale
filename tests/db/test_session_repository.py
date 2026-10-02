@@ -1,20 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from api.common.exceptions import NotFoundError
 from api.db.database import (
     create_all_tables_async,
     create_async_database_engine,
     create_async_session_factory,
 )
 from api.db.session_db import SqlAlchemySessionRepository
-from api.common.exceptions import NotFoundError
 from api.models.message_model import Message
-from api.models.runtime_model import SessionEvent
+from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
-from api.models.runtime_model import VoiceSessionFact
 
 try:
     from api.models.review_model import (
@@ -161,8 +160,8 @@ async def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_pat
         visual_anchors=["counter"],
         vocab_candidates=["coffee"],
         messages=[],
-        created_at=datetime.now(timezone.utc) - timedelta(hours=1),
-        updated_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        created_at=datetime.now(UTC) - timedelta(hours=1),
+        updated_at=datetime.now(UTC) - timedelta(hours=1),
     )
     later = Session(
         id="sess_late",
@@ -174,8 +173,8 @@ async def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_pat
         visual_anchors=["glass wall"],
         vocab_candidates=["office"],
         messages=[],
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
     await repository.save_session(earlier)
@@ -207,7 +206,9 @@ async def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_pat
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_labels(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_labels(
+    tmp_path,
+) -> None:
     database_url = f"sqlite:///{tmp_path / 'session-legacy.db'}"
     engine = create_async_database_engine(database_url)
     await create_all_tables_async(engine)
@@ -234,7 +235,9 @@ async def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_leg
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_persists_sample_sessions_without_media_id(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_persists_sample_sessions_without_media_id(
+    tmp_path,
+) -> None:
     database_url = f"sqlite:///{tmp_path / 'session-sample.db'}"
     engine = create_async_database_engine(database_url)
     await create_all_tables_async(engine)
@@ -268,7 +271,9 @@ async def test_sqlalchemy_session_repository_persists_sample_sessions_without_me
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_persists_session_events_and_voice_facts(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_persists_session_events_and_voice_facts(
+    tmp_path,
+) -> None:
     database_url = f"sqlite:///{tmp_path / 'session-runtime.db'}"
     engine = create_async_database_engine(database_url)
     await create_all_tables_async(engine)
@@ -448,7 +453,9 @@ async def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_batch(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_batch(
+    tmp_path,
+) -> None:
     assert SessionReview is not None
     assert PracticeFeedback is not None
     assert FeedbackMetric is not None
@@ -459,7 +466,7 @@ async def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_b
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
-    base = datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc)
+    base = datetime(2026, 4, 4, 12, 0, tzinfo=UTC)
     sessions = [
         Session(
             id="sess_a",

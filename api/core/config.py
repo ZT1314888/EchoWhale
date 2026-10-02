@@ -99,6 +99,14 @@ class Settings(BaseSettings):
     llm_coach_max_tokens: int = 300
     llm_feedback_max_tokens: int = 400
     llm_scene_max_tokens: int = 500
+    # 复盘文案（LLM 复盘，审计 Finding 20）输出预算（Finding 10a 同族）：
+    # 复盘是短中文文案，预算给小即可；复盘是增强分支，失败/超时降级模板复盘，
+    # 该键只约束单次调用成本，不参与启动校验。
+    llm_review_max_tokens: int = 300
+    # 复盘分支对回复轮的最大附加等待（秒）：流式路径复盘与教练 delta 并行、
+    # 非流式与语音收口路径串行有界等待，超时取消并降级模板复盘，
+    # 保证主价值（教练回复）不被增强分支拖慢。
+    llm_review_wait_seconds: float = 5.0
     # 教练输出防滥用硬顶（Finding 11）：模型输出超过该字符数直接截断并记
     # coach_reply_truncated warning，超长输出不再无限撑库/撑响应。
     llm_coach_output_max_chars: int = 2000

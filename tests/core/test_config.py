@@ -72,12 +72,7 @@ _PRODUCTION_ENV_ALIASES = ["production", "prod", "PROD", "staging", "live", ""]
 def test_settings_accept_csv_lists_from_env_file(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "\n".join(
-            [
-                "ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173",
-                "MEDIA_ALLOWED_CONTENT_TYPES=image/jpeg,image/png,image/webp",
-            ]
-        ),
+        "ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173\nMEDIA_ALLOWED_CONTENT_TYPES=image/jpeg,image/png,image/webp",
         encoding="utf-8",
     )
 
@@ -161,15 +156,7 @@ def test_production_settings_do_not_require_deepgram_think_proxy_settings() -> N
 def test_live_model_runtime_requires_configured_model_endpoints(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "\n".join(
-            [
-                "MODEL_RUNTIME_MODE=live",
-                "VISION_PRIMARY_PROVIDER=openai_compatible",
-                "VISION_PRIMARY_MODEL=qwen-vl-max",
-                "TEXT_PRIMARY_PROVIDER=openai_compatible",
-                "TEXT_PRIMARY_MODEL=qwen-max",
-            ]
-        ),
+        "MODEL_RUNTIME_MODE=live\nVISION_PRIMARY_PROVIDER=openai_compatible\nVISION_PRIMARY_MODEL=qwen-vl-max\nTEXT_PRIMARY_PROVIDER=openai_compatible\nTEXT_PRIMARY_MODEL=qwen-max",
         encoding="utf-8",
     )
 
@@ -191,15 +178,7 @@ def test_mock_model_runtime_does_not_require_live_model_endpoints(tmp_path: Path
 def test_smtp_settings_require_credentials_when_host_is_configured(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "\n".join(
-            [
-                "AUTH_SMTP_HOST=smtpdm.aliyun.com",
-                "AUTH_SMTP_PORT=465",
-                "AUTH_SMTP_USERNAME=",
-                "AUTH_SMTP_PASSWORD=",
-                "AUTH_SMTP_FROM_EMAIL=",
-            ]
-        ),
+        "AUTH_SMTP_HOST=smtpdm.aliyun.com\nAUTH_SMTP_PORT=465\nAUTH_SMTP_USERNAME=\nAUTH_SMTP_PASSWORD=\nAUTH_SMTP_FROM_EMAIL=",
         encoding="utf-8",
     )
 
@@ -212,17 +191,7 @@ def test_smtp_settings_require_credentials_when_host_is_configured(tmp_path: Pat
 def test_smtp_settings_reject_enabling_ssl_and_starttls_together(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "\n".join(
-            [
-                "AUTH_SMTP_HOST=smtpdm.aliyun.com",
-                "AUTH_SMTP_PORT=465",
-                "AUTH_SMTP_USERNAME=noreply@example.com",
-                "AUTH_SMTP_PASSWORD=app-password",
-                "AUTH_SMTP_FROM_EMAIL=noreply@example.com",
-                "AUTH_SMTP_USE_SSL=true",
-                "AUTH_SMTP_USE_STARTTLS=true",
-            ]
-        ),
+        "AUTH_SMTP_HOST=smtpdm.aliyun.com\nAUTH_SMTP_PORT=465\nAUTH_SMTP_USERNAME=noreply@example.com\nAUTH_SMTP_PASSWORD=app-password\nAUTH_SMTP_FROM_EMAIL=noreply@example.com\nAUTH_SMTP_USE_SSL=true\nAUTH_SMTP_USE_STARTTLS=true",
         encoding="utf-8",
     )
 
@@ -235,15 +204,7 @@ def test_smtp_settings_reject_enabling_ssl_and_starttls_together(tmp_path: Path)
 def test_settings_support_deepgram_latency_tuning_overrides(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(
-        "\n".join(
-            [
-                "DEEPGRAM_AGENT_LISTEN_EOT_THRESHOLD=0.75",
-                "DEEPGRAM_AGENT_LISTEN_EAGER_EOT_THRESHOLD=0.45",
-                "DEEPGRAM_AGENT_LISTEN_EOT_TIMEOUT_MS=5000",
-                "DEEPGRAM_AGENT_LISTEN_SMART_FORMAT=true",
-                "DEEPGRAM_AGENT_OUTPUT_SAMPLE_RATE=16000",
-            ]
-        ),
+        "DEEPGRAM_AGENT_LISTEN_EOT_THRESHOLD=0.75\nDEEPGRAM_AGENT_LISTEN_EAGER_EOT_THRESHOLD=0.45\nDEEPGRAM_AGENT_LISTEN_EOT_TIMEOUT_MS=5000\nDEEPGRAM_AGENT_LISTEN_SMART_FORMAT=true\nDEEPGRAM_AGENT_OUTPUT_SAMPLE_RATE=16000",
         encoding="utf-8",
     )
 

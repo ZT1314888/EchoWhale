@@ -203,7 +203,7 @@ def test_ensure_request_id_from_scope_headers() -> None:
 def test_log_filter_injects_request_id(caplog: pytest.LogCaptureFixture) -> None:
     """中间件上下文内打的日志，记录上带同一 request id（caplog 断言）。"""
     configure_request_id_logging()
-    downstream = ContextProbeApp()
+    ContextProbeApp()
 
     class LoggingApp(ContextProbeApp):
         async def __call__(self, scope: dict[str, Any], receive, send) -> None:

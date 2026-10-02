@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from redis.exceptions import RedisError
 
 from api.common.exceptions import ConfigurationError, TooManyRequestsError
 from api.core.config import settings
-from redis.exceptions import RedisError
-
 from api.services.llm_rate_limit import (
     InMemoryLLMRateLimiter,
     LLMRateLimitRule,

@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterator
 
 import httpx
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from api.db.session_db import build_session_repository
 from api.integrations.deepgram.voice_agent import DeepgramThinkProxyTokenCodec
@@ -49,7 +49,9 @@ def test_async_deepgram_proxy_forwards_json_request(
     captured: dict[str, object] = {}
 
     class FakeAsyncClient:
-        async def post(self, url: str, *, headers: dict[str, str], json: dict[str, object]) -> httpx.Response:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
             captured["url"] = url
             captured["headers"] = headers
             captured["json"] = json
@@ -115,10 +117,7 @@ def test_async_deepgram_proxy_streams_sse_response(
     )
 
     captured: dict[str, object] = {}
-    stream_body = (
-        b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n'
-        b"data: [DONE]\n\n"
-    )
+    stream_body = b'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n' b"data: [DONE]\n\n"
 
     class FakeAsyncClient:
         def build_request(

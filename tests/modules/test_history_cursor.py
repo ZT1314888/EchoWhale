@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -9,7 +9,7 @@ from api.modules.session_engine.agent import _decode_history_cursor, _encode_his
 
 
 def test_history_cursor_round_trip() -> None:
-    value = (datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc), "sess_123")
+    value = (datetime(2026, 4, 4, 12, 0, tzinfo=UTC), "sess_123")
 
     encoded = _encode_history_cursor(value)
     decoded = _decode_history_cursor(encoded)
@@ -26,9 +26,7 @@ def test_history_cursor_rejects_unsigned_legacy_cursor() -> None:
 
 
 def test_history_cursor_rejects_forged_signature() -> None:
-    signed = _encode_history_cursor(
-        (datetime(2026, 4, 4, 12, 0, tzinfo=timezone.utc), "sess_123")
-    )
+    signed = _encode_history_cursor((datetime(2026, 4, 4, 12, 0, tzinfo=UTC), "sess_123"))
     forged = signed.replace("sess_123", "sess_999")
 
     with pytest.raises(AppValidationError):

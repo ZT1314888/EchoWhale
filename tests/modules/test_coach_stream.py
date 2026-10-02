@@ -7,9 +7,8 @@ import json
 import httpx
 import pytest
 
-from api.integrations.llm.openai import OpenAICompatibleClient
-
 from api.core.config import settings
+from api.integrations.llm.openai import OpenAICompatibleClient
 from api.integrations.llm.streaming import SingleDeltaTextStream
 from api.modules.coach_engine.agent import CoachEngineAgent
 from api.modules.coach_engine.providers.chat_provider import (

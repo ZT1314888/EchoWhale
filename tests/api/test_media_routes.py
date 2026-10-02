@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import BinaryIO
 
 import pytest
@@ -46,15 +46,15 @@ class FakeStorageService:
         self.objects: dict[str, bytes] = {}
         self.content_types: dict[str, str] = {}
 
-    async def async_upload_fileobj(
-        self, *, key: str, fileobj: BinaryIO, content_type: str
-    ) -> None:
+    async def async_upload_fileobj(self, *, key: str, fileobj: BinaryIO, content_type: str) -> None:
         # 服务侧校验通过后已 seek(0)，这里读到的是完整文件内容。
         self.objects[key] = fileobj.read()
         self.content_types[key] = content_type
 
-    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, datetime]:
-        expires_at = datetime(2026, 4, 2, 12, 0, tzinfo=timezone.utc)
+    async def async_create_signed_read_url(
+        self, key: str, *, expires_in: int
+    ) -> tuple[str, datetime]:
+        expires_at = datetime(2026, 4, 2, 12, 0, tzinfo=UTC)
         return (f"https://signed.test/{key}?expires_in={expires_in}", expires_at)
 
 

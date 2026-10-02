@@ -44,8 +44,9 @@ class FeedbackEngineAgent:
                 f"Scene: {payload.scene}",
                 f"Vocab candidates: {', '.join(payload.vocab_candidates) or 'none'}",
                 f"Learner message: {payload.learner_message}",
-                "Return strict JSON with keys: grammar, more_natural, useful_words.",
-                "useful_words must be an array of short English words or phrases.",
+                # 输出契约（含 errors/cefr_level 新键）以系统提示词为准，
+                # 这里不再重复键清单，避免两处契约漂移。
+                "Return strict JSON following the output contract in the system prompt.",
             ]
         )
 

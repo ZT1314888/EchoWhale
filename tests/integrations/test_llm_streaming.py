@@ -33,7 +33,7 @@ class RecordingSink:
 def _sse_body(frames: list[dict[str, object]]) -> bytes:
     chunks: list[bytes] = []
     for frame in frames:
-        chunks.append(f"data: {json.dumps(frame)}\n\n".encode("utf-8"))
+        chunks.append(f"data: {json.dumps(frame)}\n\n".encode())
     chunks.append(b"data: [DONE]\n\n")
     return b"".join(chunks)
 

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 
 from api.common.enums import MediaUploadStatus
@@ -80,7 +78,9 @@ class FakeSceneAnalysisStore:
         )
 
     async def save_failure(self, media_id: str, prompt_version: str, *, error_code: int) -> None:
-        self.failures.append({"media_id": media_id, "prompt_version": prompt_version, "error_code": error_code})
+        self.failures.append(
+            {"media_id": media_id, "prompt_version": prompt_version, "error_code": error_code}
+        )
 
 
 class RecordingDispatcher:

@@ -5,11 +5,12 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import QueuePublishError
-from api.common.exceptions import TooManyRequestsError
-from api.common.exceptions import ValidationError
+from api.common.exceptions import (
+    AuthenticationError,
+    QueuePublishError,
+    TooManyRequestsError,
+    ValidationError,
+)
 from api.main import app
 from api.models.auth_model import AuthSession
 from api.models.user_model import User
@@ -19,8 +20,6 @@ try:
     from api.routes.v1.auth import get_auth_service
 except ImportError:  # pragma: no cover - expected during red phase
     get_auth_service = None
-
-
 
 
 def _authorization_header(token: str) -> dict[str, str]:
@@ -317,4 +316,3 @@ def test_logout_revokes_refresh_cookie(client: TestClient) -> None:
     assert set_cookie
     assert "echowhale_refresh_token=" in set_cookie
     assert "Max-Age=0" in set_cookie
-

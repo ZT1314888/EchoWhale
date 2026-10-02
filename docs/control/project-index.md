@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/delivery_gates_and_deployment/feature.md`
-- 本轮结论：审计 Release 维度 + Finding 13/14：后端覆盖率门禁（pytest-cov 入 dev 组，pyproject fail_under=87，基线实测 88.12%，CI pytest --cov=api）；前端 build 接 tsc --noEmit；requirements.txt 删除（uv.lock 单事实源）；infra/docker/Dockerfile（uv frozen，api+worker 共用镜像）+ compose 参考编排（迁移前置、健康检查依赖序）+ docs/deployment.md 运行手册（17 项清单/迁移/worker 确认/proxy-headers/回滚）；CI 新增 docker 构建 job（不推送）；gitignore 治理（tests/* 删除、docs features/versions/bugs/modules 与 deployment.md 放行、infra/* + !infra/docker/），新文件对 git status 默认可见，force-add 时代结束。
-- 当前主要阻塞：镜像 registry 推送与正式发布流水线另行接入；CI 加 PG service 容器批次待排；本地 Docker 引擎未运行，镜像构建由 CI docker job 实测。
-- 补充进展：覆盖率门禁本地实测通过；npm run build（tsc+vite）通过；compose config 校验通过；pytest 456 passed / 2 skipped。
+- 最新归档：`docs/features/teaching_kernel_prompts/feature.md`
+- 本轮结论：审计 Fix Order 16（Finding 20）：FEEDBACK_PROMPT 契约化（errors 封闭分类集合 + 一句纠正一句解释 + cefr_level 归一 + 长度约束，FeedbackResult 只加不改、前端零改动）；复盘 LLM 化定案 inline 有界等待分支（否决 RQ 异步：避免先模板后 LLM 的内容漂移与前端轮询），ReviewSummarizerAgent 复用 failover 骨架与 llm_usage 账本，reply/stream/voice 三路径统一 _review_copy_for_turn 单点降级（degraded=true），build_session_review(copy=None) 模板路径逐字节兼容；未知场景回退自然语言组合，任何路径不再输出原始 scene id；教练提示词加 COACH_LEARNER_LEVEL 中级注入位 + 仅英语 + 长度约束；新增 RUN_FEEDBACK_EVAL 门控离线评测台；连带完成锁定工具链下全仓 black/ruff 治理。
+- 当前主要阻塞：COACH_LEARNER_LEVEL 仍为固定中级占位（学员状态持久化 P2-7 另行任务）；复盘 LLM 成本占比与 degraded 率需上线后经 llm_usage 与日志观察；session_summary 死代码桩（Finding 21）另行删除。
+- 补充进展：pytest 477 passed / 7 skipped，覆盖率 88.36%（门禁 87）；ruff / black 全绿；RUN_FEEDBACK_EVAL 未设置时评测 5 skipped；trellis-check 独立复核 10 项全 PASS。
 
 ## 模块看板
 
@@ -75,6 +75,7 @@
 | LLM成本与输入边界 | `llm_cost_and_input_bounds` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 请求关联ID与就绪探针 | `request_id_and_readiness` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 交付门禁与部署收口 | `delivery_gates_and_deployment` | `feature_test_passed` | `feature_test_passed` | `module/infra_delivery` |
+| 教学内核提示词升级与LLM复盘 | `teaching_kernel_prompts` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 

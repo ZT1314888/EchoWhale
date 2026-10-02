@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import NotFoundError
-from api.common.exceptions import SceneAnalysisUnavailableError
-from api.common.exceptions import UnsupportedSceneImageError
-from api.common.exceptions import VoiceTokenError
+from api.common.exceptions import (
+    AuthenticationError,
+    NotFoundError,
+    SceneAnalysisUnavailableError,
+    UnsupportedSceneImageError,
+    VoiceTokenError,
+)
 from api.core.config import settings
 from api.core.security import sign_value, verify_signed_value
 from api.main import app
@@ -27,12 +29,16 @@ except ImportError:  # pragma: no cover - expected during red phase
     get_auth_service = None
     get_session_service = None
 
-from api.services.llm_rate_limit import InMemoryLLMRateLimiter, LLMRateLimitRule, get_llm_rate_limiter
+from api.services.llm_rate_limit import (
+    InMemoryLLMRateLimiter,
+    LLMRateLimitRule,
+    get_llm_rate_limiter,
+)
 
 
 class FakeSessionService:
     def __init__(self) -> None:
-        earlier = datetime(2026, 4, 4, 15, 20, tzinfo=timezone.utc)
+        earlier = datetime(2026, 4, 4, 15, 20, tzinfo=UTC)
         later = earlier + timedelta(hours=2)
         self.sessions = {
             "sess_123": Session(
@@ -337,7 +343,9 @@ class FakeSessionService:
         assert client_diagnostics == {}
         session = await self.get_session(session_id)
         session.messages = [
-            Message(id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"),
+            Message(
+                id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"
+            ),
             Message(id="msg_2", role="user", text="Could I get an iced latte, please?"),
             Message(id="msg_3", role="assistant", text="Of course. What size would you like?"),
         ]
@@ -779,9 +787,7 @@ def test_complete_voice_session_rejects_more_than_200_turns(client: TestClient) 
     conversation: list[dict[str, str]] = [
         {"role": "assistant", "content": "Hi there, what can I get started for you today?"}
     ]
-    conversation.extend(
-        {"role": "user", "content": f"turn {index}"} for index in range(200)
-    )
+    conversation.extend({"role": "user", "content": f"turn {index}"} for index in range(200))
 
     response = client.post(
         "/api/v1/sessions/sess_123/voice/complete",
@@ -822,7 +828,10 @@ def test_list_history_sessions_returns_paginated_history_entries(client: TestCli
     assert second_body["data"]["items"][0]["scene_title"] == "咖啡店柜台点单"
     assert second_body["data"]["items"][0]["vocab_candidates"] == ["coffee", "order"]
     assert second_body["data"]["items"][0]["review_title"] == "本轮回响"
-    assert second_body["data"]["items"][0]["review_summary"] == "下一轮先说主需求，再补一条口味或杯型细节。"
+    assert (
+        second_body["data"]["items"][0]["review_summary"]
+        == "下一轮先说主需求，再补一条口味或杯型细节。"
+    )
     assert second_body["data"]["page"]["has_more"] is False
 
 

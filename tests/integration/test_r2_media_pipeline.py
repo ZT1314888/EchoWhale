@@ -13,7 +13,6 @@ from api.db.media_db import SqlAlchemyMediaRepository
 from api.integrations.storage.r2 import R2StorageService
 from api.services.media_service import MediaService
 
-
 PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n"
     b"\x00\x00\x00\rIHDR"
@@ -58,7 +57,7 @@ def test_uploads_media_to_real_r2_and_serves_signed_access_url(tmp_path: Path) -
         assert media.upload_status == MediaUploadStatus.uploaded
         assert media.file_size == len(PNG_BYTES)
         request = Request(access.read_url, method="GET")
-        with urlopen(request, timeout=15) as response:  # noqa: S310
+        with urlopen(request, timeout=15) as response:
             assert response.status == 200
             assert response.read() == PNG_BYTES
     finally:

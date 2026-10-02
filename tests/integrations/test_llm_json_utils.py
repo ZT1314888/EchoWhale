@@ -17,7 +17,7 @@ def test_parses_fenced_json_block() -> None:
 
 
 def test_parses_fenced_json_without_language_tag() -> None:
-    raw = "```\n{\"a\": [1, 2]}\n```"
+    raw = '```\n{"a": [1, 2]}\n```'
     assert parse_llm_json(raw) == {"a": [1, 2]}
 
 

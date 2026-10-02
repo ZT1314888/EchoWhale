@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ConfigurationError, EchoWhaleError, UnsupportedSceneImageError
 from api.modules.scene_engine.agent import SceneEngineAgent
 from api.modules.scene_engine.providers.vision_provider import MockVisionProvider
 from api.modules.scene_engine.schema import SceneAnalysisInput, SceneAnalysisResult
@@ -220,7 +218,9 @@ async def test_scene_engine_raises_when_both_providers_fail(monkeypatch) -> None
 
 
 @pytest.mark.anyio
-async def test_scene_engine_raises_unsupported_image_when_all_providers_report_unusable_scene() -> None:
+async def test_scene_engine_raises_unsupported_image_when_all_providers_report_unusable_scene() -> (
+    None
+):
     agent = SceneEngineAgent(
         primary_provider=LowConfidenceVisionProvider(),
         fallback_provider=EmptyVocabCandidatesVisionProvider(),

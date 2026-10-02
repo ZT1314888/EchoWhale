@@ -9,8 +9,8 @@ from api.common.enums import MediaUploadStatus
 from api.common.exceptions import NotFoundError
 from api.db.scene_analysis_db import SceneAnalysisSnapshot
 from api.main import app
-from api.models.user_model import User
 from api.models.media_model import Media
+from api.models.user_model import User
 from api.routes.v1.media import get_media_repository, get_scene_analysis_store
 
 
@@ -45,18 +45,18 @@ def _media() -> Media:
 
 
 def _snapshot(**overrides) -> SceneAnalysisSnapshot:
-    base = dict(
-        media_id="med_1",
-        status="ready",
-        prompt_version="v1",
-        scene="coffee_shop",
-        role="barista",
-        opener="Hi!",
-        visual_anchors=["counter"],
-        vocab_candidates=["latte"],
-        confidence=0.88,
-        error_code=None,
-    )
+    base = {
+        "media_id": "med_1",
+        "status": "ready",
+        "prompt_version": "v1",
+        "scene": "coffee_shop",
+        "role": "barista",
+        "opener": "Hi!",
+        "visual_anchors": ["counter"],
+        "vocab_candidates": ["latte"],
+        "confidence": 0.88,
+        "error_code": None,
+    }
     base.update(overrides)
     return SceneAnalysisSnapshot(**base)
 

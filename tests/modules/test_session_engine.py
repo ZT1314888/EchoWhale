@@ -6,21 +6,32 @@ import logging
 import pytest
 
 from api.common.enums import MediaUploadStatus
-from api.common.exceptions import EchoWhaleError
-from api.common.exceptions import NotFoundError
-from api.common.exceptions import SceneAnalysisUnavailableError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import (
+    EchoWhaleError,
+    NotFoundError,
+    SceneAnalysisUnavailableError,
+    UnsupportedSceneImageError,
+)
 from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
 from api.models.media_model import Media
 from api.models.message_model import Message
-from api.models.runtime_model import SessionEvent
+from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
-from api.models.runtime_model import VoiceSessionFact
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.session_engine.agent import SessionEngineAgent
-from api.modules.session_engine.schema import ReplyInput, StartSessionInput
-from api.modules.session_engine.schema import VoiceCompleteInput, VoiceConversationTurn
+from api.modules.session_engine.review_builder import (
+    SCENE_COPY,
+    ReviewCopy,
+    get_role_label,
+    get_scene_title,
+)
+from api.modules.session_engine.schema import (
+    ReplyInput,
+    StartSessionInput,
+    VoiceCompleteInput,
+    VoiceConversationTurn,
+)
 from api.modules.session_engine.service import SessionEngineService
 
 
@@ -58,7 +69,9 @@ class FakeSessionRepository:
         self.sessions[session_id] = session
         return session
 
-    async def save_reply_turn(self, session_id: str, learner_message: Message, assistant_message: Message, review) -> Session:
+    async def save_reply_turn(
+        self, session_id: str, learner_message: Message, assistant_message: Message, review
+    ) -> Session:
         session = self.sessions[session_id]
         session.messages.extend([learner_message, assistant_message])
         self.sessions[session_id] = session
@@ -114,7 +127,11 @@ class FakeSessionRepository:
         return len(self.sessions[session_id].messages)
 
     async def list_session_reviews_by_ids(self, session_ids: list[str]):
-        return {session_id: self.reviews[session_id] for session_id in session_ids if session_id in self.reviews}
+        return {
+            session_id: self.reviews[session_id]
+            for session_id in session_ids
+            if session_id in self.reviews
+        }
 
 
 @pytest.fixture
@@ -147,7 +164,9 @@ class FakeReadUrlSigner:
     def __init__(self) -> None:
         self.requested_keys: list[str] = []
 
-    async def async_create_signed_read_url(self, key: str, *, expires_in: int) -> tuple[str, object]:
+    async def async_create_signed_read_url(
+        self, key: str, *, expires_in: int
+    ) -> tuple[str, object]:
         self.requested_keys.append(key)
         return ("https://signed.test/media/demo-user/coffee-shop.png", object())
 
@@ -284,7 +303,6 @@ class RecordingSceneAnalysisStore:
 
     async def get(self, media_id: str):
         self.get_calls.append(media_id)
-        return None
 
     async def save_pending(self, media_id: str, prompt_version: str) -> None:
         self.pending_saves.append(media_id)
@@ -353,7 +371,9 @@ def test_start_session_from_sample_preset_bypasses_media_lookup_and_scene_engine
     )
     agent.scene_engine = ExplodingSceneEngine()
 
-    session = asyncio.run(agent.start(StartSessionInput(user_id="demo-user", sample_scene_id="coffee")))
+    session = asyncio.run(
+        agent.start(StartSessionInput(user_id="demo-user", sample_scene_id="coffee"))
+    )
 
     assert session.user_id == "demo-user"
     assert session.media_id is None
@@ -514,7 +534,13 @@ def test_reply_does_not_persist_partial_turn_when_generation_fails(
     agent.coach_engine = FailingCoachEngine()
 
     with pytest.raises(RuntimeError, match="coach provider unavailable"):
-        asyncio.run(agent.reply(ReplyInput(session_id="sess_123", learner_message="Could I get an iced latte, please?")))
+        asyncio.run(
+            agent.reply(
+                ReplyInput(
+                    session_id="sess_123", learner_message="Could I get an iced latte, please?"
+                )
+            )
+        )
 
     stored = asyncio.run(fake_session_repository.get_session("sess_123"))
     assert [message.id for message in stored.messages] == ["msg_1"]
@@ -560,6 +586,8 @@ def test_reply_degrades_feedback_and_persists_when_feedback_fails(
         "grammar": "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
         "more_natural": "（本轮没有更自然表达建议）",
         "useful_words": [],
+        "errors": [],
+        "cefr_level": None,
     }
     # 落库侧本轮两条消息都在，复盘也基于占位反馈正常构建。
     stored = asyncio.run(fake_session_repository.get_session("sess_feedback_fail"))
@@ -620,9 +648,11 @@ def _save_reply_fixture_session(repository: FakeSessionRepository, session_id: s
 
 
 def test_reply_truncates_oversized_coach_output_with_warning(
-    fake_session_repository: FakeSessionRepository, caplog
+    fake_session_repository: FakeSessionRepository, caplog, monkeypatch
 ) -> None:
     """教练输出硬顶（Finding 11）：3001 字符输出截断为上限长度并留 warning。"""
+    # 固定 mock 模式：本测试只关心教练输出截断，复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     _save_reply_fixture_session(fake_session_repository, "sess_truncate")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
@@ -646,9 +676,10 @@ def test_reply_truncates_oversized_coach_output_with_warning(
 
 
 def test_reply_keeps_coach_output_exactly_at_limit_without_warning(
-    fake_session_repository: FakeSessionRepository, caplog
+    fake_session_repository: FakeSessionRepository, caplog, monkeypatch
 ) -> None:
     """边界回归：输出恰好等于上限时原样保留，不产生截断 warning。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     _save_reply_fixture_session(fake_session_repository, "sess_boundary")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
@@ -667,7 +698,10 @@ def test_reply_keeps_coach_output_exactly_at_limit_without_warning(
 
 def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
     fake_session_repository: FakeSessionRepository,
+    monkeypatch,
 ) -> None:
+    # 固定 mock 模式：本测试只关心下游引擎入参，复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     session = Session(
         id="sess_labels",
         user_id="demo-user",
@@ -693,14 +727,10 @@ def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
     agent.coach_engine = coach_engine
 
     updated = asyncio.run(
-        agent.reply(
-            ReplyInput(session_id="sess_labels", learner_message="I would like a latte")
-        )
+        agent.reply(ReplyInput(session_id="sess_labels", learner_message="I would like a latte"))
     )
 
-    assert feedback_engine.calls == [
-        ("I would like a latte", "coffee_shop", ["latte", "menu"])
-    ]
+    assert feedback_engine.calls == [("I would like a latte", "coffee_shop", ["latte", "menu"])]
     assert coach_engine.calls[0][3] == ["counter", "menu board"]
     assert coach_engine.calls[0][4] == ["latte", "menu"]
     assert [message.text for message in coach_engine.calls[0][5]] == [
@@ -710,12 +740,17 @@ def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
         "grammar": "Your meaning is clear.",
         "more_natural": "Could I get an iced latte, please?",
         "useful_words": ["latte", "menu"],
+        "errors": [],
+        "cefr_level": None,
     }
 
 
 def test_reply_runs_feedback_and_coach_generation_concurrently(
     fake_session_repository: FakeSessionRepository,
+    monkeypatch,
 ) -> None:
+    # 固定 mock 模式：本测试只关心分支并发起点，复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     session = Session(
         id="sess_parallel",
         user_id="demo-user",
@@ -803,7 +838,9 @@ def test_bootstrap_voice_session_returns_deepgram_token_and_settings(
         "expires_in": float(token_issuer.calls[0]),
         "output_sample_rate": 24000,
     }
-    saved_voice_fact = asyncio.run(fake_session_repository.get_latest_voice_session_fact("sess_voice"))
+    saved_voice_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice")
+    )
     assert saved_voice_fact is not None
     assert saved_voice_fact.status == "active"
     assert saved_voice_fact.termination_reason is None
@@ -812,7 +849,10 @@ def test_bootstrap_voice_session_returns_deepgram_token_and_settings(
 
 def test_complete_voice_session_persists_transcript_and_generates_review(
     fake_session_repository: FakeSessionRepository,
+    monkeypatch,
 ) -> None:
+    # 固定 mock 模式：本测试只关心语音收口落库语义，复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     session = Session(
         id="sess_voice_complete",
         user_id="demo-user",
@@ -858,9 +898,15 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
             VoiceCompleteInput(
                 session_id="sess_voice_complete",
                 conversation=[
-                    VoiceConversationTurn(role="assistant", content="Hi there, what can I get started for you today?"),
-                    VoiceConversationTurn(role="user", content="Could I get an iced latte, please?"),
-                    VoiceConversationTurn(role="assistant", content="Of course. What size would you like?"),
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                    VoiceConversationTurn(
+                        role="assistant", content="Of course. What size would you like?"
+                    ),
                 ],
                 termination_reason="user_ended",
                 client_diagnostics={
@@ -887,7 +933,10 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
         "Of course. What size would you like?",
     ]
     assert completed.review.session_id == "sess_voice_complete"
-    assert fake_session_repository.reviews["sess_voice_complete"].feedback.grammar.body == "Your meaning is clear."
+    assert (
+        fake_session_repository.reviews["sess_voice_complete"].feedback.grammar.body
+        == "Your meaning is clear."
+    )
     saved_events = asyncio.run(fake_session_repository.list_session_events("sess_voice_complete"))
     assert [event.event_type for event in saved_events] == ["voice_finalized", "review_built"]
     assert saved_events[0].payload == {
@@ -943,8 +992,13 @@ def test_complete_voice_session_does_not_persist_transcript_when_feedback_genera
                 VoiceCompleteInput(
                     session_id="sess_voice_feedback_fail",
                     conversation=[
-                        VoiceConversationTurn(role="assistant", content="Hi there, what can I get started for you today?"),
-                        VoiceConversationTurn(role="user", content="Could I get an iced latte, please?"),
+                        VoiceConversationTurn(
+                            role="assistant",
+                            content="Hi there, what can I get started for you today?",
+                        ),
+                        VoiceConversationTurn(
+                            role="user", content="Could I get an iced latte, please?"
+                        ),
                     ],
                     termination_reason="user_ended",
                 )
@@ -956,8 +1010,15 @@ def test_complete_voice_session_does_not_persist_transcript_when_feedback_genera
         "Hi there, what can I get started for you today?"
     ]
     assert fake_session_repository.reviews == {}
-    assert asyncio.run(fake_session_repository.list_session_events("sess_voice_feedback_fail")) == []
-    assert asyncio.run(fake_session_repository.get_latest_voice_session_fact("sess_voice_feedback_fail")) is None
+    assert (
+        asyncio.run(fake_session_repository.list_session_events("sess_voice_feedback_fail")) == []
+    )
+    assert (
+        asyncio.run(
+            fake_session_repository.get_latest_voice_session_fact("sess_voice_feedback_fail")
+        )
+        is None
+    )
 
 
 def test_complete_voice_session_rejects_empty_conversation_with_validation_error(
@@ -1096,3 +1157,233 @@ def test_get_history_session_overview_returns_real_objects(
     assert loaded_session.id == "sess_overview"
     assert loaded_review is review
     assert total_messages == 1
+
+
+class FakeReviewSummarizer:
+    """返回固定 ReviewCopy 的替身，记录调用入参；异常时原样上抛。"""
+
+    def __init__(self, copy: ReviewCopy | Exception) -> None:
+        self._copy = copy
+        self.calls: list[dict[str, str]] = []
+
+    async def summarize(
+        self,
+        *,
+        scene: str,
+        role: str,
+        learner_message: str,
+        feedback,
+    ) -> ReviewCopy:
+        self.calls.append(
+            {
+                "scene": scene,
+                "role": role,
+                "learner_message": learner_message,
+            }
+        )
+        if isinstance(self._copy, Exception):
+            raise self._copy
+        return self._copy
+
+
+def test_reply_mock_mode_builds_template_review_without_llm_review_call(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """mock 模式复盘仍走模板：highlight 以模板文案开头，next_try 来自场景预设。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_reply_fixture_session(fake_session_repository, "sess_mock_review")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_mock_review", learner_message="I would like a latte")
+        )
+    )
+
+    review = fake_session_repository.reviews["sess_mock_review"]
+    assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”把主要意思表达出来了。")
+    assert review.next_try == SCENE_COPY["coffee_shop"]["next_try"]
+    assert review.feedback.next_step.body == "下一轮试着在一句主回应后再补一句细节。"
+
+
+def test_reply_live_mode_consumes_llm_review_copy(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """live 模式复盘由 summarizer 文案替换模板字段，且消费侧对超长文案截断硬顶。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _save_reply_fixture_session(fake_session_repository, "sess_live_review")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+    summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="Gym 情景对话",
+            role_label="教练对话",
+            highlight="好" * 130,
+            next_try="试" * 90,
+            next_step="步" * 100,
+        )
+    )
+    agent.review_summarizer = summarizer
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_live_review", learner_message="I would like a latte")
+        )
+    )
+
+    review = fake_session_repository.reviews["sess_live_review"]
+    # LLM 文案替换模板字段；提示词是软约束，_bound 截断才是硬顶。
+    assert len(review.highlight) == 120
+    assert len(review.next_try) == 80
+    assert len(review.feedback.next_step.body) == 80
+    assert summarizer.calls == [
+        {
+            "scene": "coffee_shop",
+            "role": "barista",
+            "learner_message": "I would like a latte",
+        }
+    ]
+
+
+def test_reply_live_mode_degrades_to_template_review_when_summarizer_fails(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+    caplog,
+) -> None:
+    """复盘是增强分支：summarizer 失败只降级模板复盘，本轮照常成功落库。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _save_reply_fixture_session(fake_session_repository, "sess_review_fail")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+    agent.review_summarizer = FakeReviewSummarizer(RuntimeError("review provider down"))
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(session_id="sess_review_fail", learner_message="I would like a latte")
+            )
+        )
+
+    review = fake_session_repository.reviews["sess_review_fail"]
+    assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”")
+    assert review.next_try == SCENE_COPY["coffee_shop"]["next_try"]
+    assert updated.messages[-1].text == "Let's keep practicing with counter."
+    # 降级必须留运维痕迹：复盘专用 degraded 事件名，与反馈降级日志可区分。
+    assert "session_review_copy_failed" in caplog.text
+    assert "degraded=true" in caplog.text
+
+
+def test_reply_live_mode_skips_review_summarizer_when_feedback_degraded(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """feedback 已降级时对占位文案做汇总没有意义：summarizer 不得被调用。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _save_reply_fixture_session(fake_session_repository, "sess_review_skip")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FailingFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+    summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="Gym 情景对话",
+            role_label="教练对话",
+            highlight="这轮你把主需求说完整了。",
+            next_try="下一轮补一句细节。",
+            next_step="把新学的词带进下一轮回答。",
+        )
+    )
+    agent.review_summarizer = summarizer
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_review_skip", learner_message="I would like a latte")
+        )
+    )
+
+    assert summarizer.calls == []
+    review = fake_session_repository.reviews["sess_review_skip"]
+    assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”")
+
+
+def test_complete_voice_session_live_mode_consumes_llm_review_copy(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """语音收口同样消费 LLM 复盘文案（feedback 总是成功产出，degraded=False）。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    session = Session(
+        id="sess_voice_live_review",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter", "menu board"],
+        vocab_candidates=["latte", "menu"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    asyncio.run(fake_session_repository.save_session(session))
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="咖啡店柜台点单",
+            role_label="店员对话",
+            highlight="这轮你把点单需求说完整了。",
+            next_try="下一轮补一句杯型或口味细节。",
+            next_step="把 useful_words 里的词带进下一轮回答。",
+        )
+    )
+    agent.review_summarizer = summarizer
+
+    completed = asyncio.run(
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_live_review",
+                conversation=[
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+    )
+
+    assert completed.review.highlight == "这轮你把点单需求说完整了。"
+    assert completed.review.next_try == "下一轮补一句杯型或口味细节。"
+    assert completed.review.feedback.next_step.body == "把 useful_words 里的词带进下一轮回答。"
+    assert summarizer.calls[0]["learner_message"] == "Could I get an iced latte, please?"
+
+
+def test_unknown_scene_labels_use_natural_language_fallback() -> None:
+    """未知场景（如视觉模型返回 gym）不得把原始 scene id 当标题/角色标签。"""
+    title = get_scene_title("gym")
+    assert title != "gym"
+    assert "情景对话" in title
+    assert title.startswith("Gym")
+
+    titled = get_scene_title("gym", "fitness_trainer")
+    assert titled == "Gym · Fitness Trainer 情景对话"
+
+    role_label = get_role_label("gym", "fitness_trainer")
+    assert role_label == "角色 · Fitness Trainer"
+
+    # 已知场景预设文案不受回退改造影响（history 契约共用这两个函数）。
+    assert get_scene_title("coffee_shop") == "咖啡店柜台点单"
+    assert get_role_label("coffee_shop", "barista") == "店员对话"

@@ -45,9 +45,7 @@ class FakeStorageService:
         self.position_at_call: int | None = None
         self.uploaded: dict[str, bytes] = {}
 
-    async def async_upload_fileobj(
-        self, *, key: str, fileobj: BinaryIO, content_type: str
-    ) -> None:
+    async def async_upload_fileobj(self, *, key: str, fileobj: BinaryIO, content_type: str) -> None:
         self.upload_calls += 1
         self.position_at_call = fileobj.tell()
         self.uploaded[key] = fileobj.read()
@@ -143,7 +141,7 @@ def test_upload_valid_headers_pass_and_hand_full_file_to_storage(
     )
 
     assert storage.upload_calls == 1
-    (uploaded_key, uploaded_content), = storage.uploaded.items()
+    ((uploaded_key, uploaded_content),) = storage.uploaded.items()
     assert uploaded_content == payload, "storage 必须收到完整内容（seek(0) 已生效）"
     assert result.media.file_size == len(payload)
     assert result.media.content_type == content_type

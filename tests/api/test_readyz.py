@@ -5,8 +5,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
-from api.main import probe_database, probe_r2_config, probe_redis
+from api.main import app, probe_database, probe_r2_config, probe_redis
 
 
 @pytest.fixture

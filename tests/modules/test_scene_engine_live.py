@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from api.modules.scene_engine.evaluation import load_scene_evaluation_cases
-from api.modules.scene_engine.evaluation import run_scene_evaluation
-
+from api.modules.scene_engine.evaluation import load_scene_evaluation_cases, run_scene_evaluation
 
 pytestmark = pytest.mark.skipif(
     os.getenv("RUN_SCENE_EVAL") != "1",
@@ -37,12 +35,12 @@ def test_scene_engine_live_evaluation() -> None:
     if normal_results:
         scene_match_rate = sum(item.scene_match for item in normal_results) / len(normal_results)
         practice_ready_rate = sum(item.final_pass for item in normal_results) / len(normal_results)
-        visual_anchor_match_rate = (
-            sum(item.visual_anchor_match for item in normal_results) / len(normal_results)
+        visual_anchor_match_rate = sum(item.visual_anchor_match for item in normal_results) / len(
+            normal_results
         )
         vocab_match_rate = sum(item.vocab_match for item in normal_results) / len(normal_results)
-        vocab_value_rate = (
-            sum(item.vocab_value_pass for item in normal_results) / len(normal_results)
+        vocab_value_rate = sum(item.vocab_value_pass for item in normal_results) / len(
+            normal_results
         )
         assert scene_match_rate >= 0.8
         assert practice_ready_rate >= 0.8
