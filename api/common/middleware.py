@@ -6,6 +6,12 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from api.common.exceptions import FileTooLargeError
+from api.common.request_context import (
+    REQUEST_ID_HEADER,
+    ensure_request_id,
+    reset_request_id,
+    set_request_id,
+)
 from api.common.responses import ApiResponse
 from api.core.config import settings
 
@@ -119,3 +125,42 @@ class BodySizeLimitMiddleware:
             body_code=FileTooLargeError.code,
             http_code=413,
         )(scope, receive, send)
+
+
+class RequestContextMiddleware:
+    """请求关联 ID 中间件（纯 ASGI 实现，语义见任务 design 第 2 节）。
+
+    - 入站 X-Request-ID 合法（非空、≤64 可打印 ASCII 字符）则复用，否则生成
+      `req_<16hex>` 新 id——不信任超长 / 含控制字符的入站值；
+    - id 注入 ContextVar，应用内任意 logger 调用经 RequestIdFilter 自动携带，
+      多轮链路（反馈 + 教练 + 流式 + 落库）的日志可凭同一 id 串起来；
+    - 响应头回写 X-Request-ID：包装 send 只改 http.response.start——SSE 等
+      流式响应的头在开流前发送，因此同样生效；
+    - 仅处理 http scope，lifespan / websocket 直通。
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = ensure_request_id(scope)
+        token = set_request_id(request_id)
+
+        async def send_with_request_id(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                # 只在响应头消息上追加，body 消息原样透传；setdefault 兼容
+                # 下游没放 headers 键的裸 ASGI 响应。
+                message.setdefault("headers", []).append(
+                    (REQUEST_ID_HEADER.encode("latin-1"), request_id.encode("latin-1"))
+                )
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_request_id)
+        finally:
+            # 正常返回与下游异常都要复位：请求结束后同线程的后台日志不得再挂旧 id。
+            reset_request_id(token)

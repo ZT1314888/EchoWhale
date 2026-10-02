@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/llm_cost_and_input_bounds/feature.md`
-- 本轮结论：审计 Finding 10/11 修复：三引擎 payload 注入 max_tokens（coach 300/feedback 400/scene 500，None 兼容）；迁移 0012 建 llm_usage 用量账本（usage_recorder→usage_sink Protocol，先日志后落库，sink 失败降级 warning 不影响主流程，sync 域 + 事件循环内 fire-and-forget 线程池）；输入边界 learner_message 2000 / turn 4000 / conversation 200 轮（契约层同步，走既有 400/1001 信封）；教练输出 2000 字符硬顶 + coach_reply_truncated warning。
-- 当前主要阻塞：owner/session 归因待 request-id 批次（任务 D）后用上下文贯穿补齐；token 级限流待账本沉淀数据后立项；本批次剩余：可观测性（D）→ 交付门禁与部署（E）。
-- 补充进展：uv run pytest tests 429 passed / 2 skipped（+41）；ruff/black 全绿；迁移链 0011→0012 可逆实测。
+- 最新归档：`docs/features/request_id_and_readiness/feature.md`
+- 本轮结论：审计 Finding 15 最小集修复：RequestContextMiddleware（纯 ASGI 管线最内层，入站 X-Request-ID 校验复用/生成，ContextVar 贯穿异步链路 + RequestIdFilter 挂 root 全部 handler，响应头回写含 SSE）；/readyz 三探针依赖注入（DB SELECT 1 实测 / Redis PING 带 2s 硬超时与 unconfigured 跳过 / R2 零网络配置检查），只有实测失败才 503，轻量 JSON 不走信封；/health 保持 liveness。body 门 413 无 request id 属有意盲区（已注释）。
+- 当前主要阻塞：uvicorn 自有日志不带 request id（应用日志已够）；JSON 日志开关、OTel/Langfuse、usage 表 owner/session 归因（ContextVar 贯穿）归后续批次；本批次最后一项：交付门禁与部署（E）。
+- 补充进展：uv run pytest tests 456 passed / 2 skipped（+27）；ruff/black 全绿。
 
 ## 模块看板
 
@@ -73,6 +73,7 @@
 | 会话写路径完整性与追加语义 | `session_write_integrity` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 限流体系收口 | `ratelimit_closing` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | LLM成本与输入边界 | `llm_cost_and_input_bounds` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 请求关联ID与就绪探针 | `request_id_and_readiness` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 
