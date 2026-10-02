@@ -23,18 +23,22 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         model: str,
         timeout_seconds: int = 30,
         transport: httpx.BaseTransport | None = None,
-        usage_recorder=None,
+        usage_sink=None,
         json_mode: bool = False,
         stream_include_usage: bool = False,
+        max_tokens: int | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/") + "/"
         self.api_key = api_key
         self.model = model
         self.timeout_seconds = timeout_seconds
         self._transport = transport
-        self._usage_recorder = usage_recorder
+        self._usage_sink = usage_sink
         self._json_mode = json_mode
         self._stream_include_usage = stream_include_usage
+        # 输出硬顶（Finding 10a）：构造期注入而非每调用传参，保证同一客户端
+        # 的所有请求预算一致；None 时不发送字段，保持向后兼容。
+        self._max_tokens = max_tokens
 
     def complete_text(self, *, system_prompt: str, user_prompt: str) -> str:
         payload = self._build_text_payload(system_prompt, user_prompt)
@@ -115,6 +119,8 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             ],
             "temperature": 0.2,
         }
+        if self._max_tokens is not None:
+            payload["max_tokens"] = self._max_tokens
         if self._json_mode:
             payload["response_format"] = {"type": "json_object"}
         return payload
@@ -132,7 +138,7 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
     def _build_image_payload(
         self, system_prompt: str, user_prompt: str, image_url: str
     ) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": system_prompt},
@@ -146,6 +152,9 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             ],
             "temperature": 0.1,
         }
+        if self._max_tokens is not None:
+            payload["max_tokens"] = self._max_tokens
+        return payload
 
     def _get_headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -218,12 +227,14 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         return content.strip()
 
     def _record_usage(self, data: dict[str, Any]) -> None:
-        """记录上游 usage 字段；无 usage 或未注入 recorder 时静默跳过。"""
+        """记录上游 usage 字段；无 usage 时静默跳过。
+
+        顺序固定：先 logger（保留既有观测口径）后 sink；整包 `_record_usage`
+        与流式 `_record_stream_usage` 共用本路径，口径一致。sink 是旁路观测
+        而非业务依赖：任一异常只降级为 warning，绝不影响补全主流程。
+        """
         usage = data.get("usage")
         if not isinstance(usage, dict):
-            return
-        if self._usage_recorder is not None:
-            self._usage_recorder(self.model, usage)
             return
         logger.info(
             "llm_usage model=%s prompt_tokens=%s completion_tokens=%s total_tokens=%s",
@@ -232,6 +243,20 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             usage.get("completion_tokens"),
             usage.get("total_tokens"),
         )
+        if self._usage_sink is None:
+            return
+        # 字段缺省容错：上游 usage 任一 token 字段缺失按 None 交给 sink。
+        try:
+            self._usage_sink.record(
+                model=self.model,
+                prompt_tokens=usage.get("prompt_tokens"),
+                completion_tokens=usage.get("completion_tokens"),
+                total_tokens=usage.get("total_tokens"),
+            )
+        except Exception as exc:  # noqa: BLE001 - sink 失败必须与主流程隔离并记 warning
+            logger.warning(
+                "llm_usage_sink_failed model=%s error=%s: %s", self.model, type(exc).__name__, exc
+            )
 
     def _record_stream_usage(self, usage: dict[str, Any]) -> None:
         """流式末帧的 usage 以原始 dict 上报，与整包路径共用落点。"""

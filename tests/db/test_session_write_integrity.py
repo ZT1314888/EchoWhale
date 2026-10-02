@@ -337,3 +337,33 @@ def test_migration_0011_up_and_down_are_reversible(tmp_path, monkeypatch) -> Non
     assert "ix_sessions_user_id_updated_at" not in index_names
     # 约束已随 downgrade 移除：同样数据可以插入成功。
     _insert_duplicate_positions(engine)
+
+
+def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypatch) -> None:
+    """迁移链完整：up 到 head 后 llm_usage 可写入且 created_at 有服务端默认值，
+    downgrade 到 0011 后表随索引一起消失。"""
+    engine, config = _run_alembic(tmp_path, monkeypatch)
+
+    inspector = sa.inspect(engine)
+    assert "llm_usage" in inspector.get_table_names()
+    with engine.begin() as conn:
+        # 不提供 created_at：验证 server_default 在 SQLite 下同样生效。
+        conn.execute(
+            sa.text(
+                "INSERT INTO llm_usage (model, prompt_tokens, completion_tokens, total_tokens) "
+                "VALUES ('demo-model', 12, 3, 15)"
+            )
+        )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa.text("SELECT model, prompt_tokens, total_tokens, created_at FROM llm_usage")
+        ).one()
+    assert row[0] == "demo-model"
+    assert row[1] == 12
+    assert row[2] == 15
+    assert row[3] is not None
+
+    command.downgrade(config, "20261001_0011")
+
+    inspector = sa.inspect(engine)
+    assert "llm_usage" not in inspector.get_table_names()

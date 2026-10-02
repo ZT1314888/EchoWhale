@@ -24,7 +24,9 @@ class StartSessionInput(BaseModel):
 
 
 class LearnerMessagePayload(BaseModel):
-    learner_message: str
+    # 长度硬顶（Finding 11）：超长输入会直接进 prompt 并撑大 Text 列；
+    # 超限走 pydantic ValidationError → 现有 RequestValidationError 处理器。
+    learner_message: str = Field(max_length=2000)
 
     @field_validator("learner_message")
     @classmethod
@@ -49,7 +51,8 @@ class SceneAnalysisPending(BaseModel):
 
 class VoiceConversationTurn(BaseModel):
     role: Literal["assistant", "user"]
-    content: str
+    # 单条转写硬顶（Finding 11）：语音转写按 turn 入库，超长 turn 同样会撑大 Text 列。
+    content: str = Field(max_length=4000)
 
     @field_validator("content")
     @classmethod
@@ -63,7 +66,8 @@ class VoiceConversationTurn(BaseModel):
 
 class VoiceCompleteInput(BaseModel):
     session_id: str
-    conversation: list[VoiceConversationTurn] = Field(default_factory=list)
+    # 转写条数硬顶（Finding 11）：无界 transcript 会让收口流程的写放大失去约束。
+    conversation: list[VoiceConversationTurn] = Field(default_factory=list, max_length=200)
     termination_reason: str = "user_ended"
     client_diagnostics: dict[str, object] = Field(default_factory=dict)
 

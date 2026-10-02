@@ -625,6 +625,31 @@ def test_reply_to_session_rejects_blank_message(client: TestClient) -> None:
     assert response.json()["message"] == "Validation error"
 
 
+def test_reply_rejects_oversized_learner_message(client: TestClient) -> None:
+    """输入边界（Finding 11）：2001 字符 learner_message 被现有校验信封拒绝。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "a" * 2001},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_reply_accepts_learner_message_at_length_limit(client: TestClient) -> None:
+    """边界回归：恰好 2000 字符的 learner_message 正常进入生成链路。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "a" * 2000},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == 200
+
+
 def test_get_session_review_returns_review_snapshot(client: TestClient) -> None:
     response = client.get(
         "/api/v1/sessions/sess_123/review",
@@ -720,6 +745,48 @@ def test_complete_voice_session_rejects_payload_without_user_turn(client: TestCl
             "conversation": [
                 {"role": "assistant", "content": "Hi there, what can I get started for you today?"}
             ],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_complete_voice_session_rejects_oversized_turn_content(client: TestClient) -> None:
+    """输入边界（Finding 11）：4001 字符的单条转写被现有校验信封拒绝。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": [
+                {"role": "assistant", "content": "Hi there, what can I get started for you today?"},
+                {"role": "user", "content": "a" * 4001},
+            ],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_complete_voice_session_rejects_more_than_200_turns(client: TestClient) -> None:
+    """输入边界（Finding 11）：第 201 个转写 turn 使 payload 被现有校验信封拒绝。"""
+    conversation: list[dict[str, str]] = [
+        {"role": "assistant", "content": "Hi there, what can I get started for you today?"}
+    ]
+    conversation.extend(
+        {"role": "user", "content": f"turn {index}"} for index in range(200)
+    )
+
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": conversation,
             "termination_reason": "user_ended",
         },
         headers={"Authorization": "Bearer valid-access-token"},

@@ -574,6 +574,97 @@ def test_reply_degrades_feedback_and_persists_when_feedback_fails(
     assert "degraded=true" in caplog.text
 
 
+class LongCoachEngine:
+    """返回超长回复的教练替身：验证输出硬顶截断（Finding 11）。"""
+
+    def __init__(self, length: int) -> None:
+        self.length = length
+
+    async def respond(
+        self,
+        scene: str,
+        role: str,
+        learner_message: str,
+        visual_anchors: list[str],
+        vocab_candidates: list[str],
+        recent_messages: list[Message],
+    ):
+        from api.modules.coach_engine.schema import CoachReplyResult
+
+        return CoachReplyResult(text="x" * self.length)
+
+
+def _save_reply_fixture_session(repository: FakeSessionRepository, session_id: str) -> None:
+    """落库一个可供 reply 测试复用的最小会话。"""
+    asyncio.run(
+        repository.save_session(
+            Session(
+                id=session_id,
+                user_id="demo-user",
+                media_id="med_123",
+                scene="coffee_shop",
+                role="barista",
+                opener="Hi there, what can I get started for you today?",
+                visual_anchors=["counter", "menu board"],
+                vocab_candidates=["latte", "menu"],
+                messages=[
+                    Message(
+                        id="msg_1",
+                        role="assistant",
+                        text="Hi there, what can I get started for you today?",
+                    )
+                ],
+            )
+        )
+    )
+
+
+def test_reply_truncates_oversized_coach_output_with_warning(
+    fake_session_repository: FakeSessionRepository, caplog
+) -> None:
+    """教练输出硬顶（Finding 11）：3001 字符输出截断为上限长度并留 warning。"""
+    _save_reply_fixture_session(fake_session_repository, "sess_truncate")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = LongCoachEngine(length=settings.llm_coach_output_max_chars + 1)
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(session_id="sess_truncate", learner_message="I would like a latte")
+            )
+        )
+
+    assert len(updated.messages[-1].text) == settings.llm_coach_output_max_chars
+    assert "coach_reply_truncated" in caplog.text
+    assert "sess_truncate" in caplog.text
+    assert f"length={settings.llm_coach_output_max_chars + 1}" in caplog.text
+    # 落库侧同样只保留截断后的文本：超长输出不再无限撑大 Text 列。
+    stored = asyncio.run(fake_session_repository.get_session("sess_truncate"))
+    assert len(stored.messages[-1].text) == settings.llm_coach_output_max_chars
+    assert fake_session_repository.reviews["sess_truncate"].title
+
+
+def test_reply_keeps_coach_output_exactly_at_limit_without_warning(
+    fake_session_repository: FakeSessionRepository, caplog
+) -> None:
+    """边界回归：输出恰好等于上限时原样保留，不产生截断 warning。"""
+    _save_reply_fixture_session(fake_session_repository, "sess_boundary")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = LongCoachEngine(length=settings.llm_coach_output_max_chars)
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(session_id="sess_boundary", learner_message="I would like a latte")
+            )
+        )
+
+    assert len(updated.messages[-1].text) == settings.llm_coach_output_max_chars
+    assert "coach_reply_truncated" not in caplog.text
+
+
 def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
     fake_session_repository: FakeSessionRepository,
 ) -> None:

@@ -6,6 +6,8 @@ from typing import Protocol
 import httpx
 
 from api.common.exceptions import ModelProviderError
+from api.core.config import settings
+from api.db.llm_usage_db import LlmUsageSink, build_llm_usage_sink
 from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient
 from api.modules.scene_engine.prompts.scene_prompts import SCENE_INFERENCE_PROMPT
@@ -81,13 +83,19 @@ class OpenAICompatibleVisionProvider:
         api_key: str,
         model: str,
         timeout_seconds: int,
+        usage_sink: LlmUsageSink | None = None,
     ) -> None:
-        """保存远端视觉模型调用所需的客户端配置。"""
+        """保存远端视觉模型调用所需的客户端配置。
+
+        max_tokens 与用量 sink 在构造期接入：引擎（agent）对此无感知。
+        """
         self.client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
             model=model,
             timeout_seconds=timeout_seconds,
+            max_tokens=settings.llm_scene_max_tokens,
+            usage_sink=usage_sink if usage_sink is not None else build_llm_usage_sink(),
         )
 
     async def analyze(self, payload: SceneAnalysisInput) -> SceneAnalysisResult:

@@ -11,6 +11,25 @@ from api.integrations.llm.openai import OpenAICompatibleClient
 from api.integrations.llm.streaming import SingleDeltaTextStream
 
 
+class RecordingSink:
+    """测试用 fake sink：记录流式末帧上报的 token 字段。"""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+
+    def record(
+        self,
+        *,
+        model: str,
+        prompt_tokens: int | None,
+        completion_tokens: int | None,
+        total_tokens: int | None,
+    ) -> None:
+        self.records.append(
+            {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
+        )
+
+
 def _sse_body(frames: list[dict[str, object]]) -> bytes:
     chunks: list[bytes] = []
     for frame in frames:
@@ -25,7 +44,7 @@ def _stream_transport(handler) -> httpx.MockTransport:
 
 @pytest.mark.anyio
 async def test_stream_yields_deltas_and_records_final_usage() -> None:
-    recorded: list[dict[str, object]] = []
+    sink = RecordingSink()
     body = _sse_body(
         [
             {"choices": [{"delta": {"role": "assistant", "content": "Hello"}}]},
@@ -48,7 +67,7 @@ async def test_stream_yields_deltas_and_records_final_usage() -> None:
         model="test-model",
         timeout_seconds=5,
         transport=_stream_transport(handler),
-        usage_recorder=lambda model, usage: recorded.append(usage),
+        usage_sink=sink,
     )
     stream = await client.async_open_text_stream(
         system_prompt="sys",
@@ -57,7 +76,7 @@ async def test_stream_yields_deltas_and_records_final_usage() -> None:
     deltas = [delta async for delta in stream.aiter_deltas()]
 
     assert deltas == ["Hello", " world"]
-    assert recorded == [{"prompt_tokens": 7, "completion_tokens": 3}]
+    assert sink.records == [{"prompt_tokens": 7, "completion_tokens": 3}]
 
 
 @pytest.mark.anyio
@@ -85,7 +104,7 @@ async def test_stream_requests_usage_when_enabled() -> None:
 
 @pytest.mark.anyio
 async def test_stream_falls_back_to_single_delta_for_non_sse_json() -> None:
-    recorded: list[dict[str, object]] = []
+    sink = RecordingSink()
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -103,12 +122,12 @@ async def test_stream_falls_back_to_single_delta_for_non_sse_json() -> None:
         model="m",
         timeout_seconds=5,
         transport=_stream_transport(handler),
-        usage_recorder=lambda model, usage: recorded.append(usage),
+        usage_sink=sink,
     )
     stream = await client.async_open_text_stream(system_prompt="s", user_prompt="u")
     assert isinstance(stream, SingleDeltaTextStream)
     assert [delta async for delta in stream.aiter_deltas()] == ["plain reply"]
-    assert recorded == [{"prompt_tokens": 1, "completion_tokens": 1}]
+    assert sink.records == [{"prompt_tokens": 1, "completion_tokens": 1}]
 
 
 @pytest.mark.anyio

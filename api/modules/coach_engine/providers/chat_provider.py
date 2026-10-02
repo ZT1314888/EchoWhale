@@ -4,6 +4,7 @@ from typing import Protocol
 
 from api.common.exceptions import ModelProviderError
 from api.core.config import settings
+from api.db.llm_usage_db import LlmUsageSink, build_llm_usage_sink
 from api.integrations.llm.base import TextStream
 from api.integrations.llm.openai import OpenAICompatibleClient
 from api.integrations.llm.streaming import WordChunkedTextStream
@@ -53,13 +54,20 @@ class OpenAICompatibleChatProvider:
         api_key: str,
         model: str,
         timeout_seconds: int,
+        usage_sink: LlmUsageSink | None = None,
     ) -> None:
-        """保存远端文本模型调用所需的客户端配置。"""
+        """保存远端文本模型调用所需的客户端配置。
+
+        max_tokens 与用量 sink 在构造期接入：引擎（agent）对此无感知，
+        所有用该 provider 发出的教练回复共享同一输出预算与用量账本。
+        """
         self.client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
             model=model,
             timeout_seconds=timeout_seconds,
+            max_tokens=settings.llm_coach_max_tokens,
+            usage_sink=usage_sink if usage_sink is not None else build_llm_usage_sink(),
             stream_include_usage=settings.llm_stream_include_usage,
         )
 

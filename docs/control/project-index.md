@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/ratelimit_closing/feature.md`
-- 本轮结论：审计 Finding 5/12 修复：AuthRateLimiter Redis 化（固定窗口 + RedisError 降级进程内 + 工厂口径与 LLM 限流一致，多 worker 共享计数）；voice/bootstrap 接 owner+IP 双键限流（Deepgram 令牌仅限流通过后签发）；think 代理补per-sid 配额（120/5min）与 sid 会话存在性校验（401 不泄露存在性），处理顺序=解码→配置→body→限流→存在性→转发；XFF 立场：应用零解析，由 uvicorn --proxy-headers 保证 client.host 真实性（部署要求已写入 .env.example）。
-- 当前主要阻塞：think 一次性票据归语音演进批次；INCR+EXPIRE 原子化（Lua）随 LLM 限流器统一处理；本批次后续：LLM 成本与输入边界（F10+F11）→ 可观测性 → 交付门禁与部署。
-- 补充进展：uv run pytest tests 404 passed / 2 skipped（+11）；ruff/black 全绿。
+- 最新归档：`docs/features/llm_cost_and_input_bounds/feature.md`
+- 本轮结论：审计 Finding 10/11 修复：三引擎 payload 注入 max_tokens（coach 300/feedback 400/scene 500，None 兼容）；迁移 0012 建 llm_usage 用量账本（usage_recorder→usage_sink Protocol，先日志后落库，sink 失败降级 warning 不影响主流程，sync 域 + 事件循环内 fire-and-forget 线程池）；输入边界 learner_message 2000 / turn 4000 / conversation 200 轮（契约层同步，走既有 400/1001 信封）；教练输出 2000 字符硬顶 + coach_reply_truncated warning。
+- 当前主要阻塞：owner/session 归因待 request-id 批次（任务 D）后用上下文贯穿补齐；token 级限流待账本沉淀数据后立项；本批次剩余：可观测性（D）→ 交付门禁与部署（E）。
+- 补充进展：uv run pytest tests 429 passed / 2 skipped（+41）；ruff/black 全绿；迁移链 0011→0012 可逆实测。
 
 ## 模块看板
 
@@ -72,6 +72,7 @@
 | 反馈失败降级不拖垮整轮对话 | `feedback_failure_degradation` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 会话写路径完整性与追加语义 | `session_write_integrity` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 限流体系收口 | `ratelimit_closing` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| LLM成本与输入边界 | `llm_cost_and_input_bounds` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 

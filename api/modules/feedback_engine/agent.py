@@ -55,7 +55,10 @@ class FeedbackEngineAgent:
             fallback_slot=provider_slot_from_settings("text", "fallback"),
             build_mock=MockChatProvider,
             build_real=lambda slot: TextCompletionProvider(
-                slot, json_mode=settings.llm_json_mode_enabled
+                slot,
+                json_mode=settings.llm_json_mode_enabled,
+                # 反馈输出预算（Finding 10a）：与教练/场景各自独立配额。
+                max_tokens=settings.llm_feedback_max_tokens,
             ),
         )
 

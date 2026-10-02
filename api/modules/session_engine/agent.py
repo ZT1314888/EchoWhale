@@ -480,10 +480,25 @@ def _build_reply_turn(
     coach_text: str,
     feedback: FeedbackResult,
 ) -> tuple[Message, Message, SessionReview]:
-    """组装一轮对话的两条消息与复盘；coach 文本为空按模型失败处理。"""
+    """组装一轮对话的两条消息与复盘；coach 文本为空按模型失败处理。
+
+    输出硬顶（Finding 11）：超长模型输出在 strip 与空判定之后截断，
+    防止失控输出无限撑大 Text 列与响应体；截断是防滥用硬顶而非优雅降级，
+    留 coach_reply_truncated warning 供观测。整包与流式路径共用本函数。
+    """
     coach_text = coach_text.strip()
     if not coach_text:
         raise ModelProviderError("Coach reply was empty")
+
+    max_chars = settings.llm_coach_output_max_chars
+    if len(coach_text) > max_chars:
+        logger.warning(
+            "coach_reply_truncated session_id=%s length=%s max_chars=%s",
+            session_head.id,
+            len(coach_text),
+            max_chars,
+        )
+        coach_text = coach_text[:max_chars]
 
     learner_message = Message(role="user", text=learner_text)
     assistant_message = Message(

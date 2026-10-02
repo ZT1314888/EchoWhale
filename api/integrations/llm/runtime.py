@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from api.common.exceptions import ConfigurationError
 from api.core.config import settings
+from api.db.llm_usage_db import LlmUsageSink, build_llm_usage_sink
 from api.integrations.llm.openai import OpenAICompatibleClient
 
 T = TypeVar("T")
@@ -71,7 +72,11 @@ def resolve_engine_providers(
 
 
 class TextCompletionProvider:
-    """裸文本补全 provider，供不需要业务 prompt 组装的引擎（如反馈）复用。"""
+    """裸文本补全 provider，供不需要业务 prompt 组装的引擎（如反馈）复用。
+
+    用量 sink 在构造期接入默认账本，调用方只需关心各自的 max_tokens 预算
+    （feedback 引擎从 settings 读 llm_feedback_max_tokens 传入）。
+    """
 
     def __init__(
         self,
@@ -79,6 +84,8 @@ class TextCompletionProvider:
         *,
         json_mode: bool = False,
         stream_include_usage: bool = False,
+        max_tokens: int | None = None,
+        usage_sink: LlmUsageSink | None = None,
     ) -> None:
         self._client = OpenAICompatibleClient(
             base_url=slot.base_url,
@@ -87,6 +94,8 @@ class TextCompletionProvider:
             timeout_seconds=slot.timeout_seconds,
             json_mode=json_mode,
             stream_include_usage=stream_include_usage,
+            max_tokens=max_tokens,
+            usage_sink=usage_sink if usage_sink is not None else build_llm_usage_sink(),
         )
 
     async def complete(self, *, system_prompt: str, user_prompt: str) -> str:

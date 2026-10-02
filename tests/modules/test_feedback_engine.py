@@ -112,6 +112,8 @@ async def test_feedback_engine_live_mode_uses_only_configured_real_clients(monke
             timeout_seconds: int,
             json_mode: bool = False,
             stream_include_usage: bool = False,
+            max_tokens: int | None = None,
+            usage_sink=None,
         ) -> None:
             self.base_url = base_url
 

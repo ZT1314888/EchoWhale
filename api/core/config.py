@@ -94,6 +94,14 @@ class Settings(BaseSettings):
     llm_request_deadline_seconds: int = 45
     llm_max_retries_per_provider: int = 1
     llm_retry_backoff_seconds: float = 0.5
+    # 单次调用输出硬顶（Finding 10a）：max_tokens 是输出上限而非精确计量
+    # （不引入 tiktoken），按引擎用途给不同预算，避免单次调用成本上不封顶。
+    llm_coach_max_tokens: int = 300
+    llm_feedback_max_tokens: int = 400
+    llm_scene_max_tokens: int = 500
+    # 教练输出防滥用硬顶（Finding 11）：模型输出超过该字符数直接截断并记
+    # coach_reply_truncated warning，超长输出不再无限撑库/撑响应。
+    llm_coach_output_max_chars: int = 2000
     llm_coach_window_size: int = 8
     llm_json_mode_enabled: bool = False
     llm_stream_include_usage: bool = False

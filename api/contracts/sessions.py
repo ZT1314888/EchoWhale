@@ -32,7 +32,8 @@ class SessionReplyRequest(LearnerMessagePayload):
 
 
 class VoiceCompleteRequest(BaseModel):
-    conversation: list[VoiceConversationTurn]
+    # 转写条数硬顶（Finding 11）：与 engine 侧 VoiceCompleteInput.conversation 上限保持一致。
+    conversation: list[VoiceConversationTurn] = Field(max_length=200)
     termination_reason: str = "user_ended"
     client_diagnostics: dict[str, object] = Field(default_factory=dict)
 
