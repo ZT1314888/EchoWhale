@@ -8,7 +8,7 @@ from api.db.llm_usage_db import LlmUsageSink, build_llm_usage_sink
 from api.integrations.llm.base import TextStream
 from api.integrations.llm.openai import OpenAICompatibleClient
 from api.integrations.llm.streaming import WordChunkedTextStream
-from api.modules.coach_engine.prompts.coach_prompts import COACH_SYSTEM_PROMPT
+from api.modules.coach_engine.prompts.coach_prompts import build_coach_system_prompt
 from api.modules.coach_engine.schema import CoachReplyInput, CoachReplyResult
 from api.modules.coach_engine.tools.dialogue_tools import build_follow_up
 
@@ -76,7 +76,7 @@ class OpenAICompatibleChatProvider:
         user_prompt = _build_coach_user_prompt(payload)
         try:
             text = await self.client.async_complete_text(
-                system_prompt=COACH_SYSTEM_PROMPT,
+                system_prompt=build_coach_system_prompt(payload.learner_cefr),
                 user_prompt=user_prompt,
             )
         except Exception as exc:  # pragma: no cover - live provider path
@@ -88,7 +88,7 @@ class OpenAICompatibleChatProvider:
         user_prompt = _build_coach_user_prompt(payload)
         try:
             return await self.client.async_open_text_stream(
-                system_prompt=COACH_SYSTEM_PROMPT,
+                system_prompt=build_coach_system_prompt(payload.learner_cefr),
                 user_prompt=user_prompt,
             )
         except Exception as exc:  # pragma: no cover - live provider path
@@ -96,14 +96,20 @@ class OpenAICompatibleChatProvider:
 
 
 def _build_coach_user_prompt(payload: CoachReplyInput) -> str:
-    """把场景、上下文和最近消息整理成单个用户提示词。"""
+    """把场景、上下文和最近消息整理成单个用户提示词。
+
+    学员档案注入块（服务端渲染的封闭集合行）在 scene 块之后追加：
+    有则加、无则省，保证无档案时提示词与历史形态逐字节一致。
+    """
     recent_messages = [
         f"{message.role}: {message.text}"
         for message in payload.recent_messages[-settings.llm_coach_window_size :]
     ]
-    return "\n".join(
+    lines = [f"Scene: {payload.scene}"]
+    if payload.learner_context:
+        lines.append(payload.learner_context)
+    lines.extend(
         [
-            f"Scene: {payload.scene}",
             f"Role: {payload.role}",
             f"Visual anchors: {', '.join(payload.visual_anchors) or 'none'}",
             f"Vocab candidates: {', '.join(payload.vocab_candidates) or 'none'}",
@@ -121,3 +127,4 @@ def _build_coach_user_prompt(payload: CoachReplyInput) -> str:
             ),
         ]
     )
+    return "\n".join(lines)

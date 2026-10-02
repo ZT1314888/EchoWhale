@@ -159,6 +159,12 @@ class Settings(BaseSettings):
     deepgram_agent_think_upstream_api_key: str = ""
     deepgram_agent_think_timeout_seconds: int = 30
     deepgram_agent_think_token_ttl_seconds: int = 300
+    # 学员档案（user_learning_profiles）写侧封顶：场景名由视觉模型自由产出，
+    # scene_counts 不封顶就是无界增长，只保留最近 N 个场景（插入序=近期序）；
+    # CEFR 滚动估计只看最近 N 次观测（median_low），让估计随近期表现滚动，
+    # 不被远古轮次的水平钉死。均为带默认值非启动关键项，不进生产校验清单。
+    learner_profile_scene_cap: int = 12
+    learner_profile_cefr_window: int = 10
 
     model_config = SettingsConfigDict(
         env_file=".env",

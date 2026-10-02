@@ -27,9 +27,13 @@ def upgrade() -> None:
     op.execute(
         "UPDATE session_messages SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
     )
-    op.alter_column("sessions", "created_at", nullable=False)
-    op.alter_column("sessions", "updated_at", nullable=False)
-    op.alter_column("session_messages", "created_at", nullable=False)
+    # SQLite 不支持 ALTER COLUMN SET NOT NULL，batch 模式借表复制完成；
+    # Postgres 下 batch 默认即普通 DDL，行为一致（与迁移 0011 同一约定）。
+    with op.batch_alter_table("sessions") as batch_op:
+        batch_op.alter_column("created_at", nullable=False)
+        batch_op.alter_column("updated_at", nullable=False)
+    with op.batch_alter_table("session_messages") as batch_op:
+        batch_op.alter_column("created_at", nullable=False)
     op.create_index("ix_sessions_updated_at", "sessions", ["updated_at"], unique=False)
 
     op.create_table(

@@ -5,7 +5,11 @@ import pytest
 from api.common.exceptions import ConfigurationError
 from api.core.config import settings
 from api.models.message_model import Message
-from api.modules.coach_engine.prompts.coach_prompts import COACH_LEARNER_LEVEL, COACH_SYSTEM_PROMPT
+from api.modules.coach_engine.prompts.coach_prompts import (
+    COACH_LEARNER_LEVEL,
+    COACH_SYSTEM_PROMPT,
+    build_coach_system_prompt,
+)
 from api.modules.coach_engine.providers.chat_provider import OpenAICompatibleChatProvider
 from api.modules.coach_engine.schema import CoachReplyInput
 from api.modules.coach_engine.service import CoachEngineService
@@ -91,3 +95,76 @@ def test_coach_system_prompt_declares_learner_level_and_constraints() -> None:
     assert "CEFR" in COACH_SYSTEM_PROMPT
     assert "English only" in COACH_SYSTEM_PROMPT
     assert "at most 3 short sentences" in COACH_SYSTEM_PROMPT
+
+
+def test_build_coach_system_prompt_none_matches_constant_byte_for_byte() -> None:
+    """无档案时默认提示词与存量常量逐字节一致：回退路径零回归。"""
+    assert build_coach_system_prompt(None) == COACH_SYSTEM_PROMPT
+    assert build_coach_system_prompt() == COACH_SYSTEM_PROMPT
+
+
+def test_build_coach_system_prompt_overrides_level_with_dynamic_cefr() -> None:
+    """有档案时动态估计覆盖静态水平行，模板其余约束行保持不动。"""
+    prompt = build_coach_system_prompt("B2")
+
+    assert "estimated CEFR B2" in prompt
+    assert COACH_LEARNER_LEVEL not in prompt
+    assert "English only" in prompt
+    assert "at most 3 short sentences" in prompt
+    # 模板非水平行逐字节不变：动态注入只替换 The learner is ... 一行。
+    static_prompt = build_coach_system_prompt(None)
+    assert prompt.replace("estimated CEFR B2", COACH_LEARNER_LEVEL) == static_prompt
+
+
+@pytest.mark.anyio
+async def test_live_chat_provider_appends_learner_context_block_to_user_prompt() -> None:
+    """live 教练路径：动态 CEFR 覆盖系统提示词水平行，注入块追加在 scene 块后。"""
+    provider = OpenAICompatibleChatProvider(
+        base_url="https://llm.test",
+        api_key="dummy",
+        model="demo-model",
+        timeout_seconds=30,
+    )
+    provider.client = CapturingClient()
+
+    context = "Learner profile: estimated CEFR B1.\n" "Learner profile: 6 practice turns completed."
+    await provider.reply(
+        CoachReplyInput(
+            scene="office",
+            role="office staff",
+            learner_message="I am here for a meeting.",
+            learner_context=context,
+            learner_cefr="B1",
+        )
+    )
+
+    system_prompt, user_prompt = provider.client.calls[0]
+    assert "estimated CEFR B1" in system_prompt
+    assert COACH_LEARNER_LEVEL not in system_prompt
+    # 注入块紧跟 scene 块之后（两形态位置契约）。
+    assert user_prompt.index("Scene: office") < user_prompt.index("Learner profile:")
+    assert context in user_prompt
+
+
+@pytest.mark.anyio
+async def test_live_chat_provider_omits_context_block_when_absent() -> None:
+    """无档案时 user prompt 不含注入块：与历史形态逐字节一致。"""
+    provider = OpenAICompatibleChatProvider(
+        base_url="https://llm.test",
+        api_key="dummy",
+        model="demo-model",
+        timeout_seconds=30,
+    )
+    provider.client = CapturingClient()
+
+    await provider.reply(
+        CoachReplyInput(
+            scene="office",
+            role="office staff",
+            learner_message="I am here for a meeting.",
+        )
+    )
+
+    system_prompt, user_prompt = provider.client.calls[0]
+    assert system_prompt == COACH_SYSTEM_PROMPT
+    assert "Learner profile:" not in user_prompt

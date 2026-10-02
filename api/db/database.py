@@ -107,6 +107,7 @@ def get_async_session_factory() -> AsyncSessionFactory:
 
 def create_all_tables(engine: Engine) -> None:
     import api.db.auth_db
+    import api.db.learner_profile_db
     import api.db.llm_usage_db
     import api.db.media_db
     import api.db.scene_analysis_db
@@ -117,6 +118,7 @@ def create_all_tables(engine: Engine) -> None:
 
 async def create_all_tables_async(engine: AsyncEngine) -> None:
     import api.db.auth_db
+    import api.db.learner_profile_db
     import api.db.llm_usage_db
     import api.db.media_db
     import api.db.scene_analysis_db

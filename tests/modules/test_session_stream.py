@@ -37,8 +37,16 @@ class RecordingSessionRepository:
 class StubFeedbackEngine:
     def __init__(self, result: FeedbackResult | Exception) -> None:
         self._result = result
+        self.contexts: list[str | None] = []
 
-    async def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
+    async def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+        learner_context: str | None = None,
+    ):
+        self.contexts.append(learner_context)
         await asyncio.sleep(0)
         if isinstance(self._result, Exception):
             raise self._result
@@ -399,3 +407,86 @@ async def test_stream_reply_skips_review_task_when_feedback_degraded(monkeypatch
     assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
     assert summarizer.calls == []
     assert events[0][1].model_dump() == _degraded_feedback_payload()
+
+
+class FakeLearnerProfileRepository:
+    """实现 LearnerProfileRepository 协议的内存替身，记录全部写入。"""
+
+    def __init__(self, *, fail_on_upsert: bool = False) -> None:
+        self.profiles: dict[str, object] = {}
+        self.upsert_calls: list[str] = []
+        self._fail_on_upsert = fail_on_upsert
+
+    async def get(self, user_id: str):
+        return self.profiles.get(user_id)
+
+    async def upsert(self, profile):
+        if self._fail_on_upsert:
+            raise RuntimeError("profile store unavailable")
+        self.upsert_calls.append(profile.user_id)
+        self.profiles[profile.user_id] = profile
+        return profile
+
+
+@pytest.mark.anyio
+async def test_stream_reply_updates_learner_profile_before_session_event(monkeypatch) -> None:
+    """session 事件下发之前本轮档案已落档（更新在 yield 之前）。"""
+    # 固定 mock 模式：本地 .env 是 live 模式，不 pin 会打真 LLM。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    session = _session().model_copy(update={"user_id": "user:42"})
+    repository = RecordingSessionRepository(session)
+    profile_repository = FakeLearnerProfileRepository()
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = SessionEngineAgent(
+        session_repository=repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = StubFeedbackEngine(_feedback())
+    agent.coach_engine = StubCoachEngine(stream)
+
+    event_names: list[str] = []
+    async for name, _payload in agent.stream_reply(
+        ReplyInput(session_id="sess_stream", learner_message="latte please")
+    ):
+        event_names.append(name)
+        if name == "session":
+            assert "user:42" in profile_repository.profiles
+
+    assert event_names == ["feedback", "delta", "delta", "session"]
+    profile = profile_repository.profiles["user:42"]
+    assert profile.practiced_turn_count == 1
+    assert profile.scene_counts == {"coffee_shop": 1}
+    # 落库先于档案更新：save_reply_turn 成功是档案累积的前置条件。
+    assert len(repository.saved_turns) == 1
+    assert profile_repository.upsert_calls == ["user:42"]
+
+
+@pytest.mark.anyio
+async def test_stream_reply_completes_when_profile_upsert_fails(monkeypatch, caplog) -> None:
+    """档案写失败是增强分支故障：事件序不变、本轮照常落库，留 degraded 日志。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    session = _session().model_copy(update={"user_id": "user:42"})
+    repository = RecordingSessionRepository(session)
+    profile_repository = FakeLearnerProfileRepository(fail_on_upsert=True)
+    stream = StubCoachStream(["Sure, ", "one latte."])
+    agent = SessionEngineAgent(
+        session_repository=repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = StubFeedbackEngine(_feedback())
+    agent.coach_engine = StubCoachEngine(stream)
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        events = [
+            event
+            async for event in agent.stream_reply(
+                ReplyInput(session_id="sess_stream", learner_message="latte please")
+            )
+        ]
+
+    assert [name for name, _ in events] == ["feedback", "delta", "delta", "session"]
+    assert events[-1][1].messages[-1].text == "Sure, one latte."
+    assert len(repository.saved_turns) == 1
+    assert stream.closed is True
+    assert "learner_profile_update_failed" in caplog.text
+    assert "degraded=true" in caplog.text

@@ -18,6 +18,10 @@ from api.common.exceptions import (
 )
 from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
+from api.db.learner_profile_db import (
+    LearnerProfileRepository,
+    build_learner_profile_repository,
+)
 from api.db.media_db import MediaLookup, build_media_repository
 from api.db.scene_analysis_db import (
     SCENE_ANALYSIS_STATUS_READY,
@@ -27,6 +31,7 @@ from api.db.scene_analysis_db import (
 from api.db.session_db import SessionRepository, build_session_repository
 from api.integrations.deepgram import DeepgramSettingsBuilder, DeepgramTokenIssuer
 from api.integrations.storage.r2 import R2StorageService
+from api.models.learner_profile_model import LearnerProfile
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
@@ -36,6 +41,10 @@ from api.modules.feedback_engine.schema import FeedbackResult
 from api.modules.feedback_engine.service import FeedbackEngineService
 from api.modules.scene_engine.schema import SceneAnalysisResult, scene_result_from_snapshot
 from api.modules.scene_engine.service import SceneEngineService
+from api.modules.session_engine.learner_profile import (
+    apply_turn_to_profile,
+    build_learner_context_lines,
+)
 from api.modules.session_engine.review_builder import ReviewCopy, build_session_review
 from api.modules.session_engine.review_summarizer import ReviewSummarizerAgent
 from api.modules.session_engine.sample_presets import get_sample_session_preset
@@ -60,6 +69,7 @@ class SessionEngineAgent:
         read_url_signer: R2StorageService | None = None,
         scene_analysis_store: SceneAnalysisStore | None = None,
         scene_dispatcher: Callable[[str], bool] | None = None,
+        learner_profile_repository: LearnerProfileRepository | None = None,
     ) -> None:
         """装配会话编排依赖，包括媒体、存储、三段 agent 和语音组件。"""
         self.media_lookup = media_lookup or build_media_repository()
@@ -67,6 +77,11 @@ class SessionEngineAgent:
         self.read_url_signer = read_url_signer or R2StorageService()
         self.scene_analysis_store = scene_analysis_store or build_scene_analysis_store()
         self.scene_dispatcher = scene_dispatcher or enqueue_scene_analysis
+        # 学员档案仓储（增强状态）：读写失败只降级，绝不拖垮回复轮；
+        # visitor 会话在编排层前缀门控排除，不产生任何档案读写。
+        self.learner_profile_repository = (
+            learner_profile_repository or build_learner_profile_repository()
+        )
         self.scene_engine = SceneEngineService()
         self.coach_engine = CoachEngineService()
         self.feedback_engine = FeedbackEngineService()
@@ -201,6 +216,76 @@ class SessionEngineAgent:
         """只读取会话头部信息，避免历史消息分页场景过载。"""
         return await self.session_repository.get_session_head(session_id)
 
+    async def _load_learner_profile(self, user_id: str) -> LearnerProfile | None:
+        """PK 点查学员档案；任何失败都降级为静态注入，绝不拖垮回复轮。
+
+        点查是主键单行读（低成本）；失败只记 degraded warning 并返回 None，
+        调用方回退 COACH_LEARNER_LEVEL 静态注入与空注入块。
+        """
+        try:
+            return await self.learner_profile_repository.get(user_id)
+        except Exception as exc:  # noqa: BLE001 - 档案读失败需降级续轮而非上抛
+            logger.warning(
+                "learner_profile_load_failed degraded=true user_id=%s error=%s: %s",
+                user_id,
+                type(exc).__name__,
+                exc,
+            )
+            return None
+
+    async def _learner_context_for_turn(
+        self, session_head: Session
+    ) -> tuple[str | None, str | None]:
+        """渲染本轮的学员注入块与 CEFR 估计；visitor / 无档案 / 读失败回退 (None, None)。
+
+        visitor 会话零查询直接回退：访客身份可轮换、键无界且无清理语义，
+        不建档也不读档，避免无意义的点查。
+        """
+        if not session_head.user_id.startswith("user:"):
+            return (None, None)
+        profile = await self._load_learner_profile(session_head.user_id)
+        if profile is None:
+            return (None, None)
+        return (build_learner_context_lines(profile), profile.cefr_estimate)
+
+    async def _update_learner_profile_for_turn(
+        self,
+        session_head: Session,
+        feedback: FeedbackResult,
+    ) -> None:
+        """把单轮反馈信号滚动累计进学员档案（增强分支，独立于消息落库事务）。
+
+        门控：user_id 不以 user: 开头（visitor）直接返回，零日志噪音。
+        与 save_reply_turn / finalize_voice_session 是不同连接不同事务：
+        档案写失败可独立回滚，消息已提交不受影响（Orchestration failure
+        policy——主价值是回复轮，档案只是估算用途的增强状态）。
+        只捕获 Exception：CancelledError 等 BaseException 不吞，取消语义保持。
+        并发取舍（已知并接受）：同用户并发轮的 read-modify-write 非原子，
+        最坏丢一次计数（last-write-wins）；单用户并发轮罕见，不值得为此上
+        SELECT FOR UPDATE（还会拖 SQLite 测试兼容）。
+        """
+        user_id = session_head.user_id
+        if not user_id.startswith("user:"):
+            return
+        try:
+            profile = await self.learner_profile_repository.get(user_id)
+            profile = apply_turn_to_profile(
+                profile,
+                user_id=user_id,
+                scene=session_head.scene,
+                feedback=feedback,
+                scene_cap=settings.learner_profile_scene_cap,
+                cefr_window=settings.learner_profile_cefr_window,
+            )
+            await self.learner_profile_repository.upsert(profile)
+        except Exception as exc:  # noqa: BLE001 - 档案写失败需降级续轮而非上抛
+            logger.warning(
+                "learner_profile_update_failed degraded=true user_id=%s error=%s: %s",
+                user_id,
+                type(exc).__name__,
+                exc,
+            )
+
     async def reply(self, payload: ReplyInput) -> Session:
         """并发生成反馈与教练回复，再把这一轮消息原子化落库。
 
@@ -208,17 +293,21 @@ class SessionEngineAgent:
         教练回复是主价值，失败时整轮上抛、不落任何消息。
         读路径只取会话头 + 最近窗口消息，避免每轮全量拉取整个消息历史；
         写后的全量重读保留，作为响应契约的一部分。
+        学员档案在会话头后点查一次（低成本 PK 读），注入块同时喂给反馈与
+        教练分支；档案更新在消息落库成功之后独立执行（增强分支，可降级）。
         """
         session_head = await self.session_repository.get_session_head(payload.session_id)
         recent_messages = await self.session_repository.list_recent_messages(
             payload.session_id,
             limit=settings.llm_coach_window_size,
         )
+        learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
         feedback_result, coach_result = await asyncio.gather(
             self.feedback_engine.review(
                 payload.learner_message,
                 session_head.scene,
                 session_head.vocab_candidates,
+                learner_context=learner_context,
             ),
             self.coach_engine.respond(
                 scene=session_head.scene,
@@ -227,6 +316,8 @@ class SessionEngineAgent:
                 visual_anchors=session_head.visual_anchors,
                 vocab_candidates=session_head.vocab_candidates,
                 recent_messages=recent_messages,
+                learner_context=learner_context,
+                learner_cefr=learner_cefr,
             ),
             return_exceptions=True,
         )
@@ -255,12 +346,15 @@ class SessionEngineAgent:
             feedback=feedback,
             review_copy=review_copy,
         )
-        return await self.session_repository.save_reply_turn(
+        stored_session = await self.session_repository.save_reply_turn(
             session_head.id,
             learner_message,
             assistant_message,
             review,
         )
+        # 档案更新在消息落库成功之后（独立事务）：写失败只降级不影响已提交的回复轮。
+        await self._update_learner_profile_for_turn(session_head, feedback)
+        return stored_session
 
     async def stream_reply(self, payload: ReplyInput) -> AsyncIterator[tuple[str, object]]:
         """流式 reply：先回执 feedback，再逐 token 下发教练回复，成功后原子落库。
@@ -273,11 +367,13 @@ class SessionEngineAgent:
             payload.session_id,
             limit=settings.llm_coach_window_size,
         )
+        learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
         feedback_task = asyncio.create_task(
             self.feedback_engine.review(
                 payload.learner_message,
                 session_head.scene,
                 session_head.vocab_candidates,
+                learner_context=learner_context,
             )
         )
         try:
@@ -288,6 +384,8 @@ class SessionEngineAgent:
                 visual_anchors=session_head.visual_anchors,
                 vocab_candidates=session_head.vocab_candidates,
                 recent_messages=recent_messages,
+                learner_context=learner_context,
+                learner_cefr=learner_cefr,
             )
         except BaseException:
             # 回复流打不开，这一轮已注定失败；不再等待另一侧已计费的反馈调用。
@@ -342,6 +440,9 @@ class SessionEngineAgent:
                 assistant_message,
                 review,
             )
+            # 档案更新在落库成功之后、session 事件下发之前：客户端拿到
+            # session 事件时，本轮的档案累积已确定（增强分支失败只降级）。
+            await self._update_learner_profile_for_turn(session_head, feedback)
             yield ("session", session)
         finally:
             with contextlib.suppress(Exception):
@@ -473,8 +574,13 @@ class SessionEngineAgent:
         )
 
     async def bootstrap_voice_session(self, session_id: str) -> VoiceBootstrapResult:
-        """签发语音会话令牌，并记录语音链路已启动。"""
+        """签发语音会话令牌，并记录语音链路已启动。
+
+        学员档案在此处点查一次并渲染进 agent think prompt；语音收口路径
+        不构建提示词，只做档案更新。
+        """
         session = await self.session_repository.get_session(session_id)
+        learner_context, _learner_cefr = await self._learner_context_for_turn(session)
         token, expires_in = await asyncio.to_thread(
             self.voice_token_issuer.issue_token,
             settings.deepgram_agent_token_ttl_seconds,
@@ -484,7 +590,10 @@ class SessionEngineAgent:
             deepgram_access_token=token,
             expires_in=expires_in,
             deepgram_ws_url=settings.deepgram_agent_base_url,
-            agent_settings=self.voice_settings_builder.build(session),
+            agent_settings=self.voice_settings_builder.build(
+                session,
+                learner_context=learner_context,
+            ),
             session=session,
         )
         await self.session_repository.save_voice_session_fact(
@@ -581,6 +690,8 @@ class SessionEngineAgent:
             voice_fact=voice_fact,
             events=events,
         )
+        # 档案更新在语音收口成功之后（独立事务）：写失败只降级，不影响已提交的会话。
+        await self._update_learner_profile_for_turn(updated_session, feedback)
         return VoiceCompleteResult(session=stored_session, review=stored_review)
 
 

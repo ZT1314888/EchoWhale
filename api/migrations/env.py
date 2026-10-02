@@ -6,6 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 import api.db.auth_db
+import api.db.learner_profile_db
 import api.db.llm_usage_db
 import api.db.media_db
 import api.db.session_db  # noqa: F401

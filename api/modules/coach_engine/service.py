@@ -26,6 +26,8 @@ class CoachEngineService:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ) -> CoachReplyResult:
         """把会话上下文组装成 payload，并转交给对话 agent。"""
         payload = CoachReplyInput(
@@ -35,6 +37,8 @@ class CoachEngineService:
             visual_anchors=visual_anchors,
             vocab_candidates=vocab_candidates,
             recent_messages=recent_messages,
+            learner_context=learner_context,
+            learner_cefr=learner_cefr,
         )
         return await self.agent.run(payload)
 
@@ -46,6 +50,8 @@ class CoachEngineService:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ) -> TextStream:
         """组装 payload 后打开教练回复增量流，供 SSE 端点逐 token 下发。"""
         payload = CoachReplyInput(
@@ -55,5 +61,7 @@ class CoachEngineService:
             visual_anchors=visual_anchors,
             vocab_candidates=vocab_candidates,
             recent_messages=recent_messages,
+            learner_context=learner_context,
+            learner_cefr=learner_cefr,
         )
         return await self.agent.stream_reply(payload)

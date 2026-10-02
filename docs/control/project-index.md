@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/teaching_kernel_prompts/feature.md`
-- 本轮结论：审计 Fix Order 16（Finding 20）：FEEDBACK_PROMPT 契约化（errors 封闭分类集合 + 一句纠正一句解释 + cefr_level 归一 + 长度约束，FeedbackResult 只加不改、前端零改动）；复盘 LLM 化定案 inline 有界等待分支（否决 RQ 异步：避免先模板后 LLM 的内容漂移与前端轮询），ReviewSummarizerAgent 复用 failover 骨架与 llm_usage 账本，reply/stream/voice 三路径统一 _review_copy_for_turn 单点降级（degraded=true），build_session_review(copy=None) 模板路径逐字节兼容；未知场景回退自然语言组合，任何路径不再输出原始 scene id；教练提示词加 COACH_LEARNER_LEVEL 中级注入位 + 仅英语 + 长度约束；新增 RUN_FEEDBACK_EVAL 门控离线评测台；连带完成锁定工具链下全仓 black/ruff 治理。
-- 当前主要阻塞：COACH_LEARNER_LEVEL 仍为固定中级占位（学员状态持久化 P2-7 另行任务）；复盘 LLM 成本占比与 degraded 率需上线后经 llm_usage 与日志观察；session_summary 死代码桩（Finding 21）另行删除。
-- 补充进展：pytest 477 passed / 7 skipped，覆盖率 88.36%（门禁 87）；ruff / black 全绿；RUN_FEEDBACK_EVAL 未设置时评测 5 skipped；trellis-check 独立复核 10 项全 PASS。
+- 最新归档：`docs/features/learner_profile_prompt_injection/feature.md`
+- 本轮结论：审计对标结论 10（P2-7）：新增 user_learning_profiles 档案表（迁移 0013 可逆对，只对认证 user: 建档、visitor 零读写并测试锁定）；reply/stream/voice 三路径落库后零额外 LLM 更新档案（9 类封闭集合错误计数、场景 pop+重插封顶 12 淘汰最旧、轮数自增），CEFR 滚动估计定案 median_low（最近 10 轮序数下中位，免超参、防单轮异常）；教练系统提示词抽 build_coach_system_prompt(learner_cefr) 动态覆盖水平行（COACH_SYSTEM_PROMPT 默认逐字节不变、COACH_LEARNER_LEVEL 降级为回退默认），教练/反馈/语音三处提示词按 profile 注入有界上下文（CEFR + top≤3 错误类别 + 轮数，服务端拼装、无学习者原文），无档案/点查失败全部回退现状；档案更新是增强分支，失败仅 learner_profile_update_failed degraded=true 不影响回复轮；连带修复迁移 0004 在 alembic 1.18.4/SQLite 下的 batch 兼容（干净基线即红，0011 同款 batch_alter_table）。
+- 当前主要阻塞：档案暂无读取 API 与前端进度页（表结构已就绪，后续 feature）；教练难度适配的主观质量需上线人工评估；复盘 LLM 成本占比与 degraded 率需经 llm_usage 与日志观察；session_summary 死代码桩（Finding 21）另行删除。
+- 补充进展：pytest 513 passed / 7 skipped，覆盖率 88.76%（门禁 87，基线 88.36）；ruff / black 全绿；迁移 0013 本地 PG upgrade→downgrade→upgrade 往返通过；trellis-check 独立复核 10 项全 PASS（含 0004 基线红 stash 实验）。
 
 ## 模块看板
 
@@ -76,6 +76,7 @@
 | 请求关联ID与就绪探针 | `request_id_and_readiness` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 交付门禁与部署收口 | `delivery_gates_and_deployment` | `feature_test_passed` | `feature_test_passed` | `module/infra_delivery` |
 | 教学内核提示词升级与LLM复盘 | `teaching_kernel_prompts` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 学员状态持久化与提示词动态注入 | `learner_profile_prompt_injection` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 

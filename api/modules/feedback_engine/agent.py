@@ -39,9 +39,13 @@ class FeedbackEngineAgent:
         payload: FeedbackInput,
     ) -> FeedbackResult:
         """按主备顺序轮询文本模型，直到成功产出结构化反馈。"""
-        user_prompt = "\n".join(
+        # 学员档案注入块在 scene 块之后追加（与教练 user prompt 同位约定）：
+        # 有则加、无则省，保证无档案时提示词与历史形态逐字节一致。
+        user_prompt_lines = [f"Scene: {payload.scene}"]
+        if payload.learner_context:
+            user_prompt_lines.append(payload.learner_context)
+        user_prompt_lines.extend(
             [
-                f"Scene: {payload.scene}",
                 f"Vocab candidates: {', '.join(payload.vocab_candidates) or 'none'}",
                 f"Learner message: {payload.learner_message}",
                 # 输出契约（含 errors/cefr_level 新键）以系统提示词为准，
@@ -49,6 +53,7 @@ class FeedbackEngineAgent:
                 "Return strict JSON following the output contract in the system prompt.",
             ]
         )
+        user_prompt = "\n".join(user_prompt_lines)
 
         primary, fallback = resolve_engine_providers(
             kind="text",

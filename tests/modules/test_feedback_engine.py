@@ -287,3 +287,85 @@ def test_feedback_prompt_declares_structured_contract() -> None:
     assert "at most 2 sentences" in FEEDBACK_PROMPT
     assert "2 to 4" in FEEDBACK_PROMPT
     assert "strict JSON" in FEEDBACK_PROMPT
+
+
+@pytest.mark.anyio
+async def test_feedback_engine_live_user_prompt_carries_learner_context(monkeypatch) -> None:
+    """live 反馈路径：学员注入块追加进 user prompt（scene 块之后）。"""
+    _configure_live_text_providers(monkeypatch)
+    captured: list[str] = []
+
+    class FakeOpenAICompatibleClient:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def async_complete_text(self, *, system_prompt: str, user_prompt: str) -> str:
+            captured.append(user_prompt)
+            return json.dumps({"grammar": "g", "more_natural": "m", "useful_words": ["latte"]})
+
+    monkeypatch.setattr(
+        "api.integrations.llm.runtime.OpenAICompatibleClient", FakeOpenAICompatibleClient
+    )
+
+    context = "Learner profile: estimated CEFR B1.\nLearner profile: 6 practice turns completed."
+    await FeedbackEngineAgent().run(
+        FeedbackInput(
+            learner_message="I want a latte",
+            scene="coffee_shop",
+            vocab_candidates=[],
+            learner_context=context,
+        )
+    )
+
+    user_prompt = captured[0]
+    assert "Learner profile: estimated CEFR B1." in user_prompt
+    assert "Learner profile: 6 practice turns completed." in user_prompt
+    # 注入块紧跟 scene 块之后。
+    assert user_prompt.index("Scene: coffee_shop") < user_prompt.index("Learner profile:")
+
+
+@pytest.mark.anyio
+async def test_feedback_engine_live_user_prompt_omits_context_when_absent(monkeypatch) -> None:
+    """无档案时 live user prompt 不含注入块：与历史形态逐字节一致。"""
+    _configure_live_text_providers(monkeypatch)
+    captured: list[str] = []
+
+    class FakeOpenAICompatibleClient:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def async_complete_text(self, *, system_prompt: str, user_prompt: str) -> str:
+            captured.append(user_prompt)
+            return json.dumps({"grammar": "g", "more_natural": "m", "useful_words": ["latte"]})
+
+    monkeypatch.setattr(
+        "api.integrations.llm.runtime.OpenAICompatibleClient", FakeOpenAICompatibleClient
+    )
+
+    await FeedbackEngineAgent().run(
+        FeedbackInput(learner_message="I want a latte", scene="coffee_shop", vocab_candidates=[])
+    )
+
+    assert "Learner profile:" not in captured[0]
+
+
+@pytest.mark.anyio
+async def test_feedback_engine_mock_path_ignores_learner_context(monkeypatch) -> None:
+    """mock 路径忽略注入块：输出与历史 mock 形态一致，不含任何注入内容。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    service = FeedbackEngineService()
+
+    result = await service.review(
+        learner_message="I want a hot drink",
+        scene="coffee_shop",
+        vocab_candidates=["latte"],
+        learner_context="Learner profile: estimated CEFR B1.\nLearner profile: 6 practice turns completed.",
+    )
+
+    assert (
+        result.grammar
+        == "Your meaning is clear. Add articles and complete sentence endings when possible."
+    )
+    assert result.useful_words == ["latte"]
+    assert "Learner profile" not in result.grammar
+    assert "Learner profile" not in result.more_natural

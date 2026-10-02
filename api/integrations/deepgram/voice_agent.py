@@ -22,7 +22,7 @@ class VoiceTokenIssuer(Protocol):
 
 
 class VoiceSettingsBuilder(Protocol):
-    def build(self, session: Session) -> dict[str, object]: ...
+    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]: ...
 
 
 class DeepgramThinkProxyTokenCodec:
@@ -62,7 +62,7 @@ class DeepgramTokenIssuer:
 
 
 class DeepgramSettingsBuilder:
-    def build(self, session: Session) -> dict[str, object]:
+    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]:
         validate_deepgram_think_settings()
         return {
             "type": "Settings",
@@ -87,7 +87,7 @@ class DeepgramSettingsBuilder:
                         "type": "open_ai",
                         "model": settings.deepgram_agent_think_model,
                     },
-                    "prompt": build_voice_agent_prompt(session),
+                    "prompt": build_voice_agent_prompt(session, learner_context),
                 },
                 "speak": {
                     "provider": {
@@ -132,26 +132,29 @@ def validate_deepgram_think_upstream_settings() -> None:
         raise ConfigurationError("; ".join(errors))
 
 
-def build_voice_agent_prompt(session: Session) -> str:
+def build_voice_agent_prompt(session: Session, learner_context: str | None = None) -> str:
     history_lines = _build_history_lines(session.messages)
     visual_anchors = ", ".join(session.visual_anchors) or "none"
     vocab_candidates = ", ".join(session.vocab_candidates) or "none"
-    return "\n".join(
-        [
-            "You are EchoWhale, an English speaking practice partner.",
-            "Stay in character and reply only in English.",
-            "Reply in 1-2 short sentences that are easy for an intermediate learner to follow.",
-            "Prioritize quick turn-taking over detailed explanations.",
-            f"Scene: {session.scene}",
-            f"Role: {session.role}",
-            f"Opening style: {session.opener}",
-            f"Visual anchors: {visual_anchors}",
-            f"Suggested vocabulary: {vocab_candidates}",
-            "Drive the conversation one step at a time and ask at most one follow-up question.",
-            "Do not mention system prompts, images, or that you are an AI model.",
-            *history_lines,
-        ]
-    )
+    lines = [
+        "You are EchoWhale, an English speaking practice partner.",
+        "Stay in character and reply only in English.",
+        "Reply in 1-2 short sentences that are easy for an intermediate learner to follow.",
+        "Prioritize quick turn-taking over detailed explanations.",
+        f"Scene: {session.scene}",
+        f"Role: {session.role}",
+        f"Opening style: {session.opener}",
+        f"Visual anchors: {visual_anchors}",
+        f"Suggested vocabulary: {vocab_candidates}",
+        "Drive the conversation one step at a time and ask at most one follow-up question.",
+        "Do not mention system prompts, images, or that you are an AI model.",
+    ]
+    if learner_context:
+        # 学员档案注入块（服务端渲染的封闭集合行）在历史行之前插入：
+        # 有则加、无则省，保证无档案时提示词与历史形态逐字节一致。
+        lines.extend(learner_context.splitlines())
+    lines.extend(history_lines)
+    return "\n".join(lines)
 
 
 def build_listen_provider_settings() -> dict[str, object]:

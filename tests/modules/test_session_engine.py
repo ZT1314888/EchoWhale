@@ -14,10 +14,12 @@ from api.common.exceptions import (
 )
 from api.common.exceptions import ValidationError as AppValidationError
 from api.core.config import settings
+from api.models.learner_profile_model import LearnerProfile
 from api.models.media_model import Media
 from api.models.message_model import Message
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
+from api.modules.feedback_engine.schema import FeedbackErrorItem, FeedbackResult
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.session_engine.agent import SessionEngineAgent
 from api.modules.session_engine.review_builder import (
@@ -393,18 +395,26 @@ class FailingCoachEngine:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ):
         raise RuntimeError("coach provider unavailable")
 
 
 class FakeFeedbackEngine:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, list[str]]] = []
+        self.calls: list[tuple[str, str, list[str], str | None]] = []
 
-    async def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
+    async def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+        learner_context: str | None = None,
+    ):
         from api.modules.feedback_engine.schema import FeedbackResult
 
-        self.calls.append((learner_message, scene, vocab_candidates))
+        self.calls.append((learner_message, scene, vocab_candidates, learner_context))
 
         return FeedbackResult(
             grammar="Your meaning is clear.",
@@ -414,13 +424,22 @@ class FakeFeedbackEngine:
 
 
 class FailingFeedbackEngine:
-    async def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
+    async def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+        learner_context: str | None = None,
+    ):
         raise RuntimeError("feedback provider unavailable")
 
 
 class RecordingCoachEngine:
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, str, list[str], list[str], list[Message]]] = []
+        # 学员注入参数追加在元组尾部（下标 6/7），既有下标断言保持稳定。
+        self.calls: list[
+            tuple[str, str, str, list[str], list[str], list[Message], str | None, str | None]
+        ] = []
 
     async def respond(
         self,
@@ -430,6 +449,8 @@ class RecordingCoachEngine:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ):
         self.calls.append(
             (
@@ -439,6 +460,8 @@ class RecordingCoachEngine:
                 visual_anchors,
                 vocab_candidates,
                 recent_messages,
+                learner_context,
+                learner_cefr,
             )
         )
         from api.modules.coach_engine.schema import CoachReplyResult
@@ -451,7 +474,13 @@ class ConcurrentFeedbackEngine:
         self.started = started
         self.released = released
 
-    async def review(self, learner_message: str, scene: str, vocab_candidates: list[str]):
+    async def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+        learner_context: str | None = None,
+    ):
         from api.modules.feedback_engine.schema import FeedbackResult
 
         self.started.append("feedback")
@@ -476,6 +505,8 @@ class ConcurrentCoachEngine:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ):
         from api.modules.coach_engine.schema import CoachReplyResult
 
@@ -496,9 +527,11 @@ class FakeVoiceTokenIssuer:
 class FakeVoiceSettingsBuilder:
     def __init__(self) -> None:
         self.calls: list[Session] = []
+        self.contexts: list[str | None] = []
 
-    def build(self, session: Session) -> dict[str, object]:
+    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]:
         self.calls.append(session)
+        self.contexts.append(learner_context)
         return {
             "type": "Settings",
             "agent": {
@@ -616,6 +649,8 @@ class LongCoachEngine:
         visual_anchors: list[str],
         vocab_candidates: list[str],
         recent_messages: list[Message],
+        learner_context: str | None = None,
+        learner_cefr: str | None = None,
     ):
         from api.modules.coach_engine.schema import CoachReplyResult
 
@@ -730,7 +765,9 @@ def test_reply_passes_session_labels_and_recent_messages_to_downstream_engines(
         agent.reply(ReplyInput(session_id="sess_labels", learner_message="I would like a latte"))
     )
 
-    assert feedback_engine.calls == [("I would like a latte", "coffee_shop", ["latte", "menu"])]
+    assert feedback_engine.calls == [
+        ("I would like a latte", "coffee_shop", ["latte", "menu"], None)
+    ]
     assert coach_engine.calls[0][3] == ["counter", "menu board"]
     assert coach_engine.calls[0][4] == ["latte", "menu"]
     assert [message.text for message in coach_engine.calls[0][5]] == [
@@ -1387,3 +1424,373 @@ def test_unknown_scene_labels_use_natural_language_fallback() -> None:
     # 已知场景预设文案不受回退改造影响（history 契约共用这两个函数）。
     assert get_scene_title("coffee_shop") == "咖啡店柜台点单"
     assert get_role_label("coffee_shop", "barista") == "店员对话"
+
+
+class FakeLearnerProfileRepository:
+    """实现 LearnerProfileRepository 协议的内存替身，记录全部读写。"""
+
+    def __init__(self, *, fail_on_get: bool = False, fail_on_upsert: bool = False) -> None:
+        self.profiles: dict[str, LearnerProfile] = {}
+        self.get_calls: list[str] = []
+        self.upsert_calls: list[str] = []
+        self._fail_on_get = fail_on_get
+        self._fail_on_upsert = fail_on_upsert
+
+    async def get(self, user_id: str) -> LearnerProfile | None:
+        self.get_calls.append(user_id)
+        if self._fail_on_get:
+            raise RuntimeError("profile store read failed")
+        return self.profiles.get(user_id)
+
+    async def upsert(self, profile: LearnerProfile) -> LearnerProfile:
+        if self._fail_on_upsert:
+            raise RuntimeError("profile store unavailable")
+        self.upsert_calls.append(profile.user_id)
+        self.profiles[profile.user_id] = profile
+        return profile
+
+
+class StructuredFeedbackEngine:
+    """返回带 errors / cefr_level 的反馈替身：验证档案累积的信号来源。"""
+
+    def __init__(self, *, categories: list[str], cefr_level: str | None = None) -> None:
+        self._categories = categories
+        self._cefr_level = cefr_level
+        self.calls: list[dict[str, object]] = []
+
+    async def review(
+        self,
+        learner_message: str,
+        scene: str,
+        vocab_candidates: list[str],
+        learner_context: str | None = None,
+    ):
+        self.calls.append(
+            {
+                "learner_message": learner_message,
+                "scene": scene,
+                "learner_context": learner_context,
+            }
+        )
+        return FeedbackResult(
+            grammar="Watch the past tense.",
+            more_natural="Yesterday I went to the coffee shop.",
+            useful_words=vocab_candidates or ["latte"],
+            errors=[
+                FeedbackErrorItem(
+                    category=category,
+                    original="I go",
+                    correction="I went",
+                    explanation="Use the past tense.",
+                )
+                for category in self._categories
+            ],
+            cefr_level=self._cefr_level,
+        )
+
+
+def _save_profile_fixture_session(
+    repository: FakeSessionRepository, session_id: str, *, user_id: str
+) -> None:
+    """落库一个可供档案链路测试复用的最小会话（user_id 由用例指定）。"""
+    asyncio.run(
+        repository.save_session(
+            Session(
+                id=session_id,
+                user_id=user_id,
+                media_id="med_123",
+                scene="coffee_shop",
+                role="barista",
+                opener="Hi there, what can I get started for you today?",
+                visual_anchors=["counter"],
+                vocab_candidates=["latte"],
+                messages=[
+                    Message(
+                        id="msg_1",
+                        role="assistant",
+                        text="Hi there, what can I get started for you today?",
+                    )
+                ],
+            )
+        )
+    )
+
+
+def _profile_agent(
+    fake_session_repository: FakeSessionRepository,
+    profile_repository: FakeLearnerProfileRepository,
+) -> SessionEngineAgent:
+    agent = SessionEngineAgent(
+        session_repository=fake_session_repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+    return agent
+
+
+def test_reply_persists_learner_profile_for_authenticated_user(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """认证用户 reply 落库后档案正确累积：错误计数 / 场景 / 轮数 / CEFR 估计。"""
+    # 固定 mock 模式：本地 .env 是 live 模式，不 pin 会打真 LLM。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(fake_session_repository, "sess_profile_user", user_id="user:42")
+    feedback_engine = StructuredFeedbackEngine(categories=["tense", "tense"], cefr_level="B1")
+    profile_repository = FakeLearnerProfileRepository()
+    agent = SessionEngineAgent(
+        session_repository=fake_session_repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = feedback_engine
+    agent.coach_engine = RecordingCoachEngine()
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_profile_user", learner_message="I would like a latte")
+        )
+    )
+
+    profile = profile_repository.profiles["user:42"]
+    assert profile.error_type_counts == {"tense": 2}
+    assert profile.scene_counts == {"coffee_shop": 1}
+    assert profile.practiced_turn_count == 1
+    assert profile.cefr_history == ["B1"]
+    assert profile.cefr_estimate == "B1"
+
+
+def test_reply_skips_learner_profile_for_visitor_owner(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """visitor 会话不入档：零点查、零写入（键无界且无清理语义，显式排除）。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(
+        fake_session_repository, "sess_profile_visitor", user_id="visitor:abc123"
+    )
+    profile_repository = FakeLearnerProfileRepository()
+    agent = _profile_agent(fake_session_repository, profile_repository)
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_profile_visitor", learner_message="I would like a latte")
+        )
+    )
+
+    assert profile_repository.get_calls == []
+    assert profile_repository.upsert_calls == []
+    assert profile_repository.profiles == {}
+
+
+def test_reply_carries_learner_context_into_coach_and_feedback_payloads(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """有档案时注入块（CEFR + top 错误类别 + 轮数）同时喂给教练与反馈分支。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(fake_session_repository, "sess_profile_inject", user_id="user:42")
+    profile_repository = FakeLearnerProfileRepository()
+    profile_repository.profiles["user:42"] = LearnerProfile(
+        user_id="user:42",
+        cefr_estimate="B1",
+        error_type_counts={"tense": 2, "article": 4},
+        practiced_turn_count=6,
+    )
+    feedback_engine = FakeFeedbackEngine()
+    coach_engine = RecordingCoachEngine()
+    agent = SessionEngineAgent(
+        session_repository=fake_session_repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = feedback_engine
+    agent.coach_engine = coach_engine
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_profile_inject", learner_message="I would like a latte")
+        )
+    )
+
+    expected_context = (
+        "Learner profile: estimated CEFR B1.\n"
+        "Learner profile: frequent error categories so far: article, tense.\n"
+        "Learner profile: 6 practice turns completed."
+    )
+    assert coach_engine.calls[0][6] == expected_context
+    assert coach_engine.calls[0][7] == "B1"
+    assert feedback_engine.calls[0][3] == expected_context
+
+
+def test_reply_degrades_to_static_injection_when_profile_read_fails(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+    caplog,
+) -> None:
+    """档案读失败是增强分支故障：本轮照常成功，注入回退静态且留 degraded 日志。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(
+        fake_session_repository, "sess_profile_readfail", user_id="user:42"
+    )
+    profile_repository = FakeLearnerProfileRepository(fail_on_get=True)
+    agent = _profile_agent(fake_session_repository, profile_repository)
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(
+                    session_id="sess_profile_readfail", learner_message="I would like a latte"
+                )
+            )
+        )
+
+    assert updated.messages[-1].text == "Let's keep practicing with counter."
+    # 教练 payload 未携带任何注入块（回退静态水平行）。
+    assert agent.coach_engine.calls[0][6] is None
+    assert agent.coach_engine.calls[0][7] is None
+    assert "learner_profile_load_failed" in caplog.text
+    assert "degraded=true" in caplog.text
+
+
+def test_reply_succeeds_and_logs_degraded_when_profile_upsert_fails(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+    caplog,
+) -> None:
+    """档案写失败绝不影响回复轮：本轮照常落库返回，warning 带 degraded=true。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(
+        fake_session_repository, "sess_profile_writefail", user_id="user:42"
+    )
+    profile_repository = FakeLearnerProfileRepository(fail_on_upsert=True)
+    agent = _profile_agent(fake_session_repository, profile_repository)
+
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        updated = asyncio.run(
+            agent.reply(
+                ReplyInput(
+                    session_id="sess_profile_writefail", learner_message="I would like a latte"
+                )
+            )
+        )
+
+    assert updated.messages[-1].text == "Let's keep practicing with counter."
+    assert [message.text for message in updated.messages[-2:]] == [
+        "I would like a latte",
+        "Let's keep practicing with counter.",
+    ]
+    assert "learner_profile_update_failed" in caplog.text
+    assert "degraded=true" in caplog.text
+    assert "user_id=user:42" in caplog.text
+
+
+def test_reply_mock_feedback_keeps_estimate_untouched_but_grows_turn_and_scene(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """mock 反馈 cefr_level=None：estimate/history 不动，场景与轮数照常累计。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(fake_session_repository, "sess_profile_mock", user_id="user:42")
+    profile_repository = FakeLearnerProfileRepository()
+    profile_repository.profiles["user:42"] = LearnerProfile(
+        user_id="user:42",
+        cefr_estimate="B2",
+        cefr_history=["A2", "B1", "B2"],
+        practiced_turn_count=3,
+    )
+    agent = _profile_agent(fake_session_repository, profile_repository)
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_profile_mock", learner_message="I would like a latte")
+        )
+    )
+
+    profile = profile_repository.profiles["user:42"]
+    assert profile.cefr_estimate == "B2"
+    assert profile.cefr_history == ["A2", "B1", "B2"]
+    assert profile.practiced_turn_count == 4
+    assert profile.scene_counts == {"coffee_shop": 1}
+
+
+def test_bootstrap_voice_session_injects_learner_context_into_settings_builder(
+    fake_session_repository: FakeSessionRepository,
+) -> None:
+    """语音 bootstrap 点查档案并把注入块传进 settings builder（think prompt 来源）。"""
+    _save_profile_fixture_session(fake_session_repository, "sess_voice_profile", user_id="user:42")
+    profile_repository = FakeLearnerProfileRepository()
+    profile_repository.profiles["user:42"] = LearnerProfile(
+        user_id="user:42",
+        cefr_estimate="B1",
+        error_type_counts={"tense": 3},
+        practiced_turn_count=5,
+    )
+    token_issuer = FakeVoiceTokenIssuer()
+    settings_builder = FakeVoiceSettingsBuilder()
+    agent = SessionEngineAgent(
+        session_repository=fake_session_repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.voice_token_issuer = token_issuer
+    agent.voice_settings_builder = settings_builder
+
+    asyncio.run(agent.bootstrap_voice_session("sess_voice_profile"))
+
+    assert settings_builder.contexts == [
+        (
+            "Learner profile: estimated CEFR B1.\n"
+            "Learner profile: frequent error categories so far: tense.\n"
+            "Learner profile: 5 practice turns completed."
+        )
+    ]
+
+
+def test_complete_voice_session_persists_learner_profile(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """语音收口成功后档案更新：最后一轮学习者发言的反馈信号入档。"""
+    # 固定 mock 模式：复盘分支不得发起真实 LLM 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_profile_fixture_session(
+        fake_session_repository, "sess_voice_complete_profile", user_id="user:42"
+    )
+    feedback_engine = StructuredFeedbackEngine(categories=["word_choice"], cefr_level="B2")
+    profile_repository = FakeLearnerProfileRepository()
+    agent = SessionEngineAgent(
+        session_repository=fake_session_repository,
+        learner_profile_repository=profile_repository,
+    )
+    agent.feedback_engine = feedback_engine
+    asyncio.run(
+        fake_session_repository.save_voice_session_fact(
+            VoiceSessionFact(
+                session_id="sess_voice_complete_profile",
+                status="active",
+                transcript_turn_count=1,
+            )
+        )
+    )
+
+    asyncio.run(
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_complete_profile",
+                conversation=[
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+    )
+
+    profile = profile_repository.profiles["user:42"]
+    assert profile.error_type_counts == {"word_choice": 1}
+    assert profile.scene_counts == {"coffee_shop": 1}
+    assert profile.practiced_turn_count == 1
+    assert profile.cefr_estimate == "B2"

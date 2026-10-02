@@ -8,6 +8,9 @@ class FeedbackInput(BaseModel):
     learner_message: str
     scene: str
     vocab_candidates: list[str] = Field(default_factory=list)
+    # 学员档案注入（只加可选字段，契约零破坏）：服务端渲染的有界注入块，
+    # live 路径追加进 user prompt；mock 路径忽略（mock 输出不变）。
+    learner_context: str | None = None
 
 
 class FeedbackErrorItem(BaseModel):
