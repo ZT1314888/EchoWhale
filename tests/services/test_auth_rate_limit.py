@@ -6,10 +6,20 @@
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from api.common.exceptions import TooManyRequestsError
-from api.services.auth_rate_limit import AuthRateLimitRule, AuthRateLimiter
+from api.core.config import settings
+from redis.exceptions import RedisError
+
+from api.services.auth_rate_limit import (
+    AuthRateLimitRule,
+    AuthRateLimiter,
+    RedisAuthRateLimiter,
+    get_auth_rate_limiter,
+)
 
 
 def _limiter(max_keys: int) -> AuthRateLimiter:
@@ -102,3 +112,103 @@ def test_auth_limiter_tolerates_zero_capacity_misconfiguration() -> None:
     # 现存键继续正常计数（限额 5 内放行）。
     limiter.consume(action="login", key="bob")
     assert len(limiter._attempts["login:bob"]) == 2
+
+
+class FakeRedis:
+    """用字典模拟 INCR/EXPIRE 的最小 Redis 客户端（与 test_llm_rate_limit 同形）。"""
+
+    def __init__(self) -> None:
+        self.counters: dict[str, int] = {}
+        self.ttls: dict[str, int] = {}
+
+    def incr(self, key: str) -> int:
+        self.counters[key] = self.counters.get(key, 0) + 1
+        return self.counters[key]
+
+    def expire(self, key: str, ttl_seconds: int) -> None:
+        self.ttls[key] = ttl_seconds
+
+
+class FlakyRedis:
+    """incr 一律抛 RedisError 的假客户端，模拟 Redis 故障。"""
+
+    def incr(self, key: str) -> int:
+        raise RedisError("connection refused")
+
+    def expire(self, key: str, ttl_seconds: int) -> None:
+        raise RedisError("connection refused")
+
+
+def test_redis_auth_limiter_shares_counts_across_instances() -> None:
+    """多实例（多 worker 的替身）用同一 Redis 时必须共享计数，配额不按进程数倍增。"""
+    client = FakeRedis()
+    rule = AuthRateLimitRule(limit=2, window_seconds=60, message="too many")
+    limiter_a = RedisAuthRateLimiter(client, rules={"login": rule}, time_fn=lambda: 1000.0)
+    limiter_b = RedisAuthRateLimiter(client, rules={"login": rule}, time_fn=lambda: 1000.0)
+
+    limiter_a.consume(action="login", key="alice")
+    limiter_b.consume(action="login", key="alice")
+    with pytest.raises(TooManyRequestsError) as excinfo:
+        limiter_b.consume(action="login", key="alice")
+
+    # 每 action 独立文案在 Redis 变体上不丢失。
+    assert excinfo.value.message == "too many"
+    window_key = "auth:rate:login:alice:16"
+    assert client.counters[window_key] == 3
+    assert client.ttls[window_key] == 60
+
+
+def test_redis_auth_limiter_resets_after_window_renews() -> None:
+    """窗口翻新后计数归零：新窗口按全新配额放行。"""
+    client = FakeRedis()
+    clock = {"now": 1000.0}
+    limiter = RedisAuthRateLimiter(
+        client,
+        rules={"login": AuthRateLimitRule(limit=1, window_seconds=60, message="too many")},
+        time_fn=lambda: clock["now"],
+    )
+
+    limiter.consume(action="login", key="alice")
+    with pytest.raises(TooManyRequestsError):
+        limiter.consume(action="login", key="alice")
+
+    clock["now"] += 60
+    limiter.consume(action="login", key="alice")
+    assert client.counters["auth:rate:login:alice:17"] == 1
+
+
+def test_redis_auth_limiter_degrades_to_in_memory_on_redis_failure(caplog) -> None:
+    """Redis 故障不影响放行判定：退化为进程内计数并记 warning。"""
+    limiter = RedisAuthRateLimiter(
+        FlakyRedis(),
+        rules={"login": AuthRateLimitRule(limit=1, window_seconds=60, message="too many")},
+        time_fn=lambda: 1000.0,
+    )
+
+    with caplog.at_level(logging.WARNING, logger="api.services.auth_rate_limit"):
+        limiter.consume(action="login", key="alice")
+        with pytest.raises(TooManyRequestsError):
+            limiter.consume(action="login", key="alice")
+
+    assert "auth_rate_limit_redis_unavailable" in caplog.text
+
+
+def test_factory_uses_in_memory_without_redis_url(monkeypatch) -> None:
+    """工厂口径与 get_llm_rate_limiter 一致：未配置 redis_url 时用进程内实现。"""
+    monkeypatch.setattr(settings, "redis_url", "")
+    get_auth_rate_limiter.cache_clear()
+    try:
+        assert type(get_auth_rate_limiter()) is AuthRateLimiter
+    finally:
+        get_auth_rate_limiter.cache_clear()
+
+
+def test_factory_builds_redis_limiter_when_configured(monkeypatch) -> None:
+    """配置了 redis_url 时构建 Redis 实现（客户端惰性连接，构造不触网）。"""
+    monkeypatch.setattr(settings, "redis_url", "redis://localhost:6379/0")
+    get_auth_rate_limiter.cache_clear()
+    try:
+        limiter = get_auth_rate_limiter()
+        assert isinstance(limiter, RedisAuthRateLimiter)
+    finally:
+        get_auth_rate_limiter.cache_clear()

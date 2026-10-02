@@ -7,17 +7,24 @@ from json import JSONDecodeError
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Header, Request
+from fastapi import APIRouter, Depends, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ValidationError, field_validator
 
-from api.common.exceptions import AuthenticationError, ConfigurationError
+from api.common.exceptions import (
+    AuthenticationError,
+    ConfigurationError,
+    NotFoundError,
+    TooManyRequestsError,
+)
 from api.core.config import settings
+from api.db.session_db import SessionRepository, build_session_repository
 from api.integrations.deepgram import (
     DeepgramThinkProxyTokenCodec,
     build_deepgram_think_upstream_url,
     validate_deepgram_think_upstream_settings,
 )
+from api.services.llm_rate_limit import LLMRateLimiter, get_llm_rate_limiter
 
 router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 logger = logging.getLogger(__name__)
@@ -46,6 +53,8 @@ class ProxyChatCompletionRequest(BaseModel):
 async def proxy_deepgram_think_chat_completions(
     request: Request,
     authorization: str | None = Header(default=None),
+    session_repository: SessionRepository = Depends(build_session_repository),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Response:
     token = _extract_bearer_token(authorization)
     if token is None:
@@ -98,6 +107,32 @@ async def proxy_deepgram_think_chat_completions(
             status_code=400,
             message=validation_error,
             error_type="invalid_request_error",
+        )
+
+    # 顺序理由（审计 Finding 12b）：per-sid 限流先于存在性校验——同 sid 洪泛
+    # 在配额打满后即被挡，不再打 DB；伪造令牌则进不到 sid 提取。令牌 TTL 内
+    # 可复用，per-sid 配额是这种可复用性的主要约束。
+    try:
+        rate_limiter.consume(action="think_proxy", key=session_id)
+    except TooManyRequestsError:
+        logger.warning("Deepgram think proxy rate limited for session=%s", session_id)
+        return _error_response(
+            status_code=429,
+            message="Too many requests for this session",
+            error_type="rate_limit_error",
+        )
+
+    # sid 存在性校验：令牌是 TTL 内可复用的 bearer 能力，签发后不再与应用状态
+    # 绑定，这里用仓储 PK 查询把"令牌有效"收紧到"会话仍存在"。不存在（含
+    # sid="unknown"）统一 401 authentication_error，不泄露会话存在性。
+    try:
+        await session_repository.get_session_head(session_id)
+    except NotFoundError:
+        logger.warning("Deepgram think proxy rejected unknown session id")
+        return _error_response(
+            status_code=401,
+            message="Proxy authorization required",
+            error_type="authentication_error",
         )
 
     if _requests_streaming(payload):

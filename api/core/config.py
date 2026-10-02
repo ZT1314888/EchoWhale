@@ -110,6 +110,14 @@ class Settings(BaseSettings):
     # IP 键同一模式，只取 TCP 对端地址）；窗口复用 3600 秒常量语义。
     media_upload_limit: int = 20
     media_upload_ip_limit: int = 100
+    # 语音 bootstrap 限流（Finding 12a）：每次调用都消耗一次 Deepgram token grant，
+    # owner 键 + 匿名访客 IP 兜底键；窗口复用 3600 秒常量语义（见 llm_rate_limit）。
+    voice_bootstrap_limit: int = 5
+    voice_bootstrap_ip_limit: int = 25
+    # Deepgram think 代理 per-sid 限流（Finding 12b）：令牌 TTL 内可复用，
+    # 配额按会话维度约束（120 次 / 5 分钟对正常语音会话绰绰有余）。
+    think_proxy_limit: int = 120
+    think_proxy_window_seconds: int = 300
     # 进程内限流字典的键容量上限（LRU 淘汰最久未用键）；
     # Redis 变体不受影响（键自带 TTL，天然有界）。
     rate_limiter_max_keys: int = 10_000

@@ -6,8 +6,11 @@ import httpx
 from fastapi.testclient import TestClient
 import pytest
 
+from api.db.session_db import build_session_repository
 from api.integrations.deepgram.voice_agent import DeepgramThinkProxyTokenCodec
 from api.main import app
+from api.services.llm_rate_limit import InMemoryLLMRateLimiter, get_llm_rate_limiter
+from tests.api.test_deepgram_routes import StubSessionHeadRepository
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +22,9 @@ def clear_overrides() -> Iterator[None]:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
+    # 既有用例的令牌 sid 都视为已存在会话；限流器用默认规则的内存实现。
+    app.dependency_overrides[build_session_repository] = lambda: StubSessionHeadRepository()
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: InMemoryLLMRateLimiter()
     with TestClient(app) as test_client:
         yield test_client
 

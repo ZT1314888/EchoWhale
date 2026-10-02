@@ -31,6 +31,10 @@ RATE_LIMIT_MESSAGE = "请求过于频繁，请稍后再试。"
 # （limits 本身走 settings.media_upload_limit / media_upload_ip_limit）。
 MEDIA_UPLOAD_WINDOW_SECONDS = 3600
 
+# 语音 bootstrap 限流窗口：同复用 3600 秒常量语义，不单独暴露环境配置键
+# （limits 走 settings.voice_bootstrap_limit / voice_bootstrap_ip_limit）。
+VOICE_BOOTSTRAP_WINDOW_SECONDS = 3600
+
 
 @dataclass(frozen=True, slots=True)
 class LLMRateLimitRule:
@@ -176,6 +180,23 @@ def default_llm_rate_limit_rule(action: str) -> LLMRateLimitRule:
         return LLMRateLimitRule(
             settings.media_upload_ip_limit,
             MEDIA_UPLOAD_WINDOW_SECONDS,
+        )
+    if action == "voice_bootstrap":
+        return LLMRateLimitRule(
+            settings.voice_bootstrap_limit,
+            VOICE_BOOTSTRAP_WINDOW_SECONDS,
+        )
+    if action == "voice_bootstrap_ip":
+        return LLMRateLimitRule(
+            settings.voice_bootstrap_ip_limit,
+            VOICE_BOOTSTRAP_WINDOW_SECONDS,
+        )
+    if action == "think_proxy":
+        # Deepgram think 代理按令牌里的 sid 计数：令牌 TTL 内可复用，
+        # 会话维度配额是该复用性的主要约束。
+        return LLMRateLimitRule(
+            settings.think_proxy_limit,
+            settings.think_proxy_window_seconds,
         )
     raise ConfigurationError(f"Unknown LLM rate limit action: {action}")
 

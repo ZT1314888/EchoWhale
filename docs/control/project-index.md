@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/session_write_integrity/feature.md`
-- 本轮结论：审计 Finding 7/8 修复：迁移 0011 给 session_messages 加 UNIQUE(session_id,position)（batch_alter_table，SQLite/PG 双兼容）+ sessions(user_id,updated_at) 复合索引；save_reply_turn 冲突重试（独立事务，二次冲突InvalidStateError）；finalize_voice_session 改 append-only（agent 层传 new_messages，仓储绝不动既有消息行），消除语音收口与文本轮并发的丢失更新。
-- 当前主要阻塞：add_message 重试随调用方出现再补；Finding 9 历史 INNER JOIN 语义待决策；本批次后续：限流收口（F5+F12）→ LLM 成本与输入边界（F10+F11）→ 可观测性 → 交付门禁与部署。
-- 补充进展：uv run pytest tests 393 passed / 2 skipped（+5：约束/重试/append-only/迁移可逆）；ruff/black 全绿。
+- 最新归档：`docs/features/ratelimit_closing/feature.md`
+- 本轮结论：审计 Finding 5/12 修复：AuthRateLimiter Redis 化（固定窗口 + RedisError 降级进程内 + 工厂口径与 LLM 限流一致，多 worker 共享计数）；voice/bootstrap 接 owner+IP 双键限流（Deepgram 令牌仅限流通过后签发）；think 代理补per-sid 配额（120/5min）与 sid 会话存在性校验（401 不泄露存在性），处理顺序=解码→配置→body→限流→存在性→转发；XFF 立场：应用零解析，由 uvicorn --proxy-headers 保证 client.host 真实性（部署要求已写入 .env.example）。
+- 当前主要阻塞：think 一次性票据归语音演进批次；INCR+EXPIRE 原子化（Lua）随 LLM 限流器统一处理；本批次后续：LLM 成本与输入边界（F10+F11）→ 可观测性 → 交付门禁与部署。
+- 补充进展：uv run pytest tests 404 passed / 2 skipped（+11）；ruff/black 全绿。
 
 ## 模块看板
 
@@ -71,6 +71,7 @@
 | 会话启动媒体归属校验 | `session_media_ownership_check` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 反馈失败降级不拖垮整轮对话 | `feedback_failure_degradation` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 会话写路径完整性与追加语义 | `session_write_integrity` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 限流体系收口 | `ratelimit_closing` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 

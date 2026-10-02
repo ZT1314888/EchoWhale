@@ -427,6 +427,53 @@ class VisitorAwareSessionService(FakeSessionService):
         return session
 
 
+class RecordingDeepgramTokenIssuer:
+    """记录 Deepgram token 签发次数的假 issuer。
+
+    真实链路里 grant 发生在 agent 内部（route → service → agent → issuer）；
+    fake 在 service 替身里调用它，保证"限流通过才签发"能被断言。
+    """
+
+    def __init__(self) -> None:
+        self.grant_calls = 0
+
+    def issue_token(self, ttl_seconds: int) -> tuple[str, float]:
+        self.grant_calls += 1
+        return (f"fake-dg-token-{self.grant_calls}", float(ttl_seconds))
+
+
+class IssuerBackedVoiceSessionService(FakeSessionService):
+    """bootstrap 时经由 fake issuer 签发令牌的语音会话服务替身。
+
+    不沿用父类 bootstrap 的 owner 断言：匿名访客（owner=visitor:*）也要能
+    走通 bootstrap，供 IP 兜底键的轮换 Cookie 测试使用。
+    """
+
+    def __init__(self, issuer: RecordingDeepgramTokenIssuer) -> None:
+        super().__init__()
+        self.issuer = issuer
+
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise NotFoundError(f"Session {session_id} not found")
+        token, expires_in = self.issuer.issue_token(settings.deepgram_agent_token_ttl_seconds)
+        return {
+            "session_id": session.id,
+            "deepgram_access_token": token,
+            "expires_in": expires_in,
+            "deepgram_ws_url": "wss://api.deepgram.com/v1/agent/converse",
+            "agent_settings": {
+                "type": "Settings",
+                "agent": {
+                    "language": "en",
+                    "greeting": session.opener,
+                },
+            },
+            "session": session,
+        }
+
+
 @pytest.fixture(autouse=True)
 def clear_session_overrides() -> Iterator[None]:
     app.dependency_overrides.clear()
@@ -908,4 +955,74 @@ def test_authenticated_user_bursts_do_not_consume_ip_quota(client: TestClient) -
     headers = {"Authorization": "Bearer valid-access-token"}
     for _ in range(3):
         response = client.post("/api/v1/sessions", json={"media_id": "med_123"}, headers=headers)
+        assert response.status_code == 200
+
+
+def test_bootstrap_voice_session_rate_limited_before_token_issuance(client: TestClient) -> None:
+    """owner 超限 429，且限流先于签发：超限请求零 Deepgram token grant。"""
+    issuer = RecordingDeepgramTokenIssuer()
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(issuer)
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=1, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=100, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    first = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
+    second = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == 1006
+    # fake issuer 签发次数 == 成功次数：被限流的第二次请求没有签发任何令牌。
+    assert issuer.grant_calls == 1
+
+
+def test_anonymous_rotating_cookies_hit_bootstrap_ip_rate_limit(client: TestClient) -> None:
+    """匿名同 IP 轮换 Cookie：owner 键每次都是新访客挡不住，IP 兜底键 429。"""
+    issuer = RecordingDeepgramTokenIssuer()
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(issuer)
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=2, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # TestClient 的对端地址固定为 testclient：每次请求换一个伪造 Cookie，
+    # visitor 键始终是全新身份，第 3 次请求撞上 IP 限额（limit=2）。
+    responses = [
+        client.post(
+            "/api/v1/sessions/sess_123/voice/bootstrap",
+            headers={"Cookie": f"{settings.auth_visitor_cookie_name}=forged_{index}"},
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses[:2]] == [200, 200]
+    assert responses[2].status_code == 429
+    assert responses[2].json()["code"] == 1006
+    assert issuer.grant_calls == 2
+
+
+def test_authenticated_user_bootstrap_does_not_consume_ip_quota(client: TestClient) -> None:
+    """认证用户 bootstrap 不受 IP 兜底键影响：IP 限额调到 1 也应连发无阻。"""
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(
+        RecordingDeepgramTokenIssuer()
+    )
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=10, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=1, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    for _ in range(3):
+        response = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
         assert response.status_code == 200

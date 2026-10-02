@@ -136,9 +136,20 @@ async def get_session_review(
 @router.post("/{session_id}/voice/bootstrap", response_model=ApiResponse[VoiceBootstrapResponse])
 async def bootstrap_voice_session(
     session_id: str,
+    request: Request,
     session_service: SessionEngineService = Depends(get_session_service),
     owner: ResourceOwnerContext = Depends(get_resource_owner),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
+    # 限流必须通过才进入 service：Deepgram token grant 发生在 service→agent 内部，
+    # 每次签发都消耗一次 Deepgram 配额，超限请求必须零签发（审计 Finding 12a）。
+    consume_with_ip_guard(
+        rate_limiter,
+        action="voice_bootstrap",
+        ip_action="voice_bootstrap_ip",
+        owner=owner,
+        request=request,
+    )
     bootstrap = await session_service.bootstrap_voice_session(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(
         data=VoiceBootstrapResponse(
