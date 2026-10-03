@@ -596,4 +596,5 @@ frontend/
 ### v0.4
 
 - 增加会话总结与历史复习能力
+  （2026-10 标注：会话总结由 LLM 复盘承载，见 docs/features/teaching_kernel_prompts；本节为历史版本记录，全面升版另行任务。）
 - 完善测试与部署文档

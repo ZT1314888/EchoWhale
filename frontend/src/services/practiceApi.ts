@@ -1,8 +1,6 @@
 import type {
-  PracticeTurnInput,
   SceneAnalysisStatusValue,
   SessionSummary,
-  SubmitPracticeTurnResult,
   UploadDraft,
 } from "../types/app";
 
@@ -79,11 +77,4 @@ async function startPracticeSession(
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {
   return sessionApi.getPracticeSession(sessionId);
-}
-
-export async function submitPracticeTurn(
-  sessionId: string,
-  input: PracticeTurnInput,
-): Promise<SubmitPracticeTurnResult> {
-  return sessionApi.submitPracticeTurn(sessionId, input);
 }

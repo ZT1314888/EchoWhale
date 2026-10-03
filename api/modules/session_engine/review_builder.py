@@ -38,8 +38,9 @@ SCENE_COPY = {
 }
 
 # ReviewCopy 消费侧硬顶（与 REVIEW_PROMPT 的软约束一致）：提示词管不住失控输出，
-# 落卡前逐字段截断，防止超长文案撑爆复盘卡片。scene_title/role_label 本期不被
-# 复盘卡片消费（冗余保留，供未来随契约下发），故只给被消费字段配硬顶常量。
+# 落卡前逐字段截断，防止超长文案撑爆复盘卡片。scene_title/role_label 已随
+# SessionResponse/HistorySessionMetaResponse 契约下发（仍不被复盘卡片消费），
+# 故只给被消费字段配硬顶常量。
 _REVIEW_COPY_HIGHLIGHT_MAX_CHARS = 120
 _REVIEW_COPY_NEXT_TRY_MAX_CHARS = 80
 _REVIEW_COPY_NEXT_STEP_MAX_CHARS = 80

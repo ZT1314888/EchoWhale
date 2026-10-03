@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/coach_review_eval_samples/feature.md`
-- 本轮结论：审计 Schedule Later 18（教练与复盘侧）：新增 api/modules/coach_engine/evaluation.py 与 session_engine/evaluation.py 两座离线评测台（按引擎各建模块、scene 评测台零改动、零跨引擎 import，定案不抽共享泛化骨架）；固定输入样例集入库（教练 10 组 4 场景 × B1×5/B2×5、复盘 6 组含非预设 gym），fixtures 被 always-on 单测与 gated live 评测双通道共用；硬规则校验器为公开纯函数（coach 五维：仅英语/≤80 词/?恰好1/meta 黑名单/不复读原句，review 五维：结构/中文/40-40-120-80-80/无原始 id/无关话题黑名单代理不编造）；coach 可选 LLM judge 与 SceneOutputJudge 同构（role_fit/cefr_fit/stretch）；RUN_COACH_EVAL=1 / RUN_REVIEW_EVAL=1 门控（CI 默认 2 skipped 零费用），JSONL 落盘绑定 prompt 哈希（coach 绑 build_coach_system_prompt(learner_cefr) 实际输出、review 绑 REVIEW_PROMPT）。生产代码零改动：无任何 tracked 文件被修改。
-- 当前主要阻塞：教练/复盘 live 评测未实跑（费用与真实 provider 依赖，首次实跑命令见 feature.md）；评测暴露 4 项提示词疑似问题已记录未改（meta 黑名单误报张力、追问 ? 恰 1 的过杀风险、ReviewCopy 标题/标签无生产侧硬顶、mock 双空分支复读原句）；语音链路提示词评测另行立项。
-- 补充进展：pytest 539 passed / 9 skipped，覆盖率 88.44%（门禁 87，基线 88.76）；ruff / black 全绿；零 pragma（live-only 路径靠缓冲覆盖）；trellis-check 独立复核 9 项全 PASS（生产零改动 / 门禁复跑 / CI 零费用 / always-on 无网络 / design 定案执行 / prd 验收对照 / 代码质量 / fixture 约束 / 仓库卫生）。
+- 最新归档：`docs/features/scene_copy_single_source_cleanup/feature.md`
+- 本轮结论：审计 F17/F19/F21 清理批次 + 两个小件：场景展示文案改由后端单一来源下发——SessionResponse 与 HistorySessionMetaResponse 以 add-only 增 scene_title/role_label（取值 review_builder.get_scene_title/get_role_label 的确定性路径：SCENE_COPY 预设或 humanize 回退，任何展示路径不露原始 scene/role id），前端删两份漂移的 SCENE_META 改消费后端字段 + utils/humanizeIdentifier 最小兜底，SessionSummary.liveHint（零渲染死状态）随批移除；前端死代码全删（7 组件、mockApi+测试、useSpeechRecognition、非流式 submitPracticeTurn 及 practiceApi 门面、data/ 收口为静态 sampleScenes.ts），grep 零残留；session_summary 死桩删除（api/tasks/session_summary.py + prompts/session_prompts.py）且 PRD §11 v0.4 加标注；index.html lang=zh-CN、首页拖拽承诺兑现（handleSelectedFile 共用链路 + onDragOver/onDrop + 新测试）。
+- 当前主要阻塞：无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前批）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页、PRD 全面升版均有排期。
+- 补充进展：pytest 540 passed / 9 skipped，覆盖率 88.49%（门禁 87，基线 88.44 → +0.05pt）；ruff / black 全绿；前端 typecheck 通过、vitest 覆盖率 Stmts 85.97 / Branch 77.42 / Funcs 84.02 / Lines 85.97 对阈值 76/74/78/76 全部上升（删未测试死代码，vite.config.ts 阈值未动）；生产提示词零改动（review_prompts.py / 两个 evaluation.py / fixtures 空 diff，评测基线不漂）；trellis-check 独立复核 10/10 PASS。
 
 ## 模块看板
 
@@ -78,6 +78,7 @@
 | 教学内核提示词升级与LLM复盘 | `teaching_kernel_prompts` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 学员状态持久化与提示词动态注入 | `learner_profile_prompt_injection` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 教练与复盘离线评测样例集 | `coach_engine` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
+| 场景文案单一事实源与死代码清理 | `scene_copy_single_source_cleanup` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
 
 ## 测试门
 

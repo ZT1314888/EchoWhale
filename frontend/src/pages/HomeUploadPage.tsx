@@ -1,10 +1,10 @@
-import { type ChangeEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type DragEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 import { SampleSceneCard } from "../components/SampleSceneCard";
 import { UserMenu } from "../components/UserMenu";
-import { sampleScenes } from "../data/mockApp";
+import { sampleScenes } from "../data/sampleScenes";
 
 function validateImage(file: File) {
   const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
@@ -63,9 +63,8 @@ export function HomeUploadPage() {
     });
   }
 
-  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
+  // 点击选择与拖拽投放共用同一条校验+跳转链路，保证两种入口行为一致。
+  function handleSelectedFile(file: File | undefined | null) {
     if (!file) {
       return;
     }
@@ -83,6 +82,15 @@ export function HomeUploadPage() {
     navigate("/session/loading", {
       state: { draft: { source: "file", fileName: file.name, file } },
     });
+  }
+
+  function onFileChange(event: ChangeEvent<HTMLInputElement>) {
+    handleSelectedFile(event.target.files?.[0]);
+  }
+
+  function onDrop(event: DragEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    handleSelectedFile(event.dataTransfer.files?.[0]);
   }
 
   return (
@@ -127,7 +135,13 @@ export function HomeUploadPage() {
               拖入一张生活图片，让 EchoWhale 把它整理成一轮安静、专注的口语练习。
             </p>
 
-            <button className="dropzone-card dropzone-card--home" type="button" onClick={() => inputRef.current?.click()}>
+            <button
+              className="dropzone-card dropzone-card--home"
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={onDrop}
+            >
               <span className="dropzone-title">点击上传，或把图片拖到这里</span>
               <span className="muted-text">
                 支持 JPG / PNG，最大 10 MB。我们会先读场景、定角色，再准备第一句开场提示。

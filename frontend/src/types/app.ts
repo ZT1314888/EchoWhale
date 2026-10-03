@@ -75,7 +75,6 @@ export type SessionSummary = {
   roleLabel: string;
   openingPrompt: string;
   tags: string[];
-  liveHint: string;
   voiceTitle: string;
   voiceBody: string;
   messages: PracticeMessage[];

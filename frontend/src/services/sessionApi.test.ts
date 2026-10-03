@@ -6,7 +6,6 @@ import {
   createPracticeSession,
   createSamplePracticeSession,
   getPracticeSession,
-  submitPracticeTurn,
   submitPracticeTurnStream,
 } from "./sessionApi";
 
@@ -140,6 +139,8 @@ describe("sessionApi", () => {
           media_id: "med_123",
           scene: "coffee_shop",
           role: "barista",
+          scene_title: "咖啡店柜台点单",
+          role_label: "店员对话",
           opener: "Hi there, what can I get started for you today?",
           status: "active",
           labels: ["coffee", "menu"],
@@ -156,8 +157,9 @@ describe("sessionApi", () => {
 
     const session = await getPracticeSession("sess_123");
 
+    // 标题断言为「后端字段流转」口径（F17）：展示文案由后端 scene_title/role_label 下发。
     expect(session.title).toBe("咖啡店柜台点单");
-    expect(session.roleLabel).toContain("barista");
+    expect(session.roleLabel).toBe("店员对话");
     expect(session.openingPrompt).toContain("Hi there");
     expect(session.messages).toEqual([
       {
@@ -169,60 +171,31 @@ describe("sessionApi", () => {
     ]);
   });
 
-  it("maps a reply response into frontend messages and feedback", async () => {
+  it("falls back to humanized copy without exposing raw ids when backend copy fields are missing", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         code: 200,
         message: "Success",
         data: {
-          session: {
-            session_id: "sess_123",
-            media_id: "med_123",
-            scene: "coffee_shop",
-            role: "barista",
-            opener: "Hi there, what can I get started for you today?",
-            status: "active",
-            labels: ["coffee", "menu"],
-            messages: [
-              {
-                message_id: "msg_1",
-                role: "assistant",
-                text: "Hi there, what can I get started for you today?",
-              },
-              {
-                message_id: "msg_2",
-                role: "user",
-                text: "Could I get an iced latte, please?",
-              },
-              {
-                message_id: "msg_3",
-                role: "assistant",
-                text: "Sure. What size would you like?",
-                feedback: {
-                  grammar: "Your meaning is clear.",
-                  more_natural: "Could I get an iced latte, please?",
-                  useful_words: ["latte", "size", "iced"],
-                },
-              },
-            ],
-          },
-          feedback: {
-            grammar: "Your meaning is clear.",
-            more_natural: "Could I get an iced latte, please?",
-            useful_words: ["latte", "size", "iced"],
-          },
+          session_id: "sess_gym",
+          media_id: "med_gym",
+          scene: "night_market",
+          role: "street_vendor",
+          opener: "What would you like to try?",
+          status: "active",
+          messages: [],
         },
       }),
     }) as typeof fetch;
 
-    const result = await submitPracticeTurn("sess_123", {
-      content: "Could I get an iced latte, please?",
-    });
+    const session = await getPracticeSession("sess_gym");
 
-    expect(result.messages).toHaveLength(3);
-    expect(result.feedback.grammar.body).toBe("Your meaning is clear.");
-    expect(result.feedback.usefulWords.words).toEqual(["latte", "size", "iced"]);
+    // 兜底路径（F17）：humanizeIdentifier 与后端同语义，不得露出原始 snake_case id。
+    expect(session.title).toBe("Night Market 情景对话");
+    expect(session.roleLabel).toBe("角色 · Street Vendor");
+    expect(session.title).not.toContain("_");
+    expect(session.roleLabel).not.toContain("_");
   });
 
   it("maps voice bootstrap into a frontend Deepgram session payload", async () => {

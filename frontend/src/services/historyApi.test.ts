@@ -79,6 +79,8 @@ describe("historyApi", () => {
             media_id: "med_123",
             scene: "coffee_shop",
             role: "barista",
+            scene_title: "咖啡店柜台点单",
+            role_label: "店员对话",
             opener: "Hi there, what can I get started for you today?",
             status: "active",
             visual_anchors: ["counter", "menu board"],
@@ -115,6 +117,9 @@ describe("historyApi", () => {
 
     expect(detail.entry.reviewTitle).toBe("本轮回响");
     expect(detail.session.id).toBe("sess_123");
+    // F17：详情 session 块消费后端 scene_title/role_label，不再本地映射。
+    expect(detail.session.title).toBe("咖啡店柜台点单");
+    expect(detail.session.roleLabel).toBe("店员对话");
     expect(detail.session.totalMessages).toBe(12);
     expect(detail.review.feedback.moreNatural.body).toBe("Could I get an iced latte, please?");
   });

@@ -118,7 +118,6 @@ const realSession = {
   roleLabel: "角色 · barista",
   openingPrompt: "开场提示：Hi there, what can I get started for you today?",
   tags: ["coffee", "menu"],
-  liveHint: "先用一句短句回应，再补一条细节，会更稳。",
   voiceTitle: "点一下，用声音回答",
   voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",
   messages: [

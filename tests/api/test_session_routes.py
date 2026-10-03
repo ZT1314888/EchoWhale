@@ -108,6 +108,27 @@ class FakeSessionService:
                 created_at=later + timedelta(minutes=5),
                 updated_at=later + timedelta(minutes=5),
             ),
+            # 非预设场景（F17）：live 上传的场景 id 来自 LLM，任意值都可能，
+            # 专用于断言展示文案回退路径不输出原始 snake_case id。
+            "sess_market": Session(
+                id="sess_market",
+                user_id="user:user_123",
+                media_id="med_market",
+                scene="night_market",
+                role="street_vendor",
+                opener="What would you like to try from the stall?",
+                visual_anchors=["food stalls", "lanterns"],
+                vocab_candidates=["stall", "snack"],
+                messages=[
+                    Message(
+                        id="msg_market_1",
+                        role="assistant",
+                        text="What would you like to try from the stall?",
+                    )
+                ],
+                created_at=later + timedelta(minutes=10),
+                updated_at=later + timedelta(minutes=10),
+            ),
         }
         self.reviews = {
             "sess_123": SimpleNamespace(
@@ -597,9 +618,33 @@ def test_get_session_returns_session_snapshot(client: TestClient) -> None:
     assert body["code"] == 200
     assert body["data"]["session_id"] == "sess_123"
     assert body["data"]["role"] == "barista"
+    # F17：预设场景下发 SCENE_COPY 文案，前端不再需要本地映射。
+    assert body["data"]["scene_title"] == "咖啡店柜台点单"
+    assert body["data"]["role_label"] == "店员对话"
     assert body["data"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["messages"][0]["text"] == "Hi there, what can I get started for you today?"
+
+
+def test_get_session_returns_humanized_fallback_copy_for_non_preset_scene(
+    client: TestClient,
+) -> None:
+    """F17 回退路径：非预设场景输出自然语言组合，任何路径不露原始 snake_case id。"""
+    response = client.get(
+        "/api/v1/sessions/sess_market",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    # 裸 scene/role 数据字段原样保留（add-only 契约），但展示文案必须是人话。
+    assert body["data"]["scene"] == "night_market"
+    assert body["data"]["role"] == "street_vendor"
+    assert body["data"]["scene_title"] == "Night Market · Street Vendor 情景对话"
+    assert body["data"]["role_label"] == "角色 · Street Vendor"
+    assert "_" not in body["data"]["scene_title"]
+    assert "_" not in body["data"]["role_label"]
 
 
 def test_reply_to_session_returns_updated_messages_and_feedback(client: TestClient) -> None:
@@ -847,6 +892,9 @@ def test_get_history_session_returns_overview_and_review(client: TestClient) -> 
     assert body["data"]["entry"]["id"] == "sess_123"
     assert body["data"]["entry"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["session"]["session_id"] == "sess_123"
+    # F17：历史详情的 session 元数据块与 SessionResponse 对齐，同样下发展示文案。
+    assert body["data"]["session"]["scene_title"] == "咖啡店柜台点单"
+    assert body["data"]["session"]["role_label"] == "店员对话"
     assert body["data"]["session"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["session"]["total_messages"] == 1
     assert body["data"]["review"]["title"] == "本轮回响"

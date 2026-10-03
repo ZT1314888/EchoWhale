@@ -41,6 +41,10 @@ class HistorySessionMetaResponse(BaseModel):
     media_id: str | None
     scene: str
     role: str
+    # 与 SessionResponse 对齐（F17）：历史详情的 session 元数据块也下发展示文案，
+    # 前端历史详情不再需要本地映射；未命中预设时回退为自然语言组合。
+    scene_title: str
+    role_label: str
     opener: str
     status: str
     visual_anchors: list[str]
@@ -54,6 +58,8 @@ class HistorySessionMetaResponse(BaseModel):
             media_id=session.media_id,
             scene=session.scene,
             role=session.role,
+            scene_title=get_scene_title(session.scene, session.role),
+            role_label=get_role_label(session.scene, session.role),
             opener=session.opener,
             status=session.status.value,
             visual_anchors=list(session.visual_anchors),

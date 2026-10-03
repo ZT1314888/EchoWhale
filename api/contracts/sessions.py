@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
+from api.modules.session_engine.review_builder import get_role_label, get_scene_title
 from api.modules.session_engine.schema import (
     LearnerMessagePayload,
     SampleSceneId,
@@ -67,6 +68,10 @@ class SessionResponse(BaseModel):
     media_id: str | None
     scene: str
     role: str
+    # 场景展示文案单一事实源（F17）：后端下发，前端不再维护 SCENE_META 副本；
+    # 未命中预设时回退为自然语言组合，任何路径不输出原始 scene/role id。
+    scene_title: str
+    role_label: str
     opener: str
     status: str
     visual_anchors: list[str]
@@ -80,6 +85,8 @@ class SessionResponse(BaseModel):
             media_id=session.media_id,
             scene=session.scene,
             role=session.role,
+            scene_title=get_scene_title(session.scene, session.role),
+            role_label=get_role_label(session.scene, session.role),
             opener=session.opener,
             status=session.status.value,
             visual_anchors=list(session.visual_anchors),

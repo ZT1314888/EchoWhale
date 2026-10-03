@@ -11,6 +11,7 @@ import type {
   ReviewSummary,
 } from "../types/app";
 import { apiFetch } from "./apiClient";
+import { humanizeIdentifier } from "../utils/humanizeIdentifier";
 
 type ApiResponse<T> = {
   code?: number;
@@ -39,6 +40,9 @@ type BackendSession = {
   media_id: string | null;
   scene: string;
   role: string;
+  // F17：后端下发的场景展示文案；标 optional 以容忍旧后端/缓存响应，走 humanize 兜底。
+  scene_title?: string;
+  role_label?: string;
   opener: string;
   status: string;
   visual_anchors?: string[];
@@ -90,25 +94,6 @@ type BackendVoiceCompleteResponse = {
   review: BackendReview;
 };
 
-const SCENE_META: Record<string, { title: string; liveHint: string }> = {
-  coffee_shop: {
-    title: "咖啡店柜台点单",
-    liveHint: "先用一句短句回应，再补一条细节，会更稳。",
-  },
-  office: {
-    title: "办公室状态同步",
-    liveHint: "先说结果，再说原因，会更像真实办公室沟通。",
-  },
-  travel: {
-    title: "街头问路确认路线",
-    liveHint: "先说目的地，再确认转弯位置，会更清楚。",
-  },
-  restaurant: {
-    title: "餐厅点单练习",
-    liveHint: "先说主需求，再补额外偏好，会更自然。",
-  },
-};
-
 function toError(message: string, code = "SESSION_API_FAILED"): AppError {
   return { code, message };
 }
@@ -129,18 +114,14 @@ function toPracticeMessage(message: BackendSessionMessage): PracticeMessage {
 }
 
 function toSessionSummary(session: BackendSession): SessionSummary {
-  const sceneMeta = SCENE_META[session.scene] ?? {
-    title: session.scene.replace(/_/g, " "),
-    liveHint: "先回答主需求，再补一条细节，会更稳。",
-  };
-
+  // 展示文案单一事实源（F17）：优先后端下发的 scene_title/role_label；
+  // 兜底用 humanizeIdentifier（与后端 _humanize_identifier 同语义），不露原始 snake_case id。
   return {
     id: session.session_id,
-    title: sceneMeta.title,
-    roleLabel: `角色 · ${session.role}`,
+    title: session.scene_title ?? `${humanizeIdentifier(session.scene)} 情景对话`,
+    roleLabel: session.role_label ?? `角色 · ${humanizeIdentifier(session.role)}`,
     openingPrompt: `开场提示：${session.opener}`,
     tags: session.vocab_candidates ?? session.labels ?? [],
-    liveHint: sceneMeta.liveHint,
     voiceTitle: "点一下，用声音回答",
     voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",
     messages: session.messages.map(toPracticeMessage),
@@ -280,33 +261,6 @@ export async function getPracticeSession(sessionId: string): Promise<SessionSumm
   }
 
   return toSessionSummary(payload.data);
-}
-
-export async function submitPracticeTurn(
-  sessionId: string,
-  input: PracticeTurnInput,
-): Promise<SubmitPracticeTurnResult> {
-  let response: Response;
-
-  try {
-    response = await apiFetch(`/api/v1/sessions/${sessionId}/reply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ learner_message: input.content }),
-    });
-  } catch {
-    throw toError("发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
-  }
-
-  const payload = await parseResponse<BackendReplyResponse>(response);
-  if (!response.ok || !payload.data) {
-    throw toError(payload.message ?? "发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
-  }
-
-  return {
-    messages: payload.data.session.messages.map(toPracticeMessage),
-    feedback: toPracticeFeedback(payload.data.feedback),
-  };
 }
 
 export type PracticeTurnStreamHandlers = {
