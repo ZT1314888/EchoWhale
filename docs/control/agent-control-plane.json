@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/scene_copy_single_source_cleanup/feature.md",
-    "summary": "审计 F17/F19/F21 清理批次 + 两个小件：场景展示文案改由后端单一来源下发——SessionResponse 与 HistorySessionMetaResponse 以 add-only 增 scene_title/role_label（取值 review_builder.get_scene_title/get_role_label 的确定性路径：SCENE_COPY 预设或 humanize 回退，任何展示路径不露原始 scene/role id），前端删两份漂移的 SCENE_META 改消费后端字段 + utils/humanizeIdentifier 最小兜底，SessionSummary.liveHint（零渲染死状态）随批移除；前端死代码全删（7 组件、mockApi+测试、useSpeechRecognition、非流式 submitPracticeTurn 及 practiceApi 门面、data/ 收口为静态 sampleScenes.ts），grep 零残留；session_summary 死桩删除（api/tasks/session_summary.py + prompts/session_prompts.py）且 PRD §11 v0.4 加标注；index.html lang=zh-CN、首页拖拽承诺兑现（handleSelectedFile 共用链路 + onDragOver/onDrop + 新测试）。",
-    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前批）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页、PRD 全面升版均有排期。",
-    "extra_progress": "pytest 540 passed / 9 skipped，覆盖率 88.49%（门禁 87，基线 88.44 → +0.05pt）；ruff / black 全绿；前端 typecheck 通过、vitest 覆盖率 Stmts 85.97 / Branch 77.42 / Funcs 84.02 / Lines 85.97 对阈值 76/74/78/76 全部上升（删未测试死代码，vite.config.ts 阈值未动）；生产提示词零改动（review_prompts.py / 两个 evaluation.py / fixtures 空 diff，评测基线不漂）；trellis-check 独立复核 10/10 PASS。"
+    "latest_record": "docs/features/prd_v05_api_docs/feature.md",
+    "summary": "审计 Schedule Later 21 + Documentation 维度收口（纯文档批次，生产代码零改动）：docs/prd.md 升版 v0.5 重写当前形态——§2.3 非目标移出语音识别（保留发音打分）、§7 技术方案重写（PostgreSQL+SQLAlchemy+Alembic、Redis+RQ 双队列、mock/live 双运行时、签名访客 Cookie、Deepgram），删除“第一版允许内存存储或 mock 数据”；§4 补流式回复/语音练习/学员档案/LLM 复盘/场景文案下发/12MB 请求体门与 202；§10 验收补功能与工程门禁数字；§11 v0.1–v0.4 标注完成态 + v0.5 阶段意图四候选（档案读取 API 与进度页、ReviewCopy 生产消费、评测驱动提示词修正、OTel/Langfuse），注明 PRD 不做 changelog；修复 §7–§10 编号错位。新建 docs/api.md 十一节：认证与身份/端点清单/统一信封与错误码/限流配额（含匿名 IP 伴生键）/SSE 事件协议/202 轮询/游标分页/请求体上限与 X-Request-ID//health 与 /readyz/think 代理特例，每个可验证声明附代码出处。README 增“文档”小节三链接并补 API 概览表缺漏的 resend-verification 行。feature.md 附 10 张“声明 ↔ 代码出处”对照表（核心验收物）。",
+    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前批）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页待立项（PRD 升版与 API 文档本批已完成）。",
+    "extra_progress": "pytest 540 passed / 9 skipped，覆盖率 88.49%（门禁 87，与基线逐项一致）；ruff / black 全绿；前端 typecheck 通过、vitest 15 文件 107 passed，覆盖率 Stmts 85.97 / Branch 77.42 / Funcs 84.02 / Lines 85.97 对阈值 76/74/78/76 全部持平达标；git diff 仅 docs/** 与 README.md，生产代码零改动；核对发现 2 处清单与代码不一致（auth 端点 9 而非 8、think 白名单空值语义），均以代码为准落档。"
   },
   "modules": [
     {
@@ -342,6 +342,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "PRD 升版 v0.5 与 API 文档",
+      "scope": "prd_v05_api_docs",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
     }
   ],
   "test_layers": [

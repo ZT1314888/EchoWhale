@@ -225,6 +225,7 @@ docs/*
 !docs/bugs/
 !docs/modules/
 !docs/deployment.md
+!docs/api.md
 !docs/interview/
 docs/interview/*
 !docs/interview/*.md

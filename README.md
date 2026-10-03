@@ -177,6 +177,12 @@ uv run alembic upgrade head
 
 单机/生产部署（Docker 镜像、compose 参考编排、生产环境 17 项清单、迁移与回滚、反代 `--proxy-headers` 要求）见 **[docs/deployment.md](docs/deployment.md)**。`APP_ENV` 在 `development/dev/test/testing/local` 之外的任何取值都会按生产标准逐项校验，缺一即拒绝启动。
 
+## 文档
+
+- **产品需求（PRD）**：[docs/prd.md](docs/prd.md) —— 产品当前形态、功能需求与版本规划
+- **API 参考**：[docs/api.md](docs/api.md) —— 统一信封、错误码、限流、SSE 事件协议、202 轮询、身份模型等协议层语义
+- **部署运行手册**：[docs/deployment.md](docs/deployment.md) —— 镜像构建、环境清单、迁移、健康检查与回滚
+
 ## 环境变量
 
 完整变量列表见 [.env.example](.env.example)，以下为关键分组：
@@ -205,6 +211,7 @@ uv run alembic upgrade head
 | | POST | `/auth/login` | 登录 |
 | | POST | `/auth/refresh` | 刷新令牌 |
 | | GET | `/auth/me` | 当前用户 |
+| | POST | `/auth/resend-verification` | 重发验证邮件 |
 | | POST | `/auth/verify-email` | 邮箱验证 |
 | | POST | `/auth/forgot-password` | 忘记密码 |
 | | POST | `/auth/reset-password` | 重置密码 |
