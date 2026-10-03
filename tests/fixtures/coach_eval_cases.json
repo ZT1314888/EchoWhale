@@ -1,0 +1,141 @@
+{
+  "comment": "教练评测固定输入集（design.md 4.1）。JSON 无注释语法，约束写在本键 + 载入测试断言：每组 recent_messages 非空、末条不等于 learner_message（mock 回复引用 recent_messages[-1].text，保证 always-on mock 通道过 no_echo 维度）、末条不含问号（mock 回复的追问恰好 1 个的前提）。覆盖矩阵：coffee_shop / office / restaurant / travel 4 场景 x B1、B2 各 >=3 组，含 B1 带 learner_context 注入块（restaurant_b1_profile）、B2 带注入块（coffee_shop_b2_profile）、recent_messages 多轮 >=4 条（restaurant_b2_multiturn / office_b2_multiturn）、visual_anchors 与 vocab_candidates 双空回退分支（travel_b2_minimal——学习者消息 <4 个 token，命中 no_echo 短句豁免）。注入块字符串与 build_learner_context_lines 的服务端渲染形态逐行一致（CEFR 行 -> 错误类别行 -> 轮数行）。B1 组学习者消息带轻微语法瑕疵，B2 组更流利，给 judge 的 CEFR 适配维度提供可判定输入。",
+  "cases": [
+    {
+      "case_id": "coffee_shop_b1_order",
+      "scene": "coffee_shop",
+      "role": "barista",
+      "learner_message": "I want order a iced latte and a piece of cheesecake.",
+      "visual_anchors": ["counter", "menu board"],
+      "vocab_candidates": ["iced latte", "cheesecake", "for here"],
+      "recent_messages": [
+        { "role": "assistant", "text": "Welcome in! The menu board above the counter shows today's specials." }
+      ],
+      "learner_cefr": "B1",
+      "learner_context": null
+    },
+    {
+      "case_id": "coffee_shop_b2_profile",
+      "scene": "coffee_shop",
+      "role": "barista",
+      "learner_message": "Could I get a flat white with oat milk, and could you make it extra hot?",
+      "visual_anchors": ["espresso machine", "pastry display"],
+      "vocab_candidates": ["flat white", "oat milk", "extra hot"],
+      "recent_messages": [
+        { "role": "assistant", "text": "Our seasonal menu just added two new oat milk options." }
+      ],
+      "learner_cefr": "B2",
+      "learner_context": "Learner profile: estimated CEFR B2.\nLearner profile: frequent error categories so far: word_choice, collocation.\nLearner profile: 18 practice turns completed."
+    },
+    {
+      "case_id": "office_b1_visitor",
+      "scene": "office",
+      "role": "office staff",
+      "learner_message": "I am here for the meeting with Miss Park at ten o clock.",
+      "visual_anchors": ["glass wall", "purple sofa"],
+      "vocab_candidates": ["visitor badge", "meeting room", "sign in"],
+      "recent_messages": [
+        { "role": "assistant", "text": "Good morning! Please sign in at the front desk first." }
+      ],
+      "learner_cefr": "B1",
+      "learner_context": null
+    },
+    {
+      "case_id": "office_b2_reschedule",
+      "scene": "office",
+      "role": "office staff",
+      "learner_message": "I'd like to reschedule tomorrow's sync because the client demo overran.",
+      "visual_anchors": ["meeting room screen", "whiteboard"],
+      "vocab_candidates": ["reschedule", "calendar invite", "time slot"],
+      "recent_messages": [
+        { "role": "assistant", "text": "Your calendar invite for tomorrow is still open on my side." }
+      ],
+      "learner_cefr": "B2",
+      "learner_context": null
+    },
+    {
+      "case_id": "restaurant_b1_dinner",
+      "scene": "restaurant",
+      "role": "waiter",
+      "learner_message": "Yesterday I have ate a steak and drink a orange juice here.",
+      "visual_anchors": ["table by the window", "printed menu"],
+      "vocab_candidates": ["starter", "main course", "bill"],
+      "recent_messages": [
+        { "role": "assistant", "text": "The printed menu has tonight's specials on the front page." }
+      ],
+      "learner_cefr": "B1",
+      "learner_context": null
+    },
+    {
+      "case_id": "restaurant_b2_multiturn",
+      "scene": "restaurant",
+      "role": "waiter",
+      "learner_message": "The salmon was cooked perfectly, but the side salad came out too salty.",
+      "visual_anchors": ["table by the window", "dinner menu"],
+      "vocab_candidates": ["salmon", "side salad", "dressing"],
+      "recent_messages": [
+        { "role": "user", "text": "A table for two, please." },
+        { "role": "assistant", "text": "Of course, the table by the window is free tonight." },
+        { "role": "user", "text": "Could we see the dinner menu first?" },
+        { "role": "assistant", "text": "Here is the dinner menu with today's specials on the back page." }
+      ],
+      "learner_cefr": "B2",
+      "learner_context": null
+    },
+    {
+      "case_id": "travel_b1_ticket",
+      "scene": "travel",
+      "role": "station clerk",
+      "learner_message": "I want buy a ticket to the airport, how much it cost?",
+      "visual_anchors": ["ticket machine", "platform sign"],
+      "vocab_candidates": ["single ticket", "return ticket", "platform"],
+      "recent_messages": [
+        { "role": "assistant", "text": "The ticket machine accepts cards but not cash today." }
+      ],
+      "learner_cefr": "B1",
+      "learner_context": null
+    },
+    {
+      "case_id": "travel_b2_minimal",
+      "scene": "travel",
+      "role": "station clerk",
+      "learner_message": "Yes, please.",
+      "visual_anchors": [],
+      "vocab_candidates": [],
+      "recent_messages": [
+        { "role": "assistant", "text": "The next express train to the airport leaves from platform six." }
+      ],
+      "learner_cefr": "B2",
+      "learner_context": null
+    },
+    {
+      "case_id": "restaurant_b1_profile",
+      "scene": "restaurant",
+      "role": "waiter",
+      "learner_message": "I will have the mushroom soup and the grilled fish, please.",
+      "visual_anchors": ["printed menu", "bread basket"],
+      "vocab_candidates": ["mushroom soup", "grilled fish", "still water"],
+      "recent_messages": [
+        { "role": "assistant", "text": "The grilled fish comes with rice or roasted potatoes." }
+      ],
+      "learner_cefr": "B1",
+      "learner_context": "Learner profile: estimated CEFR B1.\nLearner profile: frequent error categories so far: article, tense.\nLearner profile: 6 practice turns completed."
+    },
+    {
+      "case_id": "office_b2_multiturn",
+      "scene": "office",
+      "role": "office staff",
+      "learner_message": "The vendor demo went well, so I suggest we sign the contract this week.",
+      "visual_anchors": ["meeting room screen", "laptop"],
+      "vocab_candidates": ["vendor", "contract", "pricing sheet"],
+      "recent_messages": [
+        { "role": "user", "text": "How did the vendor meeting go this morning?" },
+        { "role": "assistant", "text": "I only joined for the last ten minutes of it." },
+        { "role": "user", "text": "The pricing sheet looked reasonable to me." },
+        { "role": "assistant", "text": "The pricing sheet is saved in the shared folder for review." }
+      ],
+      "learner_cefr": "B2",
+      "learner_context": null
+    }
+  ]
+}

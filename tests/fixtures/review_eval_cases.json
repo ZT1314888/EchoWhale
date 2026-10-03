@@ -1,0 +1,184 @@
+{
+  "comment": "复盘评测固定输入集（design.md 4.2）。4 组 SCENE_COPY 预设场景（coffee_shop / office / travel / restaurant）+ 1 组非预设场景 gym（专测不得把原始 id 当标题的回退路径）+ 1 组 B2 混合错误补齐 9 类封闭分类取样。errors 封闭 9 类全覆盖：tense/grammar/preposition（office）、word_choice/article/preposition（travel）、grammar/article/spelling（restaurant）、article/spelling/other（gym）、collocation/register/word_choice（coffee_shop_b2_mixed）；每组 feedback 均带 cefr_level。unrelated_topic_keywords 是跨域中文关键词黑名单（'不编造'的确定性代理断言），选取时已避开该场景 SCENE_COPY 预设文案会自然出现的词（如餐厅组不黑名单'点单'，旅行组不黑名单'问路/路线'），防止在线评测误报。",
+  "cases": [
+    {
+      "case_id": "coffee_shop_b1_clean",
+      "scene": "coffee_shop",
+      "role": "barista",
+      "learner_message": "I want order a iced latte and a piece of cheesecake.",
+      "feedback": {
+        "grammar": "I want order -> I would like to order (polite request needs 'would like').",
+        "more_natural": "Try: 'Could I get an iced latte and a slice of cheesecake, please?'",
+        "useful_words": ["would like", "a slice of", "iced"],
+        "errors": [],
+        "cefr_level": "B1"
+      },
+      "unrelated_topic_keywords": ["问路", "地铁", "面试", "简历"]
+    },
+    {
+      "case_id": "office_b1_report",
+      "scene": "office",
+      "role": "office staff",
+      "learner_message": "Yesterday I have send the report to my manager, but she don't reply me yet.",
+      "feedback": {
+        "grammar": "she don't reply me -> she hasn't replied to me (third person + present perfect).",
+        "more_natural": "Try: 'I sent the report yesterday, but my manager hasn't replied to me yet.'",
+        "useful_words": ["hasn't replied", "follow up", "report"],
+        "errors": [
+          {
+            "category": "tense",
+            "original": "I have send",
+            "correction": "I sent",
+            "explanation": "With 'yesterday', use the simple past tense."
+          },
+          {
+            "category": "grammar",
+            "original": "she don't reply me",
+            "correction": "she hasn't replied to me",
+            "explanation": "Third person singular takes 'doesn't/hasn't', and 'reply' needs 'to'."
+          },
+          {
+            "category": "preposition",
+            "original": "reply me",
+            "correction": "reply to me",
+            "explanation": "'Reply' takes 'to' before the person."
+          }
+        ],
+        "cefr_level": "B1"
+      },
+      "unrelated_topic_keywords": ["点单", "问路", "登机", "菜单"]
+    },
+    {
+      "case_id": "travel_b2_ticket",
+      "scene": "travel",
+      "role": "station clerk",
+      "learner_message": "I want to buy a ticket to airport, how much it cost and which platform I should go?",
+      "feedback": {
+        "grammar": "how much it cost -> how much does it cost (question word order).",
+        "more_natural": "Try: 'How much is a ticket to the airport, and which platform should I go to?'",
+        "useful_words": ["one-way", "platform", "how much is"],
+        "errors": [
+          {
+            "category": "word_choice",
+            "original": "how much it cost",
+            "correction": "how much does it cost",
+            "explanation": "Questions with 'how much' need do/does before the subject."
+          },
+          {
+            "category": "article",
+            "original": "to airport",
+            "correction": "to the airport",
+            "explanation": "Use 'the' before a specific, known place."
+          },
+          {
+            "category": "preposition",
+            "original": "which platform I should go",
+            "correction": "which platform should I go to",
+            "explanation": "Indirect question keeps statement order, and 'go' needs 'to' at the end."
+          }
+        ],
+        "cefr_level": "B2"
+      },
+      "unrelated_topic_keywords": ["点单", "面试", "简历", "代码"]
+    },
+    {
+      "case_id": "restaurant_a2_order",
+      "scene": "restaurant",
+      "role": "waiter",
+      "learner_message": "I want eat a steak and a oranje juice.",
+      "feedback": {
+        "grammar": "I want eat -> I want to eat (verb needs 'to' after 'want').",
+        "more_natural": "Try: 'I'd like the steak with an orange juice, please.'",
+        "useful_words": ["I'd like", "with", "please"],
+        "errors": [
+          {
+            "category": "grammar",
+            "original": "I want eat",
+            "correction": "I want to eat",
+            "explanation": "'Want' is followed by the infinitive with 'to'."
+          },
+          {
+            "category": "article",
+            "original": "a oranje juice",
+            "correction": "an orange juice",
+            "explanation": "Use 'an' before vowel sounds, and check the spelling of 'orange'."
+          },
+          {
+            "category": "spelling",
+            "original": "oranje",
+            "correction": "orange",
+            "explanation": "The fruit and juice is spelled 'orange'."
+          }
+        ],
+        "cefr_level": "A2"
+      },
+      "unrelated_topic_keywords": ["面试", "简历", "登机", "地铁"]
+    },
+    {
+      "case_id": "gym_b1_nonpreset",
+      "scene": "gym",
+      "role": "fitness coach",
+      "learner_message": "I go to gym every sunday and do some running on the treadmill.",
+      "feedback": {
+        "grammar": "I go to gym -> I go to the gym (article before 'gym').",
+        "more_natural": "Try: 'I go to the gym every Sunday and run on the treadmill.'",
+        "useful_words": ["work out", "treadmill", "every Sunday"],
+        "errors": [
+          {
+            "category": "article",
+            "original": "I go to gym",
+            "correction": "I go to the gym",
+            "explanation": "Use 'the' with 'the gym' as a specific place you visit."
+          },
+          {
+            "category": "spelling",
+            "original": "sunday",
+            "correction": "Sunday",
+            "explanation": "Days of the week are capitalized."
+          },
+          {
+            "category": "other",
+            "original": "do some running",
+            "correction": "do some cardio",
+            "explanation": "'Cardio' is the common gym word for this kind of exercise."
+          }
+        ],
+        "cefr_level": "B1"
+      },
+      "unrelated_topic_keywords": ["点单", "问路", "面试", "简历"]
+    },
+    {
+      "case_id": "coffee_shop_b2_mixed",
+      "scene": "coffee_shop",
+      "role": "barista",
+      "learner_message": "Can I make an order? I will take a coffee to go because I gotta go now.",
+      "feedback": {
+        "grammar": "I gotta go -> I have to go ('gotta' is not for careful speech).",
+        "more_natural": "Try: 'Could I place an order? I'll have a coffee to go, thanks.'",
+        "useful_words": ["place an order", "to go", "I'll have"],
+        "errors": [
+          {
+            "category": "collocation",
+            "original": "make an order",
+            "correction": "place an order",
+            "explanation": "English collocates 'order' with the verb 'place'."
+          },
+          {
+            "category": "register",
+            "original": "I gotta go",
+            "correction": "I have to go",
+            "explanation": "'Gotta' is very casual; 'have to' fits most spoken contexts."
+          },
+          {
+            "category": "word_choice",
+            "original": "I will take a coffee",
+            "correction": "I'll have a coffee",
+            "explanation": "'Have' is the natural verb when ordering food or drinks."
+          }
+        ],
+        "cefr_level": "B2"
+      },
+      "unrelated_topic_keywords": ["问路", "地铁", "面试", "简历"]
+    }
+  ]
+}

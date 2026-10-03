@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/learner_profile_prompt_injection/feature.md`
-- 本轮结论：审计对标结论 10（P2-7）：新增 user_learning_profiles 档案表（迁移 0013 可逆对，只对认证 user: 建档、visitor 零读写并测试锁定）；reply/stream/voice 三路径落库后零额外 LLM 更新档案（9 类封闭集合错误计数、场景 pop+重插封顶 12 淘汰最旧、轮数自增），CEFR 滚动估计定案 median_low（最近 10 轮序数下中位，免超参、防单轮异常）；教练系统提示词抽 build_coach_system_prompt(learner_cefr) 动态覆盖水平行（COACH_SYSTEM_PROMPT 默认逐字节不变、COACH_LEARNER_LEVEL 降级为回退默认），教练/反馈/语音三处提示词按 profile 注入有界上下文（CEFR + top≤3 错误类别 + 轮数，服务端拼装、无学习者原文），无档案/点查失败全部回退现状；档案更新是增强分支，失败仅 learner_profile_update_failed degraded=true 不影响回复轮；连带修复迁移 0004 在 alembic 1.18.4/SQLite 下的 batch 兼容（干净基线即红，0011 同款 batch_alter_table）。
-- 当前主要阻塞：档案暂无读取 API 与前端进度页（表结构已就绪，后续 feature）；教练难度适配的主观质量需上线人工评估；复盘 LLM 成本占比与 degraded 率需经 llm_usage 与日志观察；session_summary 死代码桩（Finding 21）另行删除。
-- 补充进展：pytest 513 passed / 7 skipped，覆盖率 88.76%（门禁 87，基线 88.36）；ruff / black 全绿；迁移 0013 本地 PG upgrade→downgrade→upgrade 往返通过；trellis-check 独立复核 10 项全 PASS（含 0004 基线红 stash 实验）。
+- 最新归档：`docs/features/coach_review_eval_samples/feature.md`
+- 本轮结论：审计 Schedule Later 18（教练与复盘侧）：新增 api/modules/coach_engine/evaluation.py 与 session_engine/evaluation.py 两座离线评测台（按引擎各建模块、scene 评测台零改动、零跨引擎 import，定案不抽共享泛化骨架）；固定输入样例集入库（教练 10 组 4 场景 × B1×5/B2×5、复盘 6 组含非预设 gym），fixtures 被 always-on 单测与 gated live 评测双通道共用；硬规则校验器为公开纯函数（coach 五维：仅英语/≤80 词/?恰好1/meta 黑名单/不复读原句，review 五维：结构/中文/40-40-120-80-80/无原始 id/无关话题黑名单代理不编造）；coach 可选 LLM judge 与 SceneOutputJudge 同构（role_fit/cefr_fit/stretch）；RUN_COACH_EVAL=1 / RUN_REVIEW_EVAL=1 门控（CI 默认 2 skipped 零费用），JSONL 落盘绑定 prompt 哈希（coach 绑 build_coach_system_prompt(learner_cefr) 实际输出、review 绑 REVIEW_PROMPT）。生产代码零改动：无任何 tracked 文件被修改。
+- 当前主要阻塞：教练/复盘 live 评测未实跑（费用与真实 provider 依赖，首次实跑命令见 feature.md）；评测暴露 4 项提示词疑似问题已记录未改（meta 黑名单误报张力、追问 ? 恰 1 的过杀风险、ReviewCopy 标题/标签无生产侧硬顶、mock 双空分支复读原句）；语音链路提示词评测另行立项。
+- 补充进展：pytest 539 passed / 9 skipped，覆盖率 88.44%（门禁 87，基线 88.76）；ruff / black 全绿；零 pragma（live-only 路径靠缓冲覆盖）；trellis-check 独立复核 9 项全 PASS（生产零改动 / 门禁复跑 / CI 零费用 / always-on 无网络 / design 定案执行 / prd 验收对照 / 代码质量 / fixture 约束 / 仓库卫生）。
 
 ## 模块看板
 
@@ -77,6 +77,7 @@
 | 交付门禁与部署收口 | `delivery_gates_and_deployment` | `feature_test_passed` | `feature_test_passed` | `module/infra_delivery` |
 | 教学内核提示词升级与LLM复盘 | `teaching_kernel_prompts` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 学员状态持久化与提示词动态注入 | `learner_profile_prompt_injection` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 教练与复盘离线评测样例集 | `coach_engine` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
 
 ## 测试门
 
