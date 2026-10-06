@@ -9,15 +9,31 @@ from api.common.exceptions import FileTooLargeError
 from api.common.request_context import (
     REQUEST_ID_HEADER,
     ensure_request_id,
+    get_request_id,
     reset_request_id,
     set_request_id,
 )
 from api.common.responses import ApiResponse
+from api.common.telemetry import (
+    ATTR_HTTP_METHOD,
+    ATTR_HTTP_ROUTE,
+    ATTR_HTTP_STATUS_CODE,
+    ATTR_HTTP_TARGET,
+    ATTR_REQUEST_ID,
+    ATTR_TERMINAL,
+    TERMINAL_OK,
+    mark_failed,
+    tracer,
+)
 from api.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 BODY_TOO_LARGE_MESSAGE = "Request body too large"
+
+# 基础设施探针路径：每 5–30s 一跳的 liveness/readiness 请求不打 server span，
+# 噪声大于价值（design 2.2）。仅开启态涉及；关闭态整条路径本来就无 span。
+HEALTH_PROBE_PATHS = frozenset({"/health", "/readyz"})
 
 # ASGI 三件套的类型别名：纯 ASGI 中间件只面向 receive/send 回调，
 # 不持有 Request 对象，也就不依赖 BaseHTTPMiddleware 的全量缓冲行为。
@@ -164,3 +180,65 @@ class RequestContextMiddleware:
         finally:
             # 正常返回与下游异常都要复位：请求结束后同线程的后台日志不得再挂旧 id。
             reset_request_id(token)
+
+
+class TracingMiddleware:
+    """server 层 span 中间件（纯 ASGI 实现，语义见任务 design 2.2 节）。
+
+    挂在 request-id 中间件内层（main.py 第一个 add_middleware = 最内层），
+    进入时 ContextVar 已建立，server span 可直接携带 request-id：
+
+    - span 名创建时为 `HTTP {METHOD}`，响应头阶段读 `scope["route"]`（FastAPI
+      路由器解析后会写回 scope）拿路由模板，`update_name` 成 `HTTP {METHOD}
+      {template}` 并补 `http.route` 属性——模板低基数，避免含会话 id 的原始
+      path 撑爆聚合维度；拿不到则保持方法级名（依赖 `http.target` 属性）；
+    - 下游异常：record_exception + Status ERROR + terminal=failed 后**原样上抛**
+      （不吞，全局异常处理器语义不变）；
+    - `/health`、`/readyz` 探针直通不打 span；仅处理 http scope，
+      lifespan / websocket 直通；
+    - 关闭态 tracer 是 no-op：span 全程 NonRecordingSpan，零行为。
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope.get("path") in HEALTH_PROBE_PATHS:
+            await self.app(scope, receive, send)
+            return
+
+        method = scope["method"]
+        attributes: dict[str, Any] = {
+            ATTR_HTTP_METHOD: method,
+            ATTR_HTTP_TARGET: scope.get("path", ""),
+        }
+        request_id = get_request_id()
+        if request_id:
+            attributes[ATTR_REQUEST_ID] = request_id
+
+        with tracer().start_as_current_span(
+            f"HTTP {method}",
+            attributes=attributes,
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+
+            async def tracing_send(message: dict[str, Any]) -> None:
+                if message["type"] == "http.response.start":
+                    status_code = message.get("status")
+                    if status_code is not None:
+                        span.set_attribute(ATTR_HTTP_STATUS_CODE, status_code)
+                    # 路由模板在响应头阶段才可得：路由器在 scope 上回写 route 对象。
+                    template = getattr(scope.get("route"), "path", None)
+                    if template:
+                        span.update_name(f"HTTP {method} {template}")
+                        span.set_attribute(ATTR_HTTP_ROUTE, template)
+                await send(message)
+
+            try:
+                await self.app(scope, receive, tracing_send)
+            except BaseException as exc:
+                # 只记账不改控制流：异常原样上抛，交全局异常处理器。
+                mark_failed(span, exc)
+                raise
+            span.set_attribute(ATTR_TERMINAL, TERMINAL_OK)

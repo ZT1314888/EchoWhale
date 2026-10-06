@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/prd_v05_api_docs/feature.md",
-    "summary": "审计 Schedule Later 21 + Documentation 维度收口（纯文档批次，生产代码零改动）：docs/prd.md 升版 v0.5 重写当前形态——§2.3 非目标移出语音识别（保留发音打分）、§7 技术方案重写（PostgreSQL+SQLAlchemy+Alembic、Redis+RQ 双队列、mock/live 双运行时、签名访客 Cookie、Deepgram），删除“第一版允许内存存储或 mock 数据”；§4 补流式回复/语音练习/学员档案/LLM 复盘/场景文案下发/12MB 请求体门与 202；§10 验收补功能与工程门禁数字；§11 v0.1–v0.4 标注完成态 + v0.5 阶段意图四候选（档案读取 API 与进度页、ReviewCopy 生产消费、评测驱动提示词修正、OTel/Langfuse），注明 PRD 不做 changelog；修复 §7–§10 编号错位。新建 docs/api.md 十一节：认证与身份/端点清单/统一信封与错误码/限流配额（含匿名 IP 伴生键）/SSE 事件协议/202 轮询/游标分页/请求体上限与 X-Request-ID//health 与 /readyz/think 代理特例，每个可验证声明附代码出处。README 增“文档”小节三链接并补 API 概览表缺漏的 resend-verification 行。feature.md 附 10 张“声明 ↔ 代码出处”对照表（核心验收物）。",
-    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前批）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页待立项（PRD 升版与 API 文档本批已完成）。",
-    "extra_progress": "pytest 540 passed / 9 skipped，覆盖率 88.49%（门禁 87，与基线逐项一致）；ruff / black 全绿；前端 typecheck 通过、vitest 15 文件 107 passed，覆盖率 Stmts 85.97 / Branch 77.42 / Funcs 84.02 / Lines 85.97 对阈值 76/74/78/76 全部持平达标；git diff 仅 docs/** 与 README.md，生产代码零改动；核对发现 2 处清单与代码不一致（auth 端点 9 而非 8、think 白名单空值语义），均以代码为准落档。"
+    "latest_record": "docs/features/otel_engine_spans/feature.md",
+    "summary": "审计 Schedule Later 19 + 对标结论 7（Dify ObservabilityLayer）/ PRD v0.5 候选④收口：接入 OpenTelemetry 三层链路追踪（OTel API 手动埋点，默认关闭零行为，OTLP HTTP 导出零厂商锁定）。server 层：TracingMiddleware 纯 ASGI 挂管线最内层（request-id 之内），路由模板经 scope[\"route\"] 回填低基数 span 名，/health /readyz 探针旁路；engine 层：session_engine/agent.py 的 scene/coach/feedback/review 四分支经 traced_engine 包裹，终态三值 ok/degraded/failed 与 failure policy 及 PRD §4.9 逐条对齐（feedback 异常=degraded、review copy=None/超时取消=degraded）；provider attempt 层：run_llm_with_failover 每次 attempt（含重试）一个 llm.attempt span（attempt 名/重试序号/终态，退避 sleep 移出 span 块、deadline 语义等价改写），openai.py payload builder stamp llm.model、_record_usage stamp token 三元组。基建 api/common/telemetry.py：模块级 tracer 不动全局 provider，关闭态不 import SDK（NonRecordingSpan 零行为），_ResilientSpanExporter 吞导出失败 + 60s 单调钟限频 warning。依赖 opentelemetry-api/sdk/exporter-otlp-proto-http 三包（禁 gRPC 变体，1.45.0，uv.lock 锁定）；Settings 仅增 otel_enabled 开关，标准 OTEL_* 环境变量 SDK 原生消费。新建 docs/observability.md（span 目录/终态映射/Langfuse+Jaeger 对接/关闭态承诺/llm_usage 分工/两项已知取舍），.env.example 与 README 增入口。api.md 复核零变动（未改端点）。",
+    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页、ReviewCopy 生产消费待立项。Langfuse 云端账号配置为用户侧操作（文档已给步骤）。",
+    "extra_progress": "pytest 578 passed / 9 skipped（基线 540/9，+38 用例），覆盖率 88.91%（门禁 87，基线 88.49% 抬升）；ruff / black 全绿；前端零改动（typecheck 通过、vitest 15 文件 107 passed、覆盖率 85.97/77.42/84.02/85.97 对阈值 76/74/78/76 持平达标）；tests/core/test_config.py 两处补 monkeypatch.delenv 使 mock 进程 pin 下既有 live 模式用例确定性通过（基线即存在的 pydantic-settings 优先级冲突，stash 对照验证）；Docker 镜像构建兼容由 CI docker job 实测（本地引擎未运行）。"
   },
   "modules": [
     {
@@ -346,6 +346,13 @@
     {
       "name": "PRD 升版 v0.5 与 API 文档",
       "scope": "prd_v05_api_docs",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "OTel 可观测性三层 span",
+      "scope": "otel_engine_spans",
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"

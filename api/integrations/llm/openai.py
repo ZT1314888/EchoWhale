@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 
 import httpx
 
+from api.common.telemetry import stamp_llm_model, stamp_llm_usage
 from api.integrations.llm.base import TextCompletionClient, VisionCompletionClient
 from api.integrations.llm.streaming import HttpxTextStream, SingleDeltaTextStream
 
@@ -111,6 +112,8 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
         )
 
     def _build_text_payload(self, system_prompt: str, user_prompt: str) -> dict[str, object]:
+        # 全部 5 个公开方法先经 payload builder：模型名 stamp 覆盖在此即覆盖全部入口。
+        stamp_llm_model(self.model)
         payload: dict[str, object] = {
             "model": self.model,
             "messages": [
@@ -138,6 +141,7 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
     def _build_image_payload(
         self, system_prompt: str, user_prompt: str, image_url: str
     ) -> dict[str, object]:
+        stamp_llm_model(self.model)
         payload: dict[str, object] = {
             "model": self.model,
             "messages": [
@@ -242,6 +246,14 @@ class OpenAICompatibleClient(TextCompletionClient, VisionCompletionClient):
             usage.get("prompt_tokens"),
             usage.get("completion_tokens"),
             usage.get("total_tokens"),
+        )
+        # token 三元组顺手富集到当时活跃 span（整包路径 = llm.attempt；流式路径
+        # usage 在流末帧到达，落在当时活跃的 engine/server span，见 design 2.4）。
+        stamp_llm_usage(
+            self.model,
+            prompt_tokens=usage.get("prompt_tokens"),
+            completion_tokens=usage.get("completion_tokens"),
+            total_tokens=usage.get("total_tokens"),
         )
         if self._usage_sink is None:
             return

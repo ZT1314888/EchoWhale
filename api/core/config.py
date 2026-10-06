@@ -165,6 +165,12 @@ class Settings(BaseSettings):
     # 不被远古轮次的水平钉死。均为带默认值非启动关键项，不进生产校验清单。
     learner_profile_scene_cap: int = 12
     learner_profile_cefr_window: int = 10
+    # OpenTelemetry 链路追踪开关（默认关闭零行为，docs/observability.md）：
+    # 只建模这一个开关；OTEL_EXPORTER_OTLP_ENDPOINT / OTEL_EXPORTER_OTLP_HEADERS /
+    # OTEL_SERVICE_NAME 等标准环境变量由 SDK 原生消费，不在 Settings 重复建模。
+    # 可选增强项：关闭态零 import、零 span，不影响任何既有生产清单项，
+    # 因此不进 validate_runtime()。
+    otel_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

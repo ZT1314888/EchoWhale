@@ -17,6 +17,7 @@ from api.common.exceptions import (
     UnsupportedSceneImageError,
 )
 from api.common.exceptions import ValidationError as AppValidationError
+from api.common.telemetry import TERMINAL_DEGRADED, traced_engine
 from api.core.config import settings
 from api.db.learner_profile_db import (
     LearnerProfileRepository,
@@ -125,7 +126,9 @@ class SessionEngineAgent:
         elif await self._dispatch_scene_analysis(media.id):
             return SceneAnalysisPending(media_id=media.id)
         else:
-            analysis = await self._analyze_scene_media(media)
+            # 内联场景分析打 engine.scene span：成功 ok，失败 failed（无降级路径，
+            # SceneAnalysisUnavailableError / UnsupportedSceneImageError 整轮上抛）。
+            analysis = await traced_engine("scene", self._analyze_scene_media(media))
             await self._store_scene_analysis(media.id, analysis)
         session = Session(
             id=f"sess_{uuid4().hex[:12]}",
@@ -302,22 +305,34 @@ class SessionEngineAgent:
             limit=settings.llm_coach_window_size,
         )
         learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
+        # 两个分支各自打 engine span（design 2.3 终态映射）：feedback 异常按
+        # degraded 记账（降级转换仍由下方 _resolve_feedback 完成），coach 异常按
+        # failed 记账（主价值失败整轮上抛）。span 只记账，不改任何返回/异常语义。
         feedback_result, coach_result = await asyncio.gather(
-            self.feedback_engine.review(
-                payload.learner_message,
-                session_head.scene,
-                session_head.vocab_candidates,
-                learner_context=learner_context,
+            traced_engine(
+                "feedback",
+                self.feedback_engine.review(
+                    payload.learner_message,
+                    session_head.scene,
+                    session_head.vocab_candidates,
+                    learner_context=learner_context,
+                ),
+                session_id=session_head.id,
+                on_exception=TERMINAL_DEGRADED,
             ),
-            self.coach_engine.respond(
-                scene=session_head.scene,
-                role=session_head.role,
-                learner_message=payload.learner_message,
-                visual_anchors=session_head.visual_anchors,
-                vocab_candidates=session_head.vocab_candidates,
-                recent_messages=recent_messages,
-                learner_context=learner_context,
-                learner_cefr=learner_cefr,
+            traced_engine(
+                "coach",
+                self.coach_engine.respond(
+                    scene=session_head.scene,
+                    role=session_head.role,
+                    learner_message=payload.learner_message,
+                    visual_anchors=session_head.visual_anchors,
+                    vocab_candidates=session_head.vocab_candidates,
+                    recent_messages=recent_messages,
+                    learner_context=learner_context,
+                    learner_cefr=learner_cefr,
+                ),
+                session_id=session_head.id,
             ),
             return_exceptions=True,
         )
@@ -368,24 +383,37 @@ class SessionEngineAgent:
             limit=settings.llm_coach_window_size,
         )
         learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
+        # 流式路径同样按 design 2.3 打 engine span；feedback 异常按 degraded 记账
+        # （降级转换仍在 try/except 内完成），教练 span 只覆盖"开流"阶段——
+        # span 若跨 async generator 的 yield 会把中间态泄漏进消费者上下文，
+        # 明确不做，消费耗时由 server span 承载（observability.md 注明）。
         feedback_task = asyncio.create_task(
-            self.feedback_engine.review(
-                payload.learner_message,
-                session_head.scene,
-                session_head.vocab_candidates,
-                learner_context=learner_context,
+            traced_engine(
+                "feedback",
+                self.feedback_engine.review(
+                    payload.learner_message,
+                    session_head.scene,
+                    session_head.vocab_candidates,
+                    learner_context=learner_context,
+                ),
+                session_id=session_head.id,
+                on_exception=TERMINAL_DEGRADED,
             )
         )
         try:
-            coach_stream = await self.coach_engine.stream_respond(
-                scene=session_head.scene,
-                role=session_head.role,
-                learner_message=payload.learner_message,
-                visual_anchors=session_head.visual_anchors,
-                vocab_candidates=session_head.vocab_candidates,
-                recent_messages=recent_messages,
-                learner_context=learner_context,
-                learner_cefr=learner_cefr,
+            coach_stream = await traced_engine(
+                "coach",
+                self.coach_engine.stream_respond(
+                    scene=session_head.scene,
+                    role=session_head.role,
+                    learner_message=payload.learner_message,
+                    visual_anchors=session_head.visual_anchors,
+                    vocab_candidates=session_head.vocab_candidates,
+                    recent_messages=recent_messages,
+                    learner_context=learner_context,
+                    learner_cefr=learner_cefr,
+                ),
+                session_id=session_head.id,
             )
         except BaseException:
             # 回复流打不开，这一轮已注定失败；不再等待另一侧已计费的反馈调用。
@@ -460,12 +488,38 @@ class SessionEngineAgent:
         *,
         feedback_degraded: bool,
     ) -> ReviewCopy | None:
-        """为单轮生成 LLM 复盘文案；任何失败都显式降级为 None（模板复盘）。
+        """为单轮生成 LLM 复盘文案，外层统一打 engine.review span（design 2.3）。
 
-        复盘是增强分支（Orchestration failure policy）：mock 模式短路零调用；
-        feedback 已降级时对占位文案做汇总没有意义；live 路径有界等待，
-        超时/失败/未配 provider 一律记 degraded warning 后返回 None，
-        绝不拖垮回复轮。只捕获 Exception：CancelledError 照常传播，
+        终态映射：copy 产出=ok；copy=None（mock 短路 / feedback 已降级 / 降级
+        转换）=degraded；异常（含超时取消的 CancelledError）=degraded。span 只
+        记账，吞异常与降级转换仍由 _produce_review_copy 既有代码完成。
+        """
+        return await traced_engine(
+            "review",
+            self._produce_review_copy(
+                session_head,
+                learner_message,
+                feedback,
+                feedback_degraded=feedback_degraded,
+            ),
+            session_id=session_head.id,
+            on_exception=TERMINAL_DEGRADED,
+            degraded_result=None,
+        )
+
+    async def _produce_review_copy(
+        self,
+        session_head: Session,
+        learner_message: str,
+        feedback: FeedbackResult,
+        *,
+        feedback_degraded: bool,
+    ) -> ReviewCopy | None:
+        """复盘 LLM 汇总本体（增强分支，Orchestration failure policy）。
+
+        mock 模式短路零调用；feedback 已降级时对占位文案做汇总没有意义；
+        live 路径有界等待，超时/失败/未配 provider 一律记 degraded warning 后
+        返回 None，绝不拖垮回复轮。只捕获 Exception：CancelledError 照常传播，
         客户端断连语义不变。
         """
         if settings.model_runtime_mode.lower() != "live":

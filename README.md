@@ -182,6 +182,7 @@ uv run alembic upgrade head
 - **产品需求（PRD）**：[docs/prd.md](docs/prd.md) —— 产品当前形态、功能需求与版本规划
 - **API 参考**：[docs/api.md](docs/api.md) —— 统一信封、错误码、限流、SSE 事件协议、202 轮询、身份模型等协议层语义
 - **部署运行手册**：[docs/deployment.md](docs/deployment.md) —— 镜像构建、环境清单、迁移、健康检查与回滚
+- **可观测性**：[docs/observability.md](docs/observability.md) —— OTel 三层 span 目录、Langfuse/Jaeger 对接、关闭态承诺
 
 ## 环境变量
 
@@ -198,6 +199,7 @@ uv run alembic upgrade head
 | **文本模型** | `TEXT_PRIMARY_*`, `TEXT_FALLBACK_*` | 对话与反馈主备模型 |
 | **Deepgram** | `DEEPGRAM_API_KEY`, `DEEPGRAM_AGENT_*` | 实时语音 Agent |
 | **运行模式** | `MODEL_RUNTIME_MODE` | `mock`（开发）/ `live`（生产） |
+| **可观测性** | `OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_*` | 链路追踪（默认关闭，见 docs/observability.md） |
 
 > 开发阶段可将 `MODEL_RUNTIME_MODE` 设为 `mock`，无需配置真实模型 API Key 即可运行。
 

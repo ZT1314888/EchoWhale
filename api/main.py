@@ -12,9 +12,14 @@ from redis import Redis
 from sqlalchemy import text
 
 from api.common.exceptions import EchoWhaleError
-from api.common.middleware import BodySizeLimitMiddleware, RequestContextMiddleware
+from api.common.middleware import (
+    BodySizeLimitMiddleware,
+    RequestContextMiddleware,
+    TracingMiddleware,
+)
 from api.common.request_context import configure_request_id_logging
 from api.common.responses import ApiResponse
+from api.common.telemetry import configure_telemetry
 from api.core.config import settings
 from api.db.database import get_async_session_factory
 from api.routes.v1 import router as v1_router
@@ -24,6 +29,10 @@ logger = logging.getLogger(__name__)
 # request id 日志接入放在模块导入期：此后所有 api.* 日志经 root handler 的
 # filter 自动携带请求上下文 id，无需逐点修改既有 logger.xxx 调用。
 configure_request_id_logging()
+
+# OTel 链路追踪装配（幂等；默认关闭态是 no-op，零行为）。开启态经 OTLP HTTP
+# 导出，标准 OTEL_* 环境变量由 SDK 原生消费，见 docs/observability.md。
+configure_telemetry()
 
 settings.validate_runtime()
 logger.info(
@@ -39,15 +48,18 @@ app = FastAPI(
     description="EchoWhale API for scene-based English conversation practice.",
 )
 
-# request-id 中间件挂最内层（代码顺序 request-id → body 门 → CORS，Starlette
-# 的 add_middleware 后添加者在最外层）。有意为之的取舍：body 门 413 拒绝发生在
-# request-id 上下文建立之前，因此 413 响应不带 X-Request-ID——拒绝发生在
-# 上下文注入之前，属于可接受的盲区（design 第 5 节）。
+# server span 中间件挂最内层（第一个 add = 最内层，request-id 之内）：进入时
+# request-id ContextVar 已建立，server span 可直接携带关联 id；探针路径旁路。
+app.add_middleware(TracingMiddleware)
+
+# request-id 中间件次内层。有意为之的取舍：body 门 413 拒绝发生在 request-id
+# 上下文建立之前，因此 413 响应不带 X-Request-ID——拒绝发生在上下文注入之前，
+# 属于可接受的盲区（design 第 5 节）。
 app.add_middleware(RequestContextMiddleware)
 
-# 请求管线顺序为 CORS → 请求体大小门 → request-id → 路由：Starlette 的 add_middleware
-# 后添加者在最外层，因此先挂 body 门再挂 CORS，超限 413 响应才会经 CORS
-# 包裹带上跨域头，浏览器端前端才能读到统一信封而不是裸网络错误。
+# 请求管线顺序为 CORS → 请求体大小门 → request-id → tracing → 路由：Starlette 的
+# add_middleware 后添加者在最外层，因此先挂 body 门再挂 CORS，超限 413 响应才会经
+# CORS 包裹带上跨域头，浏览器端前端才能读到统一信封而不是裸网络错误。
 app.add_middleware(BodySizeLimitMiddleware)
 
 app.add_middleware(

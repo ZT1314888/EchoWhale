@@ -153,7 +153,12 @@ def test_production_settings_do_not_require_deepgram_think_proxy_settings() -> N
     settings.validate_runtime()
 
 
-def test_live_model_runtime_requires_configured_model_endpoints(tmp_path: Path) -> None:
+def test_live_model_runtime_requires_configured_model_endpoints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 进程级 MODEL_RUNTIME_MODE（如门禁的 mock pin）优先于 env_file，必须先摘除，
+    # 本测试的 tmp env file 才能决定生效模式（pydantic-settings 优先级）。
+    monkeypatch.delenv("MODEL_RUNTIME_MODE", raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text(
         "MODEL_RUNTIME_MODE=live\nVISION_PRIMARY_PROVIDER=openai_compatible\nVISION_PRIMARY_MODEL=qwen-vl-max\nTEXT_PRIMARY_PROVIDER=openai_compatible\nTEXT_PRIMARY_MODEL=qwen-max",
@@ -166,7 +171,11 @@ def test_live_model_runtime_requires_configured_model_endpoints(tmp_path: Path) 
         settings.validate_runtime()
 
 
-def test_mock_model_runtime_does_not_require_live_model_endpoints(tmp_path: Path) -> None:
+def test_mock_model_runtime_does_not_require_live_model_endpoints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 与上一测试同理：摘除进程级值，env file 是唯一的模式来源。
+    monkeypatch.delenv("MODEL_RUNTIME_MODE", raising=False)
     env_file = tmp_path / ".env"
     env_file.write_text("MODEL_RUNTIME_MODE=mock", encoding="utf-8")
 
