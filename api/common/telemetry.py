@@ -27,7 +27,7 @@ from typing import Any, TypeVar
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode
 
-from api.common.request_context import get_request_id
+from api.common.request_context import get_request_id, get_request_owner
 from api.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ T = TypeVar("T")
 
 # —— 属性键名统一（design 2.x 节），全仓 span 只用这一组键 ——
 ATTR_REQUEST_ID = "echowhale.request_id"
+ATTR_OWNER_ID = "echowhale.owner_id"
 ATTR_SESSION_ID = "echowhale.session_id"
 ATTR_TERMINAL = "echowhale.terminal"
 ATTR_HTTP_METHOD = "http.method"
@@ -184,10 +185,17 @@ class _ResilientSpanExporter:
 
 
 def stamp_request_context(span: Span, *, session_id: str | None = None) -> None:
-    """把 request-id（与可选 session id）写上 span，跨层关联凭这两个 id。"""
+    """把 request-id / owner-id（与可选 session id）写上 span，跨层关联凭这些 id。
+
+    owner 归因由 get_attribution_owner 在依赖解析处写入请求上下文，此处可得
+    即写——traced_engine 与 resilience 的 attempt span 都经本函数，自动带上。
+    """
     request_id = get_request_id()
     if request_id:
         span.set_attribute(ATTR_REQUEST_ID, request_id)
+    owner_id = get_request_owner()
+    if owner_id:
+        span.set_attribute(ATTR_OWNER_ID, owner_id)
     if session_id:
         span.set_attribute(ATTR_SESSION_ID, session_id)
 

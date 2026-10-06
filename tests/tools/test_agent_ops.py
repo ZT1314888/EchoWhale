@@ -87,6 +87,60 @@ def test_current_workspace_control_plane_is_consistent() -> None:
     assert report.errors == []
 
 
+@pytest.mark.parametrize(
+    ("artifact_type", "slug", "expected_path"),
+    [
+        (
+            "feature",
+            "resilience-closing-batch",
+            "docs/features/resilience-closing-batch/feature.md",
+        ),
+        ("bug", "bootstrap-placeholder-gap", "docs/bugs/bootstrap-placeholder-gap/bug.md"),
+        ("module", "observability", "docs/modules/observability/status.md"),
+        ("version", "0.6.0", "docs/versions/0.6.0.md"),
+    ],
+)
+def test_bootstrap_four_subcommands_render_without_residual_placeholders(
+    tmp_path: Path,
+    artifact_type: str,
+    slug: str,
+    expected_path: str,
+) -> None:
+    """bootstrap 四种子命令回归：渲染产物无残留占位符，关键行替换正确。
+
+    module=None 走默认值路径：分支行的 <module-name> 与 <primary_module_name>
+    同落 platform_foundation；version 的 published_at 未发布诚实留空。
+    """
+    workspace = _create_minimal_workspace(tmp_path)
+
+    created = bootstrap_document(
+        workspace,
+        artifact_type=artifact_type,
+        slug=slug,
+        module=None,
+        owner="codex",
+    )
+
+    assert created == workspace / expected_path
+    content = created.read_text(encoding="utf-8")
+    assert "<" not in content
+    assert ">" not in content
+    assert slug in content
+
+    if artifact_type == "feature":
+        assert "- `branch`: `feature/platform_foundation/resilience-closing-batch`" in content
+        assert "- `merge_target`: `module/platform_foundation`" in content
+        assert "- `module`: `platform_foundation`" in content
+    elif artifact_type == "bug":
+        assert "- `branch`: `bugfix/platform_foundation/bootstrap-placeholder-gap`" in content
+        assert "- `merge_target`: `module/platform_foundation`" in content
+        assert "- `affected_area`: `bootstrap-placeholder-gap`" in content
+    elif artifact_type == "module":
+        assert "- `branch`: `module/platform_foundation`" in content
+    else:
+        assert "- `published_at`: ``" in content
+
+
 def _create_minimal_workspace(workspace: Path) -> Path:
     _write(
         workspace / "docs" / "control" / "project-index.md",
@@ -158,19 +212,38 @@ def _create_minimal_workspace(workspace: Path) -> Path:
     )
     _write(
         workspace / "docs" / "features" / "_template" / "feature.md",
-        "# Feature: `<feature_name>`\n- `feature`: `<feature_name>`\n- `module`: `<primary_module_name>`\n- `owner`: `<owner>`\n- `updated_at`: `<YYYY-MM-DD>`\n",
+        "# Feature: `<feature_name>`\n"
+        "- `feature`: `<feature_name>`\n"
+        "- `branch`: `feature/<module-name>/<feature-name>`\n"
+        "- `module`: `<primary_module_name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `updated_at`: `<YYYY-MM-DD>`\n"
+        "- `merge_target`: `module/<module-name>`\n",
     )
     _write(
         workspace / "docs" / "bugs" / "_template" / "bug.md",
-        "# Bug: `<bug_title>`\n- `bug`: `<bug_title>`\n- `affected_area`: `<module or feature>`\n- `owner`: `<owner>`\n- `reported_at`: `<YYYY-MM-DD>`\n",
+        "# Bug: `<bug_title>`\n"
+        "- `bug`: `<bug_title>`\n"
+        "- `branch`: `bugfix/<module-name>/<bug-name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `reported_at`: `<YYYY-MM-DD>`\n"
+        "- `affected_area`: `<module or feature>`\n"
+        "- `merge_target`: `module/<module-name>`\n",
     )
     _write(
         workspace / "docs" / "modules" / "_template" / "status.md",
-        "# Module Status: `<module_name>`\n- `module`: `<module_name>`\n- `owner`: `<owner>`\n- `updated_at`: `<YYYY-MM-DD>`\n",
+        "# Module Status: `<module_name>`\n"
+        "- `module`: `<module_name>`\n"
+        "- `branch`: `module/<module-name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `updated_at`: `<YYYY-MM-DD>`\n",
     )
     _write(
         workspace / "docs" / "versions" / "_template" / "version.md",
-        "# Version: `<version_name>`\n- `version`: `<version_name>`\n- `created_at`: `<YYYY-MM-DD>`\n",
+        "# Version: `<version_name>`\n"
+        "- `version`: `<version_name>`\n"
+        "- `created_at`: `<YYYY-MM-DD>`\n"
+        "- `published_at`: `<YYYY-MM-DD or blank>`\n",
     )
     _write(
         workspace / "docs" / "modules" / "platform_foundation" / "status.md",

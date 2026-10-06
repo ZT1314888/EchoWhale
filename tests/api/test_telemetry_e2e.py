@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from opentelemetry import trace
 
+from api.core.config import settings
 from api.main import app
 from api.models.message_model import Message
 from api.models.session_model import Session
@@ -74,8 +75,14 @@ def _generous_limiter() -> InMemoryLLMRateLimiter:
 @pytest.fixture
 def e2e_client(
     recording_tracer,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[tuple[TestClient, InMemorySessionRepository, Any]]:
-    """真实编排 + 内存仓储：mock 引擎全链路，span 落内存导出器（recording_tracer）。"""
+    """真实编排 + 内存仓储：mock 引擎全链路，span 落内存导出器（recording_tracer）。
+
+    进程内 pin mock 模式：docstring 声称的 mock 全链路不依赖门禁命令的环境
+    变量，本地 .env 为 live 模式时裸跑本文件同样确定性通过（零真实网络）。
+    """
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     repository = InMemorySessionRepository()
     service = SessionEngineService(session_repository=repository)
     app.dependency_overrides[get_session_service] = lambda: service
@@ -206,8 +213,11 @@ def test_stream_reply_span_tree_and_server_terminal(e2e_client) -> None:
 # ---------- 关闭态：全链路零记录 span ----------
 
 
-def test_closed_state_full_stack_records_nothing() -> None:
+def test_closed_state_full_stack_records_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     """默认配置（otel_enabled=False）：真实编排全链路 current span 一律不记录。"""
+    # 本用例自建 service 不走 e2e_client：mock pin 需要单独声明，
+    # 否则 live .env 下裸跑会发起真实 provider 调用。
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
     repository = InMemorySessionRepository()
     service = SessionEngineService(session_repository=repository)
     app.dependency_overrides[get_session_service] = lambda: service

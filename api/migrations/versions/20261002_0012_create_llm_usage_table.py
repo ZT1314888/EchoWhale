@@ -11,8 +11,8 @@ depends_on = None
 
 def upgrade() -> None:
     # LLM 用量账本（Finding 10b）：每次调用按 model 记一行 token 消耗，
-    # 回答"账单为什么涨"只需要按天/按模型聚合，owner/session 归因留待
-    # request-id 上下文批次再补列。
+    # 回答"账单为什么涨"只需要按天/按模型聚合。owner/session 归因列由
+    # 迁移 0015 补齐（0012 落地时归因暂缓，后续批次已跟进）。
     op.create_table(
         "llm_usage",
         sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),

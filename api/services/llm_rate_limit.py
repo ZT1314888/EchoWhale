@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from api.common.exceptions import ConfigurationError, TooManyRequestsError
 from api.core.config import settings
+from api.services.rate_limit_window import FixedWindowCounter
 
 if TYPE_CHECKING:  # 类型标注仅此而已：限流模块运行时不耦合路由依赖层
     from fastapi import Request
@@ -119,6 +120,9 @@ class RedisLLMRateLimiter(LLMRateLimiter):
     ) -> None:
         super().__init__(rules=rules, now_fn=now_fn)
         self._client = client
+        # 固定窗口原子计数：INCR 与首次 EXPIRE 在服务端单次 EVAL 完成，
+        # 两命令之间崩溃不再留下无 TTL 的永久键；键构造保持不变。
+        self._counter = FixedWindowCounter(client)
         # Redis 故障时降级为进程内计数，护栏不应成为主路径的单点故障；
         # 降级路径同样继承容量上限，避免退化后字典无界增长。
         self._fallback = InMemoryLLMRateLimiter(rules=rules, now_fn=now_fn, max_keys=max_keys)
@@ -129,17 +133,15 @@ class RedisLLMRateLimiter(LLMRateLimiter):
         return default_llm_rate_limit_rule(action)
 
     def consume(self, *, action: str, key: str) -> None:
-        """固定窗口计数限流：INCR + 首次设置过期，保证原子窗口生命周期。"""
+        """固定窗口计数限流：INCR + 首次设置过期原子完成，保证窗口生命周期。"""
         rule = self._resolve_rule(action)
         redis_key = f"llm:rate:{action}:{key}:{int(self._now_fn() // rule.window_seconds)}"
         try:
-            current = self._client.incr(redis_key)
+            current = self._counter.increment(redis_key, rule.window_seconds)
         except RedisError:
             logger.warning("llm_rate_limit_redis_unavailable action=%s key=%s", action, key)
             self._fallback.consume(action=action, key=key)
             return
-        if current == 1:
-            self._client.expire(redis_key, rule.window_seconds)
         if current > rule.limit:
             raise TooManyRequestsError(RATE_LIMIT_MESSAGE)
 

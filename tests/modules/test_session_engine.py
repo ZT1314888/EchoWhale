@@ -1008,9 +1008,11 @@ def test_complete_voice_session_persists_transcript_and_generates_review(
     }
 
 
-def test_complete_voice_session_does_not_persist_transcript_when_feedback_generation_fails(
+def test_complete_voice_session_degrades_feedback_and_persists_when_feedback_fails(
     fake_session_repository: FakeSessionRepository,
+    caplog,
 ) -> None:
+    """语音收口与 reply 同款 failure policy：反馈失败降级占位反馈，收口照常落库。"""
     session = Session(
         id="sess_voice_feedback_fail",
         user_id="demo-user",
@@ -1032,8 +1034,8 @@ def test_complete_voice_session_does_not_persist_transcript_when_feedback_genera
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FailingFeedbackEngine()
 
-    with pytest.raises(RuntimeError, match="feedback provider unavailable"):
-        asyncio.run(
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.agent"):
+        completed = asyncio.run(
             agent.complete_voice_session(
                 VoiceCompleteInput(
                     session_id="sess_voice_feedback_fail",
@@ -1051,20 +1053,28 @@ def test_complete_voice_session_does_not_persist_transcript_when_feedback_genera
             )
         )
 
-    stored = asyncio.run(fake_session_repository.get_session("sess_voice_feedback_fail"))
-    assert [message.text for message in stored.messages] == [
-        "Hi there, what can I get started for you today?"
+    # 收口正常返回：追加消息在返回值里（语音转写以学习者发言收尾，反馈只进复盘）。
+    assert [message.text for message in completed.session.messages] == [
+        "Hi there, what can I get started for you today?",
+        "Could I get an iced latte, please?",
     ]
-    assert fake_session_repository.reviews == {}
-    assert (
-        asyncio.run(fake_session_repository.list_session_events("sess_voice_feedback_fail")) == []
+    # 复盘基于占位反馈照常构建与落库。
+    review = fake_session_repository.reviews["sess_voice_feedback_fail"]
+    assert review.feedback.grammar.body == "本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。"
+    saved_events = asyncio.run(
+        fake_session_repository.list_session_events("sess_voice_feedback_fail")
     )
-    assert (
-        asyncio.run(
-            fake_session_repository.get_latest_voice_session_fact("sess_voice_feedback_fail")
-        )
-        is None
+    assert [event.event_type for event in saved_events] == ["voice_finalized", "review_built"]
+    saved_voice_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice_feedback_fail")
     )
+    assert saved_voice_fact is not None
+    assert saved_voice_fact.status == "completed"
+    assert saved_voice_fact.termination_reason == "user_ended"
+    assert saved_voice_fact.transcript_turn_count == 2
+    # 降级必须留运维痕迹：沿用 session_reply_branch_failed 事件名并带 degraded=true。
+    assert "session_reply_branch_failed" in caplog.text
+    assert "degraded=true" in caplog.text
 
 
 def test_complete_voice_session_rejects_empty_conversation_with_validation_error(

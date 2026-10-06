@@ -10,8 +10,16 @@ from fastapi import APIRouter, Depends, Request
 from fastapi import status as fastapi_status
 from fastapi.responses import StreamingResponse
 
-from api.common.deps import ResourceOwnerContext, apply_visitor_cookie, get_resource_owner
+from api.common.deps import (
+    ResourceOwnerContext,
+    apply_visitor_cookie,
+    get_attribution_owner,
+)
 from api.common.exceptions import EchoWhaleError
+from api.common.request_context import (
+    reset_request_session,
+    set_request_session,
+)
 from api.common.responses import ApiResponse
 from api.contracts.sessions import (
     SessionReplyRequest,
@@ -54,7 +62,7 @@ async def start_session(
     payload: StartSessionRequest,
     request: Request,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     # 先消耗 visitor 键再消耗 IP 键：任一超限即 429，visitor 先报保持既有语义。
@@ -86,7 +94,7 @@ async def start_session(
 async def get_session(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
 ) -> Any:
     session = await session_service.get_session(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=SessionResponse.from_session(session))
@@ -100,7 +108,7 @@ async def reply_to_session(
     payload: SessionReplyRequest,
     request: Request,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     # 先 visitor 后 IP，与 start_session 的消耗顺序保持一致。
@@ -111,12 +119,18 @@ async def reply_to_session(
         owner=owner,
         request=request,
     )
-    session = await session_service.reply_to_session(
-        session_id,
-        payload.learner_message,
-        owner_id=owner.owner_id,
-    )
-    response = ApiResponse.success(data=SessionReplyResponse.from_session(session))
+    # 会话内 LLM 调用发生在 handler 返回前，session 归因在这里 set、finally 复位；
+    # usage 落库在调用线程捕获上下文（SSE 流式路径见 _reply_sse_events）。
+    session_token = set_request_session(session_id)
+    try:
+        session = await session_service.reply_to_session(
+            session_id,
+            payload.learner_message,
+            owner_id=owner.owner_id,
+        )
+        response = ApiResponse.success(data=SessionReplyResponse.from_session(session))
+    finally:
+        reset_request_session(session_token)
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
@@ -125,7 +139,7 @@ async def reply_to_session(
 async def get_session_review(
     session_id: str,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
 ) -> Any:
     review = await session_service.get_session_review(session_id, owner_id=owner.owner_id)
     response = ApiResponse.success(data=SessionReviewResponse.from_review(review))
@@ -138,7 +152,7 @@ async def bootstrap_voice_session(
     session_id: str,
     request: Request,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     # 限流必须通过才进入 service：Deepgram token grant 发生在 service→agent 内部，
@@ -188,25 +202,31 @@ async def complete_voice_session(
     session_id: str,
     payload: VoiceCompleteRequest,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
 ) -> Any:
-    result = await session_service.complete_voice_session(
-        session_id=session_id,
-        conversation=payload.conversation,
-        termination_reason=payload.termination_reason,
-        client_diagnostics=payload.client_diagnostics,
-        owner_id=owner.owner_id,
-    )
-    response = ApiResponse.success(
-        data=VoiceCompleteResponse(
-            session=SessionResponse.from_session(
-                result["session"] if isinstance(result, dict) else result.session
-            ),
-            review=SessionReviewResponse.from_review(
-                result["review"] if isinstance(result, dict) else result.review
-            ),
+    # 会话内 LLM 调用（反馈 + 复盘汇总）发生在 handler 返回前，同 reply 的
+    # session 归因接缝：handler 入口 set、finally 复位。
+    session_token = set_request_session(session_id)
+    try:
+        result = await session_service.complete_voice_session(
+            session_id=session_id,
+            conversation=payload.conversation,
+            termination_reason=payload.termination_reason,
+            client_diagnostics=payload.client_diagnostics,
+            owner_id=owner.owner_id,
         )
-    )
+        response = ApiResponse.success(
+            data=VoiceCompleteResponse(
+                session=SessionResponse.from_session(
+                    result["session"] if isinstance(result, dict) else result.session
+                ),
+                review=SessionReviewResponse.from_review(
+                    result["review"] if isinstance(result, dict) else result.review
+                ),
+            )
+        )
+    finally:
+        reset_request_session(session_token)
     apply_visitor_cookie(response=response, owner=owner)
     return response
 
@@ -217,7 +237,7 @@ async def stream_reply_to_session(
     payload: SessionReplyRequest,
     request: Request,
     session_service: SessionEngineService = Depends(get_session_service),
-    owner: ResourceOwnerContext = Depends(get_resource_owner),
+    owner: ResourceOwnerContext = Depends(get_attribution_owner),
     rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Any:
     """SSE 版文字回复：先回执 feedback，再逐 token 下发 coach 回复。
@@ -239,7 +259,7 @@ async def stream_reply_to_session(
         owner_id=owner.owner_id,
     )
     response = StreamingResponse(
-        _reply_sse_events(event_stream),
+        _reply_sse_events(event_stream, session_id=session_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
@@ -249,8 +269,17 @@ async def stream_reply_to_session(
 
 async def _reply_sse_events(
     event_stream: AsyncIterator[tuple[str, object]],
+    *,
+    session_id: str,
 ) -> AsyncIterator[str]:
-    """把 agent 事件流编码成 SSE 帧；异常收敛为 error 事件（失败轮次不落库）。"""
+    """把 agent 事件流编码成 SSE 帧；异常收敛为 error 事件（失败轮次不落库）。
+
+    session 归因必须在生成器内部首行 set：SSE 生成器在 handler 返回后才被
+    迭代，handler 内 try/finally 的 set/reset 此时早已闭合，流末帧 coach 收口
+    的 usage 落库要靠这里维持归因。owner 归因由 get_attribution_owner yield
+    依赖持有（teardown 在响应体发送完成后执行，流式期间不擦除）。
+    """
+    session_token = set_request_session(session_id)
     try:
         async for event_name, event_payload in event_stream:
             if event_name == "delta":
@@ -276,6 +305,8 @@ async def _reply_sse_events(
             "error",
             {"code": 1005, "message": "Internal server error", "data": None},
         )
+    finally:
+        reset_request_session(session_token)
 
 
 def _encode_sse_event(event_name: str, data: dict[str, object]) -> str:

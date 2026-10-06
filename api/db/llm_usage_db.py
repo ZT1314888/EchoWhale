@@ -2,7 +2,10 @@
 
 该表只写不读、无多表事务组合需求，因此按 auth 仓库同款同步域实现；
 异步调用路径由 sink 内部把 DB 写挪到线程池，不阻塞事件循环。
-owner/session 归因暂不做（需要请求上下文贯穿，归 request-id 中间件批次）。
+owner/session 归因：record 在调用线程（事件循环）上从请求上下文捕获，
+以参数传入线程池写入——ContextVar 不跨线程传播，线程内读必为 None。
+无请求上下文（启动期 / 后台任务 / session_start 创建前调用）记 NULL，
+归因缺失不报错，旁路纪律与 sink 其余失败路径一致。
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from typing import Protocol
 from sqlalchemy import DateTime, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
+from api.common.request_context import get_request_owner, get_request_session
 from api.db.database import Base, SessionFactory, get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -42,6 +46,10 @@ class LlmUsageRecord(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 归因列可空（迁移 0015）：owner 形如 user:<uuid> / visitor:<uuid>，
+    # session 形如 sess_<uuid>；只写不读，暂不加索引，归因查询需求出现时再补。
+    owner_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )
@@ -69,15 +77,26 @@ class SqlAlchemyLlmUsageSink:
         completion_tokens: int | None,
         total_tokens: int | None,
     ) -> None:
+        # 归因必须在调用线程上先捕获：async 路径经 run_in_executor 换线程
+        # 执行 _write，ContextVar 不跨线程传播，线程内读取只会得到 None。
+        owner_id = get_request_owner()
+        session_id = get_request_session()
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # 无事件循环（纯同步调用路径）：与 auth 仓库同域，当前线程直接写。
-            self._write(model, prompt_tokens, completion_tokens, total_tokens)
+            self._write(model, prompt_tokens, completion_tokens, total_tokens, owner_id, session_id)
             return
         # 事件循环内：线程池执行 + fire-and-forget；持有 future 强引用防止包装器被 GC。
         future = loop.run_in_executor(
-            None, self._write, model, prompt_tokens, completion_tokens, total_tokens
+            None,
+            self._write,
+            model,
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+            owner_id,
+            session_id,
         )
         self._inflight.add(future)
         future.add_done_callback(self._inflight.discard)
@@ -88,6 +107,8 @@ class SqlAlchemyLlmUsageSink:
         prompt_tokens: int | None,
         completion_tokens: int | None,
         total_tokens: int | None,
+        owner_id: str | None,
+        session_id: str | None,
     ) -> None:
         try:
             session_factory = self._session_factory or get_session_factory()
@@ -98,6 +119,9 @@ class SqlAlchemyLlmUsageSink:
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         total_tokens=total_tokens,
+                        # 归因缺失（无请求上下文）原样带 None，不报错不阻断。
+                        owner_id=owner_id,
+                        session_id=session_id,
                     )
                 )
                 session.commit()

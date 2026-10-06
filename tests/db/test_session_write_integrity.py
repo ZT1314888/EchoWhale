@@ -399,3 +399,31 @@ def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypat
     columns = {column["name"] for column in sa.inspect(engine).get_columns("sessions")}
     assert "llm_scene_title" not in columns
     assert "llm_role_label" not in columns
+
+
+def test_migration_0015_llm_usage_attribution_up_and_down(tmp_path, monkeypatch) -> None:
+    """迁移 0015（usage 归因）：up 到 head 后 llm_usage 带 owner/session 可空列，
+    旧行读出 NULL；downgrade 到 0014 后两列消失（up/down 对称可逆）。"""
+    engine, config = _run_alembic(tmp_path, monkeypatch)
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("llm_usage")}
+    assert "owner_id" in columns
+    assert "session_id" in columns
+    with engine.begin() as conn:
+        # 旧行（迁移前既有用量行）不受影响：归因列保持 NULL。
+        conn.execute(
+            sa.text(
+                "INSERT INTO llm_usage (model, prompt_tokens, completion_tokens, total_tokens) "
+                "VALUES ('demo-model', 12, 3, 15)"
+            )
+        )
+    with engine.connect() as conn:
+        row = conn.execute(sa.text("SELECT owner_id, session_id FROM llm_usage")).one()
+    assert row[0] is None
+    assert row[1] is None
+
+    command.downgrade(config, "20261006_0014")
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("llm_usage")}
+    assert "owner_id" not in columns
+    assert "session_id" not in columns

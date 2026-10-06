@@ -143,6 +143,13 @@ def bootstrap_document(
         "<module_name>": slug,
         "<version_name>": slug,
         "<major.minor.patch>": slug,
+        # 分支行的连字符形态占位符：feature/bug 模板的分支名以 slug 收尾，
+        # module 段与 <primary_module_name> 同默认（--module 或 platform_foundation）。
+        "<feature-name>": slug,
+        "<bug-name>": slug,
+        "<module-name>": module or "platform_foundation",
+        # version 模板的 published_at：未发布版本诚实留空，不伪造发布日期。
+        "<YYYY-MM-DD or blank>": "",
     }
     content = template
     for placeholder, value in replacements.items():

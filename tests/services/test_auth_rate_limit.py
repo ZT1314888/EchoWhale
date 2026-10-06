@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 import pytest
 from redis.exceptions import RedisError
@@ -114,7 +115,8 @@ def test_auth_limiter_tolerates_zero_capacity_misconfiguration() -> None:
 
 
 class FakeRedis:
-    """用字典模拟 INCR/EXPIRE 的最小 Redis 客户端（与 test_llm_rate_limit 同形）。"""
+    """用字典模拟 EVAL（INCR + 首次 EXPIRE）的固定窗口原子语义的最小 Redis 客户端
+    （与 test_llm_rate_limit 同形）。"""
 
     def __init__(self) -> None:
         self.counters: dict[str, int] = {}
@@ -127,15 +129,36 @@ class FakeRedis:
     def expire(self, key: str, ttl_seconds: int) -> None:
         self.ttls[key] = ttl_seconds
 
+    def register_script(self, lua: str) -> Callable[..., int]:
+        """与 redis-py Script 同形的注册口：返回按 EVAL 语义执行的闭包。
+
+        闭包操作与真实 Lua 相同的键空间：INCR 后首次（current == 1）原子设置
+        TTL，续增不重置过期——模拟的是 EVAL 的语义契约而非 Lua 本身。
+        """
+
+        def script(keys: list[str], args: list[object]) -> int:
+            key = keys[0]
+            window_seconds = int(args[0])  # type: ignore[arg-type]
+            self.counters[key] = self.counters.get(key, 0) + 1
+            if self.counters[key] == 1:
+                self.ttls[key] = window_seconds
+            return self.counters[key]
+
+        return script
+
 
 class FlakyRedis:
-    """incr 一律抛 RedisError 的假客户端，模拟 Redis 故障。"""
+    """EVAL 执行一律抛 RedisError 的假客户端，模拟 Redis 故障。
 
-    def incr(self, key: str) -> int:
-        raise RedisError("connection refused")
+    register_script 本身不失败（redis-py 建脚本对象无网络往返），
+    故障发生在 consume 时的脚本调用上，与真实断连形态一致。
+    """
 
-    def expire(self, key: str, ttl_seconds: int) -> None:
-        raise RedisError("connection refused")
+    def register_script(self, lua: str) -> Callable[..., int]:
+        def script(keys: list[str], args: list[object]) -> int:
+            raise RedisError("connection refused")
+
+        return script
 
 
 def test_redis_auth_limiter_shares_counts_across_instances() -> None:

@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.common.exceptions import ModelProviderError, NotFoundError
+from api.common.request_context import get_request_owner, get_request_session
 from api.main import app
 from api.models.message_model import Message
 from api.models.session_model import Session
@@ -34,6 +35,8 @@ class FakeReplyStreamService:
     def __init__(self) -> None:
         self.prepared: list[tuple[str, str, str | None]] = []
         self.fail_after: str | None = None
+        # 每帧产出时捕获的请求归因上下文（owner, session）：流式传播测试的探针。
+        self.context_captures: list[tuple[str | None, str | None]] = []
 
     async def prepare_reply_stream(
         self,
@@ -47,6 +50,7 @@ class FakeReplyStreamService:
         return self._events()
 
     async def _events(self) -> AsyncIterator[tuple[str, object]]:
+        self.context_captures.append((get_request_owner(), get_request_session()))
         yield (
             "feedback",
             FeedbackResult(grammar="Clear.", more_natural="Latte, please.", useful_words=["latte"]),
@@ -55,6 +59,7 @@ class FakeReplyStreamService:
         if self.fail_after == "delta":
             raise ModelProviderError("Coach provider exploded")
         yield ("delta", "one latte.")
+        self.context_captures.append((get_request_owner(), get_request_session()))
         session = _session()
         session.messages.append(Message(id="msg_2", role="user", text="latte please"))
         session.messages.append(
@@ -222,3 +227,29 @@ def test_legacy_json_reply_endpoint_still_works(client) -> None:
     assert body["code"] == 200
     assert body["data"]["session"]["messages"][-1]["text"] == "Sure, one latte."
     assert body["data"]["feedback"]["grammar"] == "Clear."
+
+
+def test_reply_stream_propagates_owner_and_session_context_to_last_frame(client) -> None:
+    """流式上下文传播：流末帧时 owner/session 归因仍命中请求值。
+
+    SSE 生成器在 handler 返回后才迭代，handler 内的 set/finally 早已闭合——
+    session 归因靠 _reply_sse_events 生成器内部首行 set 维持；owner 归因靠
+    get_attribution_owner yield 依赖（teardown 在响应体发送完成后执行）。
+    真实链路里流末帧正是 coach 收口 usage 落库的时刻，归因必须仍然命中。
+    """
+    test_client, service = client
+
+    response = test_client.post(
+        "/api/v1/sessions/sess_stream/reply/stream",
+        json={"learner_message": "latte please"},
+    )
+
+    assert response.status_code == 200
+    frames = _parse_sse(response.text)
+    assert frames[-1][0] == "session"
+    owner_from_dependency = service.prepared[0][2]
+    # 流末帧（session 事件产出前）捕获的归因：owner 与依赖解析产出一致
+    # （匿名请求为 visitor 形态），session 与路径参数一致。
+    assert service.context_captures[-1] == (owner_from_dependency, "sess_stream")
+    assert service.context_captures[-1][0] is not None
+    assert service.context_captures[-1][0].startswith("visitor:")

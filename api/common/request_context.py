@@ -20,6 +20,11 @@ MAX_INBOUND_REQUEST_ID_LENGTH = 64
 MISSING_REQUEST_ID = "-"
 
 _request_id_var: ContextVar[str | None] = ContextVar("echowhale_request_id", default=None)
+# owner（user:<uuid> / visitor:<uuid>）与会话（sess_<uuid>）归因：LLM 用量落库
+# 与 span 埋点读取。与 request id 同款 token set/reset 模式；owner 在依赖解析处
+# set（get_attribution_owner），session 在带 session_id 的 LLM 消耗路由 set。
+_owner_id_var: ContextVar[str | None] = ContextVar("echowhale_owner_id", default=None)
+_session_id_var: ContextVar[str | None] = ContextVar("echowhale_session_id", default=None)
 
 
 def get_request_id() -> str | None:
@@ -35,6 +40,36 @@ def set_request_id(request_id: str) -> Token[str | None]:
 def reset_request_id(token: Token[str | None]) -> None:
     """请求结束复位 ContextVar，避免 id 泄漏到同线程后续的无请求上下文日志。"""
     _request_id_var.reset(token)
+
+
+def get_request_owner() -> str | None:
+    """取当前请求的归属者 id；无归因上下文（启动期 / 后台任务）时返回 None。"""
+    return _owner_id_var.get()
+
+
+def set_request_owner(owner_id: str) -> Token[str | None]:
+    """建立 owner 归因上下文，返回 token 供请求结束后复位。"""
+    return _owner_id_var.set(owner_id)
+
+
+def reset_request_owner(token: Token[str | None]) -> None:
+    """复位 owner 归因上下文，避免泄漏到同线程后续的无请求上下文写入。"""
+    _owner_id_var.reset(token)
+
+
+def get_request_session() -> str | None:
+    """取当前请求的会话 id；无会话路径（如 session_start 创建前调用）时返回 None。"""
+    return _session_id_var.get()
+
+
+def set_request_session(session_id: str) -> Token[str | None]:
+    """建立 session 归因上下文，返回 token 供请求结束后复位。"""
+    return _session_id_var.set(session_id)
+
+
+def reset_request_session(token: Token[str | None]) -> None:
+    """复位 session 归因上下文，避免泄漏到同线程后续的其他会话请求。"""
+    _session_id_var.reset(token)
 
 
 def generate_request_id() -> str:

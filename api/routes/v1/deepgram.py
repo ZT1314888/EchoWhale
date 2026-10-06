@@ -17,6 +17,12 @@ from api.common.exceptions import (
     NotFoundError,
     TooManyRequestsError,
 )
+from api.common.request_context import (
+    reset_request_owner,
+    reset_request_session,
+    set_request_owner,
+    set_request_session,
+)
 from api.core.config import settings
 from api.db.session_db import SessionRepository, build_session_repository
 from api.integrations.deepgram import (
@@ -126,7 +132,7 @@ async def proxy_deepgram_think_chat_completions(
     # 绑定，这里用仓储 PK 查询把"令牌有效"收紧到"会话仍存在"。不存在（含
     # sid="unknown"）统一 401 authentication_error，不泄露会话存在性。
     try:
-        await session_repository.get_session_head(session_id)
+        session_head = await session_repository.get_session_head(session_id)
     except NotFoundError:
         logger.warning("Deepgram think proxy rejected unknown session id")
         return _error_response(
@@ -135,46 +141,57 @@ async def proxy_deepgram_think_chat_completions(
             error_type="authentication_error",
         )
 
-    if _requests_streaming(payload):
-        return await _stream_think_response(payload=payload, session_id=session_id)
-
+    # think 代理的归因接缝：请求身份是 service token（typ=deepgram-think-proxy），
+    # 过不了 get_resource_owner 依赖链的 access-token 校验——owner 走依赖形态会
+    # 把 Deepgram 回源请求整体 401。会话存在性确认后从会话头取归属：user_id 即
+    # owner_id 形态（user:/visitor:），与 get_attribution_owner 产物同构；
+    # session 归因同样在此建立。upstream 调用结束后 finally 复位。
+    owner_token = set_request_owner(session_head.user_id)
+    session_token = set_request_session(session_id)
     try:
-        response = await _get_deepgram_async_client().post(
-            build_deepgram_think_upstream_url(),
-            headers=_build_upstream_headers(),
-            json=payload,
-        )
-    except httpx.HTTPError:
-        return _error_response(
-            status_code=502,
-            message="Deepgram think upstream request failed",
-            error_type="upstream_error",
-        )
+        if _requests_streaming(payload):
+            return await _stream_think_response(payload=payload, session_id=session_id)
 
-    try:
-        content = response.json()
-    except ValueError:
-        logger.exception(
-            "Deepgram think upstream returned non-JSON response for session=%s status=%s body_bytes=%s",
-            session_id,
-            response.status_code,
-            len(response.content),
-        )
-        return _error_response(
-            status_code=502,
-            message="Deepgram think upstream returned a non-JSON response",
-            error_type="upstream_invalid_response",
-        )
+        try:
+            response = await _get_deepgram_async_client().post(
+                build_deepgram_think_upstream_url(),
+                headers=_build_upstream_headers(),
+                json=payload,
+            )
+        except httpx.HTTPError:
+            return _error_response(
+                status_code=502,
+                message="Deepgram think upstream request failed",
+                error_type="upstream_error",
+            )
 
-    if response.status_code >= 400:
-        logger.warning(
-            "Deepgram think upstream error for session=%s status=%s error_type=%s",
-            session_id,
-            response.status_code,
-            _extract_error_type(content),
-        )
+        try:
+            content = response.json()
+        except ValueError:
+            logger.exception(
+                "Deepgram think upstream returned non-JSON response for session=%s status=%s body_bytes=%s",
+                session_id,
+                response.status_code,
+                len(response.content),
+            )
+            return _error_response(
+                status_code=502,
+                message="Deepgram think upstream returned a non-JSON response",
+                error_type="upstream_invalid_response",
+            )
 
-    return JSONResponse(content=content, status_code=response.status_code)
+        if response.status_code >= 400:
+            logger.warning(
+                "Deepgram think upstream error for session=%s status=%s error_type=%s",
+                session_id,
+                response.status_code,
+                _extract_error_type(content),
+            )
+
+        return JSONResponse(content=content, status_code=response.status_code)
+    finally:
+        reset_request_session(session_token)
+        reset_request_owner(owner_token)
 
 
 async def _stream_think_response(

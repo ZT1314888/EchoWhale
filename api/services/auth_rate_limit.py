@@ -9,6 +9,7 @@ from time import monotonic, time
 
 from api.common.exceptions import ConfigurationError, TooManyRequestsError
 from api.core.config import settings
+from api.services.rate_limit_window import FixedWindowCounter
 
 try:  # pragma: no cover - exercised through factory fallback
     from redis import Redis, RedisError
@@ -121,22 +122,23 @@ class RedisAuthRateLimiter(AuthRateLimiter):
     ) -> None:
         super().__init__(rules=rules, time_fn=time_fn, max_keys=max_keys)
         self._client = client
+        # 固定窗口原子计数：INCR 与首次 EXPIRE 在服务端单次 EVAL 完成，
+        # 两命令之间崩溃不再留下无 TTL 的永久键；键构造保持不变。
+        self._counter = FixedWindowCounter(client)
         # Redis 故障时降级为进程内计数（同规则同容量）：
         # 限流护栏不应成为注册/登录主路径的单点故障。
         self._fallback = AuthRateLimiter(rules=rules, time_fn=time_fn, max_keys=max_keys)
 
     def consume(self, *, action: str, key: str) -> None:
-        """固定窗口计数：INCR + 首次设置过期，保证原子窗口生命周期。"""
+        """固定窗口计数：INCR + 首次设置过期原子完成，保证窗口生命周期。"""
         rule = self._rules[action]
         redis_key = f"auth:rate:{action}:{key}:{int(self._time_fn() // rule.window_seconds)}"
         try:
-            current = self._client.incr(redis_key)
+            current = self._counter.increment(redis_key, rule.window_seconds)
         except RedisError:
             logger.warning("auth_rate_limit_redis_unavailable action=%s key=%s", action, key)
             self._fallback.consume(action=action, key=key)
             return
-        if current == 1:
-            self._client.expire(redis_key, rule.window_seconds)
         if current > rule.limit:
             raise TooManyRequestsError(rule.message)
 

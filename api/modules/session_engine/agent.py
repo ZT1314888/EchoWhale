@@ -692,18 +692,26 @@ class SessionEngineAgent:
         last_learner_message = _find_latest_user_content(payload)
         if last_learner_message is None:
             raise AppValidationError("Validation error")
-        feedback = await self.feedback_engine.review(
-            last_learner_message,
-            updated_session.scene,
-            updated_session.vocab_candidates,
-        )
-        # 语音收口路径的反馈总是成功产出（失败在上一步整轮上抛），
-        # 复盘直接走 LLM 汇总；失败/超时降级模板复盘（copy=None）。
+        # 反馈是增值能力，与 reply/stream 同款 failure policy：失败降级占位反馈
+        # （单一转换点 _degraded_feedback_with_log），收口照常落库与返回。
+        # 只捕获 Exception：CancelledError 等取消语义不上吞。
+        feedback_degraded = False
+        try:
+            feedback = await self.feedback_engine.review(
+                last_learner_message,
+                updated_session.scene,
+                updated_session.vocab_candidates,
+            )
+        except Exception as exc:  # noqa: BLE001 - 反馈失败需降级续轮而非上抛
+            feedback = _degraded_feedback_with_log(exc)
+            feedback_degraded = True
+        # 反馈已降级时复盘直接走 None 短路（对占位文案做汇总没有意义）；
+        # 正常反馈路径失败/超时降级模板复盘（copy=None）。
         review_copy = await self._review_copy_for_turn(
             updated_session,
             last_learner_message,
             feedback,
-            feedback_degraded=False,
+            feedback_degraded=feedback_degraded,
         )
         # LLM 展示名在复盘产出后并入收口快照（design 2.2）：review_copy=None
         # （mock/复盘降级）时沿用 get_session 读出的既有列值，不回闪。

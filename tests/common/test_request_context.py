@@ -17,7 +17,13 @@ from api.common.request_context import (
     ensure_request_id,
     generate_request_id,
     get_request_id,
+    get_request_owner,
+    get_request_session,
     is_reusable_request_id,
+    reset_request_owner,
+    reset_request_session,
+    set_request_owner,
+    set_request_session,
 )
 
 REQUEST_ID_PATTERN = re.compile(r"^req_[0-9a-f]{16}$")
@@ -246,3 +252,45 @@ def test_sse_streaming_response_carries_request_id() -> None:
     with client.stream("GET", "/stream") as response:
         assert response.status_code == 200
         assert response.headers["x-request-id"].startswith("req_")
+
+
+def test_owner_context_set_get_reset() -> None:
+    """owner 归因：set 后可读，reset 后回到默认 None（token 模式与 request id 一致）。"""
+    assert get_request_owner() is None
+
+    token = set_request_owner("user:u-1")
+    try:
+        assert get_request_owner() == "user:u-1"
+    finally:
+        reset_request_owner(token)
+
+    assert get_request_owner() is None
+
+
+def test_session_context_set_get_reset() -> None:
+    """session 归因：set 后可读，reset 后回到默认 None。"""
+    assert get_request_session() is None
+
+    token = set_request_session("sess_abc")
+    try:
+        assert get_request_session() == "sess_abc"
+    finally:
+        reset_request_session(token)
+
+    assert get_request_session() is None
+
+
+def test_nested_owner_set_reset_restores_previous_value() -> None:
+    """嵌套 set：内层 reset 恢复外层值——同线程串行复用不互相污染。"""
+    outer = set_request_owner("user:outer")
+    try:
+        inner = set_request_owner("visitor:inner")
+        try:
+            assert get_request_owner() == "visitor:inner"
+        finally:
+            reset_request_owner(inner)
+        assert get_request_owner() == "user:outer"
+    finally:
+        reset_request_owner(outer)
+
+    assert get_request_owner() is None

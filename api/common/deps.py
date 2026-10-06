@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Cookie, Depends, Header
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 
 from api.common.exceptions import AuthenticationError
 from api.common.ownership import build_user_owner, build_visitor_owner
+from api.common.request_context import reset_request_owner, set_request_owner
 from api.core.config import settings
 from api.core.security import generate_visitor_id, sign_value, verify_signed_value
 from api.models.user_model import User
@@ -73,6 +75,24 @@ def get_resource_owner(
         owner_id=build_visitor_owner(fresh_visitor_id),
         visitor_id_to_set=fresh_visitor_id,
     )
+
+
+async def get_attribution_owner(
+    owner: ResourceOwnerContext = Depends(get_resource_owner),
+) -> AsyncIterator[ResourceOwnerContext]:
+    """owner 归因 yield 依赖：进入时把 owner_id 写入请求上下文，响应完成后复位。
+
+    为什么包一层 yield 而不改 get_resource_owner 本体：它被大量路由消费，转
+    yield 影响面大；仅 LLM 消耗路由换用本依赖。yield 依赖的 teardown 在响应
+    （含流式体）发送完成后才执行，SSE 流末帧的用量归因不会被过早擦除。
+    为什么必须是 async 依赖：同步依赖会被 FastAPI 挪进线程池执行，ContextVar
+    的 set 会留在工作线程上下文里，事件循环上的 handler 读不到。
+    """
+    token = set_request_owner(owner.owner_id)
+    try:
+        yield owner
+    finally:
+        reset_request_owner(token)
 
 
 def get_refresh_token(refresh_token: RefreshCookie = None) -> str:

@@ -16,9 +16,15 @@ from opentelemetry.trace import StatusCode
 
 from api.common import telemetry
 from api.common.exceptions import ModelProviderError
-from api.common.request_context import reset_request_id, set_request_id
+from api.common.request_context import (
+    reset_request_id,
+    reset_request_owner,
+    set_request_id,
+    set_request_owner,
+)
 from api.common.telemetry import (
     ATTR_MODEL,
+    ATTR_OWNER_ID,
     ATTR_REQUEST_ID,
     ATTR_SESSION_ID,
     ATTR_TERMINAL,
@@ -158,6 +164,28 @@ async def test_traced_engine_success_marks_ok(recording_tracer, span_exporter) -
     assert span.attributes[ATTR_TERMINAL] == TERMINAL_OK
     assert span.attributes[ATTR_REQUEST_ID] == "req_ok"
     assert span.attributes[ATTR_SESSION_ID] == "sess_1"
+
+
+@pytest.mark.anyio
+async def test_traced_engine_stamps_owner_when_context_present(
+    recording_tracer, span_exporter
+) -> None:
+    """owner 归因上下文可得时自动上 span（echowhale.owner_id）；无上下文不写该键。"""
+    request_token = set_request_id("req_owner")
+    owner_token = set_request_owner("user:u-42")
+    try:
+
+        async def work() -> str:
+            return "done"
+
+        await traced_engine("coach", work())
+    finally:
+        reset_request_owner(owner_token)
+        reset_request_id(request_token)
+
+    (span,) = span_exporter.get_finished_spans()
+    assert span.attributes[ATTR_REQUEST_ID] == "req_owner"
+    assert span.attributes[ATTR_OWNER_ID] == "user:u-42"
 
 
 @pytest.mark.anyio
