@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FocusEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 
@@ -92,6 +93,10 @@ export function UserMenu({ variant = "default" }: UserMenuProps) {
 
       {open ? (
         <div className="user-menu__panel" role="menu" aria-label="账号菜单">
+          {/* 导航入口用 Link 而非 button：语义是页面跳转（可新标签打开、可中键点击），退出登录才是动作类按钮。 */}
+          <Link className="user-menu__item" role="menuitem" to="/progress" onClick={closeMenu}>
+            我的进度
+          </Link>
           <button
             type="button"
             className="user-menu__item"

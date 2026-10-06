@@ -64,6 +64,7 @@
 | History | GET | `/api/v1/history/sessions` | 会话列表（认证用户，游标分页 §8） |
 | | GET | `/api/v1/history/sessions/{session_id}` | 会话详情（含复盘与消息总数） |
 | | GET | `/api/v1/history/sessions/{session_id}/messages` | 消息回放（游标分页 §8） |
+| Learners | GET | `/api/v1/learners/me/profile` | 当前用户学习档案（认证用户，§12） |
 | Deepgram | POST | `/api/v1/deepgram/think/chat/completions` | Think 模型代理（§11，非信封） |
 | 根级 | GET | `/health` | liveness（§10，非信封） |
 | | GET | `/readyz` | readiness（§10，非信封） |
@@ -231,3 +232,22 @@ history 列表与消息回放均为游标分页（[history.py](../api/routes/v1/
 
 - `model` 白名单 = `DEEPGRAM_AGENT_THINK_MODEL`（生产门控强制配置）
 - 支持 SSE 流式透传（`stream: true` 时原样转发上游 `text/event-stream`）
+
+## 12. 学员档案读取（Learners）
+
+`GET /api/v1/learners/me/profile`：当前认证用户的滚动学习档案（只读；契约见 [contracts/learner.py](../api/contracts/learner.py)，能力描述见 PRD §4.8）。
+
+- **认证**：Bearer 访问令牌必需，缺失 / 非法 → 统一信封 401（code 1002）。访客（visitor cookie 身份）不建档，访问同样 401。
+- **限流**：无（纯读点查，与其他 GET 端点一致）。
+- **成功载荷**（信封 `data`，可全空）：
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `cefr_estimate` | `string \| null` | A1..C2 封闭集合值；无观测时 null（中文文案映射归前端） |
+| `error_types` | `array` | top ≤3：按次数降序、同数按类别名字典序；元素 `{category, label, count}`。`category` 为 9 类封闭集合键（grammar / tense / article / preposition / word_choice / collocation / register / spelling / other，集合外键读侧过滤），`label` 为服务端下发的中文展示名 |
+| `scenes` | `array` | ≤12 项：按次数降序；元素 `{scene_title, count}`。**键是服务端映射后的展示名**（预设文案或自然语言回退，单一事实源见 [review_builder.py](../api/modules/session_engine/review_builder.py)），任何路径不外露原始 scene id；展示名相同的场景计数合并 |
+| `practiced_turn_count` | `int` | 累计练习轮数 |
+| `updated_at` | `string \| null` | 最近档案更新时间，`"YYYY-MM-DD HH:MM"`；无档案时 null |
+
+- **空档案语义**：首访用户（无档案行）返回 **200 全空载荷**（`cefr_estimate=null`、两数组为空、轮数 0、`updated_at=null`）而非 404——空态是合法展示态，前端以 `practiced_turn_count === 0` 判空并渲染引导文案。
+- **错误**：除 401 外，存储故障经统一信封 500（code 1005），不降级伪装成空载荷。

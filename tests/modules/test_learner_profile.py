@@ -1,12 +1,15 @@
-"""learner_profile 纯函数直测：更新数学（计数/封顶/median_low）与注入渲染。"""
+"""learner_profile 纯函数直测：更新数学（计数/封顶/median_low）、注入渲染与展示选择。"""
 
 from __future__ import annotations
 
 from api.models.learner_profile_model import LearnerProfile
 from api.modules.feedback_engine.schema import FeedbackErrorItem, FeedbackResult
 from api.modules.session_engine.learner_profile import (
+    ERROR_CATEGORIES,
     apply_turn_to_profile,
     build_learner_context_lines,
+    select_display_error_types,
+    select_display_scenes,
 )
 
 
@@ -180,3 +183,52 @@ def test_injected_lines_never_contain_learner_text_or_scene_names() -> None:
     assert lines is not None
     assert "coffee_shop_with_free_form_visual_name" not in lines
     assert learner_text not in lines
+
+
+def test_select_display_error_types_sorts_by_count_then_category() -> None:
+    """(-count, category) 确定性排序：同 count 按类别字典序决胜。"""
+    assert select_display_error_types({"tense": 3, "article": 3, "grammar": 1}) == [
+        ("article", 3),
+        ("tense", 3),
+        ("grammar", 1),
+    ]
+
+
+def test_select_display_error_types_caps_at_three() -> None:
+    """API 载荷硬顶：9 类全观测也只出 top 3。"""
+    assert select_display_error_types({category: 1 for category in ERROR_CATEGORIES}) == [
+        ("article", 1),
+        ("collocation", 1),
+        ("grammar", 1),
+    ]
+
+
+def test_select_display_error_types_drops_out_of_set_keys() -> None:
+    """读侧同源防御：手改库出现的集合外键不进载荷，防幻觉值回流展示层。"""
+    assert select_display_error_types({"hallucinated": 99, "tense": 2, "other": 1}) == [
+        ("tense", 2),
+        ("other", 1),
+    ]
+    assert select_display_error_types({}) == []
+
+
+def test_select_display_scenes_maps_titles_and_merges_same_copy() -> None:
+    """street/travel 展示文案相同：映射后必须合并计数，不出现重复条目。"""
+    assert select_display_scenes({"coffee_shop": 4, "street": 3, "travel": 1}) == [
+        ("咖啡店柜台点单", 4),
+        ("街头问路确认路线", 4),
+    ]
+
+
+def test_select_display_scenes_humanizes_unknown_scene_ids() -> None:
+    """未命中预设文案的场景走 humanize 回退，任何路径不露原始 scene id。"""
+    assert select_display_scenes({"gym": 2}) == [("Gym 情景对话", 2)]
+
+
+def test_select_display_scenes_caps_at_twelve() -> None:
+    """API 载荷硬顶：15 个不同场景只出计数最高的 12 个；空计数返回空列表。"""
+    counts = {f"scene_{index:02d}": index + 1 for index in range(15)}
+    assert select_display_scenes(counts) == [
+        (f"Scene {index:02d} 情景对话", index + 1) for index in range(14, 2, -1)
+    ]
+    assert select_display_scenes({}) == []

@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/otel_engine_spans/feature.md",
-    "summary": "审计 Schedule Later 19 + 对标结论 7（Dify ObservabilityLayer）/ PRD v0.5 候选④收口：接入 OpenTelemetry 三层链路追踪（OTel API 手动埋点，默认关闭零行为，OTLP HTTP 导出零厂商锁定）。server 层：TracingMiddleware 纯 ASGI 挂管线最内层（request-id 之内），路由模板经 scope[\"route\"] 回填低基数 span 名，/health /readyz 探针旁路；engine 层：session_engine/agent.py 的 scene/coach/feedback/review 四分支经 traced_engine 包裹，终态三值 ok/degraded/failed 与 failure policy 及 PRD §4.9 逐条对齐（feedback 异常=degraded、review copy=None/超时取消=degraded）；provider attempt 层：run_llm_with_failover 每次 attempt（含重试）一个 llm.attempt span（attempt 名/重试序号/终态，退避 sleep 移出 span 块、deadline 语义等价改写），openai.py payload builder stamp llm.model、_record_usage stamp token 三元组。基建 api/common/telemetry.py：模块级 tracer 不动全局 provider，关闭态不 import SDK（NonRecordingSpan 零行为），_ResilientSpanExporter 吞导出失败 + 60s 单调钟限频 warning。依赖 opentelemetry-api/sdk/exporter-otlp-proto-http 三包（禁 gRPC 变体，1.45.0，uv.lock 锁定）；Settings 仅增 otel_enabled 开关，标准 OTEL_* 环境变量 SDK 原生消费。新建 docs/observability.md（span 目录/终态映射/Langfuse+Jaeger 对接/关闭态承诺/llm_usage 分工/两项已知取舍），.env.example 与 README 增入口。api.md 复核零变动（未改端点）。",
-    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、档案读取 API 与前端进度页、ReviewCopy 生产消费待立项。Langfuse 云端账号配置为用户侧操作（文档已给步骤）。",
-    "extra_progress": "pytest 578 passed / 9 skipped（基线 540/9，+38 用例），覆盖率 88.91%（门禁 87，基线 88.49% 抬升）；ruff / black 全绿；前端零改动（typecheck 通过、vitest 15 文件 107 passed、覆盖率 85.97/77.42/84.02/85.97 对阈值 76/74/78/76 持平达标）；tests/core/test_config.py 两处补 monkeypatch.delenv 使 mock 进程 pin 下既有 live 模式用例确定性通过（基线即存在的 pydantic-settings 优先级冲突，stash 对照验证）；Docker 镜像构建兼容由 CI docker job 实测（本地引擎未运行）。"
+    "latest_record": "docs/features/learner_profile_progress/feature.md",
+    "summary": "PRD v0.5 候选①收口：新增 GET /api/v1/learners/me/profile 只读端点（新 learners 资源组：routes/v1/learners.py 薄路由 + services/learner_profile_service.py 仓库透传、读路径不降级吞错 + contracts/learner.py add-only 契约，from_profile 空档案渲染全空载荷 200 而非 404）与前端 /progress 进度页（RequireAuth、UserMenu 增“我的进度”入口、CEFR 中文文案映射、错误/场景/轮数卡与空态引导）。展示映射在读侧独立实现：learner_profile.py 追加 ERROR_CATEGORY_LABELS（9 类中文展示名，服务端单一事实源）、select_display_error_types（top3 确定性排序）、select_display_scenes（经 review_builder.get_scene_title 映射展示名并合并同名场景 street/travel，cap 12），API 载荷独立硬顶 MAX_DISPLAYED_*，与注入面常数、写侧封顶互不引用；build_learner_context_lines 等既有注入函数逐字节不动（提示词格式与 API 契约解耦）。不变量守住：响应任何路径不外露原始 scene id（测试含负向断言）。文档同步 api.md §3/§12、PRD §4.8/§11 候选①标记交付、本 feature 文档含声明↔代码出处对照表。",
+    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、ReviewCopy 生产消费（候选②）待立项。Langfuse 云端账号配置为用户侧操作（文档已给步骤）。",
+    "extra_progress": "pytest 589 passed / 9 skipped（基线 578/9，+11 用例），覆盖率 89.02%（门禁 87，基线 88.91% 抬升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（基线 107），覆盖率 86.44/78.01/84.57/86.44 对阈值 76/74/78/76 四项高于基线（85.97/77.42/84.02/85.97）、阈值未动。环境注记：本机 .env 为 live 模式，tests/api/test_telemetry_e2e.py 全栈用例须 MODEL_RUNTIME_MODE=mock 进程 pin 复跑（既有环境陷阱，与本批无关）。"
   },
   "modules": [
     {
@@ -356,6 +356,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "学员档案读取 API 与进度页",
+      "scope": "learner_profile_progress",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
     }
   ],
   "test_layers": [

@@ -142,7 +142,8 @@ EchoWhale 是一个面向日常口语初中级学习者的情景式英语陪练�
 - 仅认证用户建档（visitor 会话不产生任何档案读写）；每用户一行，三个 JSON 字段全部写侧封顶、行宽不随练习轮数增长
 - 内容：CEFR 滚动估计（最近 10 次观测取下中位）、错误画像（9 类封闭集合计数）、场景练习频次（最近 12 个场景）
 - 注入教练与反馈提示词（上下文行 + CEFR 等级），也作为语音 Agent 思考提示词的个性化来源
-- 档案读写是增强分支：任何失败只降级记日志，绝不拖垮回复轮
+- 读侧闭环：`GET /api/v1/learners/me/profile` 只读下发档案（认证必需；空档案返回 200 全空载荷而非 404）。错误类型 top 3 携带服务端中文展示名；场景以服务端映射后的展示名为键（任何路径不外露原始 scene id），同名展示场景计数合并，载荷封顶 top 3 错误 / 12 场景。前端 `/progress` 进度页（RequireAuth）渲染水平估计、常见错误、练习场景与累计轮数，空态引导开始第一次练习（见 [api.md](api.md) §12 与 docs/features/learner_profile_progress）
+- 档案读写是增强分支：任何失败只降级记日志，绝不拖垮回复轮（该语义仅限回复轮写路径；档案读 API 对存储故障如实返回 500 信封，不伪装成空档案）
 
 ### 4.9 LLM 复盘
 
@@ -388,7 +389,7 @@ api/modules/
 
 下一阶段候选方向（仅意图，不含时间表，逐项独立立项）：
 
-1. **档案读取 API 与前端进度页**：学员档案已持久化（`user_learning_profiles` 表就绪），补读侧 API 与前端可视化
+1. **档案读取 API 与前端进度页**（已交付 2026-10-06：`GET /api/v1/learners/me/profile` + `/progress` 页，能力并入 §4.8，见 docs/features/learner_profile_progress）
 2. **LLM ReviewCopy 生产消费扩展**：复盘 LLM 产出的部分字段（如 scene_title / role_label）尚未被复盘卡片消费，评估接入与硬顶
 3. **评测驱动提示词修正**：评测台（coach / review 离线评测）已发现 4 项提示词疑似问题，按评测基线逐项修正
-4. **可观测性（OTel / Langfuse）**：在现有 request id 与结构化日志基础上接入链路追踪与 LLM 调用观测
+4. **可观测性（OTel / Langfuse）**（OTel 三层 span 已交付，见 docs/features/otel_engine_spans 与 [observability.md](observability.md)；Langfuse 对接为用户侧配置）：在现有 request id 与结构化日志基础上接入链路追踪与 LLM 调用观测

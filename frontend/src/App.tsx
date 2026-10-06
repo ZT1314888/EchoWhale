@@ -8,6 +8,7 @@ import { HomeUploadPage } from "./pages/HomeUploadPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PostPracticeReviewPage } from "./pages/PostPracticeReviewPage";
 import { PracticeSessionPage } from "./pages/PracticeSessionPage";
+import { ProgressPage } from "./pages/ProgressPage";
 import { RegisterPage } from "./pages/RegisterPage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { StartupLoadingPage } from "./pages/StartupLoadingPage";
@@ -26,6 +27,14 @@ export function App() {
           element={
             <RequireAuth>
               <HistoryPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/progress"
+          element={
+            <RequireAuth>
+              <ProgressPage />
             </RequireAuth>
           }
         />

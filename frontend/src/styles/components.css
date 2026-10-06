@@ -842,7 +842,8 @@
 .auth-panel h1,
 .auth-aside h2,
 .empty-stage h1,
-.page-grid--history h1 {
+.page-grid--history h1,
+.page-grid--progress h1 {
   font-size: 36px;
   line-height: 1.12;
 }
@@ -1481,6 +1482,50 @@
   }
 }
 
+/* 学员进度页（/progress）：卡片标题、指标与列表样式，颜色与圆角全部复用设计令牌。 */
+.progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progress-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.progress-metric-value {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.progress-meta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-mist);
+}
+
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.progress-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background: rgba(242, 246, 249, 0.96);
+}
+
 @media (max-width: 1280px) {
   .page-grid--home,
   .page-grid--session,
@@ -1535,7 +1580,8 @@
   .auth-panel h1,
   .auth-aside h2,
   .empty-stage h1,
-  .page-grid--history h1 {
+  .page-grid--history h1,
+  .page-grid--progress h1 {
     font-size: 30px;
   }
 

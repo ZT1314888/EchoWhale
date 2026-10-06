@@ -203,3 +203,22 @@ export type AppError = {
   message: string;
   reason?: string;
 };
+
+export type ProfileErrorType = {
+  category: string;
+  label: string;
+  count: number;
+};
+
+export type ProfileSceneCount = {
+  sceneTitle: string;
+  count: number;
+};
+
+export type LearnerProfileOverview = {
+  cefrEstimate: string | null;
+  errorTypes: ProfileErrorType[];
+  scenes: ProfileSceneCount[];
+  practicedTurnCount: number;
+  updatedAt: string | null;
+};
