@@ -22,19 +22,18 @@ from pydantic import BaseModel, Field
 from api.core.config import settings
 from api.modules.feedback_engine.schema import FeedbackResult
 from api.modules.session_engine.prompts.review_prompts import REVIEW_PROMPT
-from api.modules.session_engine.review_builder import ReviewCopy
+from api.modules.session_engine.review_builder import (
+    REVIEW_COPY_MAX_CHARS as REVIEW_COPY_FIELD_LIMITS,
+)
+from api.modules.session_engine.review_builder import (
+    ReviewCopy,
+)
 from api.modules.session_engine.review_summarizer import ReviewSummarizerAgent
 
-# 与 REVIEW_PROMPT 软约束逐字段一致的长度上限（字符数）。消费侧 _bound 硬顶只
-# 覆盖 highlight/next_try/next_step（scene_title/role_label 尚未被复盘卡片消费），
-# 评测在源头卡全五个字段，避免"未消费字段失控"静默漂移。
-REVIEW_COPY_FIELD_LIMITS: dict[str, int] = {
-    "scene_title": 40,
-    "role_label": 40,
-    "highlight": 120,
-    "next_try": 80,
-    "next_step": 80,
-}
+# 与 REVIEW_PROMPT 软约束逐字段一致的长度上限（字符数）：自 eval_prompt_fixes
+# 批次起与生产同表——REVIEW_COPY_MAX_CHARS 是 review_builder 的生产单一事实源
+# （ReviewCopy validator 按 cap 截断），别名 import 消除双源，评测与生产逐字段
+# 一致，生产 cap 调整时评测长度维度自动跟随。
 
 
 class ReviewEvaluationCase(BaseModel):

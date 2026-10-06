@@ -34,15 +34,24 @@ class MockChatProvider:
 
 
 def _build_mock_reply(payload: CoachReplyInput) -> str:
-    """回复文本只在此处生成，reply 与流式入口共用同一份内容。"""
-    learner = payload.learner_message.strip() or "that"
+    """回复文本只在此处生成，reply 与流式入口共用同一份内容。
+
+    复读防线（design 2.4）：无 recent_messages 时不回落引用学习者原句（改用
+    "I hear you." 中性短语），anchors/vocab 双空时也不把学习者原句当练习素材
+    （改用场景中性短语）——两条路径都会让 >=4 token 的学习者消息整句复现、
+    天然挂 no_echo 维度。整体保持三句形态与追问收尾不变。
+    """
     follow_up = build_follow_up(payload.scene)
     anchor_hint = ", ".join(payload.visual_anchors[:2])
     vocab_hint = ", ".join(payload.vocab_candidates[:2])
-    history_hint = payload.recent_messages[-1].text if payload.recent_messages else learner
+    if payload.recent_messages:
+        last_text = payload.recent_messages[-1].text
+        opener = f"As your {payload.role}, I understand you said '{last_text}'. "
+    else:
+        opener = f"As your {payload.role}, I hear you. "
     return (
-        f"As your {payload.role}, I understand you said '{history_hint}'. "
-        f"Let's practice with {anchor_hint or vocab_hint or learner}. {follow_up}"
+        f"{opener}Let's practice with {anchor_hint or vocab_hint or 'what we have here'}. "
+        f"{follow_up}"
     )
 
 

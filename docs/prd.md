@@ -149,7 +149,7 @@ EchoWhale 是一个面向日常口语初中级学习者的情景式英语陪练�
 
 - 每轮生成短中文复盘文案（亮点 / 下一试 / 下一步），随会话响应下发；会话维度复盘接口聚合返回
 - 复盘是增强分支：与教练流并行、有界等待（5 秒），超时 / 失败 / mock 模式一律降级为模板复盘
-- 复盘文案逐字段截断硬顶，防失控输出撑爆卡片
+- 复盘文案逐字段截断硬顶（REVIEW_COPY_MAX_CHARS，五字段校验层生效），防失控输出撑爆卡片
 
 ### 4.10 场景文案服务端下发
 
@@ -391,5 +391,8 @@ api/modules/
 
 1. **档案读取 API 与前端进度页**（已交付 2026-10-06：`GET /api/v1/learners/me/profile` + `/progress` 页，能力并入 §4.8，见 docs/features/learner_profile_progress）
 2. **LLM ReviewCopy 生产消费扩展**：复盘 LLM 产出的部分字段（如 scene_title / role_label）尚未被复盘卡片消费，评估接入与硬顶
-3. **评测驱动提示词修正**：评测台（coach / review 离线评测）已发现 4 项提示词疑似问题，按评测基线逐项修正
+3. **评测驱动提示词修正**（已交付 2026-10-06：coach/review live 评测首跑、4 项已记录
+   疑似问题 + 3 项 live 新发现逐项分诊处置（meta 黑名单收窄 + 提示词接地行、follow_up
+   区间、ReviewCopy 五字段截断 cap、mock 复读路径修复、judge 兜底、REVIEW_PROMPT 短例句
+   子句），复跑达标，见 docs/features/eval_prompt_fixes）
 4. **可观测性（OTel / Langfuse）**（OTel 三层 span 已交付，见 docs/features/otel_engine_spans 与 [observability.md](observability.md)；Langfuse 对接为用户侧配置）：在现有 request id 与结构化日志基础上接入链路追踪与 LLM 调用观测

@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field, field_validator
+import logging
+
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from api.models.review_model import (
     FeedbackMetric,
@@ -8,6 +10,8 @@ from api.models.review_model import (
 )
 from api.models.session_model import Session
 from api.modules.feedback_engine.schema import FeedbackResult
+
+logger = logging.getLogger(__name__)
 
 SCENE_COPY = {
     "coffee_shop": {
@@ -37,13 +41,17 @@ SCENE_COPY = {
     },
 }
 
-# ReviewCopy 消费侧硬顶（与 REVIEW_PROMPT 的软约束一致）：提示词管不住失控输出，
-# 落卡前逐字段截断，防止超长文案撑爆复盘卡片。scene_title/role_label 已随
-# SessionResponse/HistorySessionMetaResponse 契约下发（仍不被复盘卡片消费），
-# 故只给被消费字段配硬顶常量。
-_REVIEW_COPY_HIGHLIGHT_MAX_CHARS = 120
-_REVIEW_COPY_NEXT_TRY_MAX_CHARS = 80
-_REVIEW_COPY_NEXT_STEP_MAX_CHARS = 80
+# ReviewCopy 字段长度硬顶（生产单一事实源）：五字段 40/40/120/80/80，与
+# REVIEW_PROMPT 的软约束逐字段一致——提示词管不住失控输出，校验层截断才是硬保证
+# （eval_prompt_fixes 批次 design 2.3）。session_engine/evaluation.py 的
+# REVIEW_COPY_FIELD_LIMITS 从这里 import，评测与生产同表。
+REVIEW_COPY_MAX_CHARS: dict[str, int] = {
+    "scene_title": 40,
+    "role_label": 40,
+    "highlight": 120,
+    "next_try": 80,
+    "next_step": 80,
+}
 
 
 class ReviewCopy(BaseModel):
@@ -75,6 +83,34 @@ class ReviewCopy(BaseModel):
             return value.strip()
         return value
 
+    @field_validator(
+        "scene_title",
+        "role_label",
+        "highlight",
+        "next_try",
+        "next_step",
+        mode="after",
+    )
+    @classmethod
+    def _truncate_to_cap(cls, value: str, info: ValidationInfo) -> str:
+        """超长字段按 cap 截断并留观测日志（截断而非拒绝，design 2.3）。
+
+        拒绝会把其余字段完好的复盘整份打回重试/failover，换来全模板降级，损失
+        大于半句截断；与教练 2000 字符硬顶同为"超长截断 + 观测日志"纪律。截断
+        发生在 strip 之后（after 阶段），纯空白仍被 _strip_text + min_length=1
+        拒绝，failover 语义不变。
+        """
+        cap = REVIEW_COPY_MAX_CHARS[info.field_name or ""]
+        if len(value) <= cap:
+            return value
+        logger.warning(
+            "review_copy_truncated field=%s length=%d cap=%d",
+            info.field_name,
+            len(value),
+            cap,
+        )
+        return value[:cap]
+
 
 def build_session_review(
     session: Session,
@@ -95,9 +131,11 @@ def build_session_review(
     next_try = get_next_try(session.scene)
     next_step = "下一轮试着在一句主回应后再补一句细节。"
     if copy is not None:
-        highlight = _bound(copy.highlight, _REVIEW_COPY_HIGHLIGHT_MAX_CHARS)
-        next_try = _bound(copy.next_try, _REVIEW_COPY_NEXT_TRY_MAX_CHARS)
-        next_step = _bound(copy.next_step, _REVIEW_COPY_NEXT_STEP_MAX_CHARS)
+        # 消费侧 _bound 保留为双保险（design 2.3）：validator 已按 cap 截断，
+        # 此处行为零变化。
+        highlight = _bound(copy.highlight, REVIEW_COPY_MAX_CHARS["highlight"])
+        next_try = _bound(copy.next_try, REVIEW_COPY_MAX_CHARS["next_try"])
+        next_step = _bound(copy.next_step, REVIEW_COPY_MAX_CHARS["next_step"])
 
     return SessionReview(
         session_id=session.id,

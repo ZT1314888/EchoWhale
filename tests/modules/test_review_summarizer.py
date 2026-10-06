@@ -1,10 +1,13 @@
-"""ReviewSummarizerAgent 的 fake client 直测：解析、failover 与预算/账本接线。"""
+"""ReviewSummarizerAgent 的 fake client 直测：解析、failover 与预算/账本接线；
+ReviewCopy 生产截断护栏（eval_prompt_fixes 批次 design 2.3）的截断语义单测。"""
 
 from __future__ import annotations
 
 import json
+import logging
 
 import pytest
+from pydantic import ValidationError
 
 from api.common.exceptions import ModelProviderError
 from api.core.config import settings
@@ -178,3 +181,66 @@ async def test_summarize_wires_default_usage_sink(monkeypatch) -> None:
     assert constructed
     # 用量账本在 provider 构造期默认注入：复盘调用成本自动进 llm_usage。
     assert all(c.usage_sink is not None for c in constructed)
+
+
+def test_review_copy_truncates_overlong_fields_to_cap(caplog) -> None:
+    """生产护栏（design 2.3）：超长字段在校验层截到恰上限，截断留 warning 观测日志。
+
+    highlight 用带首尾空白的超长串：截断发生在 strip 之后（after 阶段）。
+    """
+    with caplog.at_level(logging.WARNING, logger="api.modules.session_engine.review_builder"):
+        copy = ReviewCopy.model_validate(
+            {
+                "scene_title": "咖" * 41,
+                "role_label": "店" * 41,
+                "highlight": " " + "好" * 121,
+                "next_try": "试" * 81,
+                "next_step": "步" * 81,
+            }
+        )
+
+    assert copy.scene_title == "咖" * 40
+    assert copy.role_label == "店" * 40
+    assert copy.highlight == "好" * 120
+    assert copy.next_try == "试" * 80
+    assert copy.next_step == "步" * 80
+    assert "review_copy_truncated" in caplog.text
+    assert "scene_title" in caplog.text
+
+
+def test_review_copy_keeps_exact_boundary_values() -> None:
+    """恰好达界的字段原样通过：截断只发生在超限时（与 REVIEW_PROMPT 软约束逐字段一致）。"""
+    fields = {
+        "scene_title": "咖" * 40,
+        "role_label": "店" * 40,
+        "highlight": "好" * 120,
+        "next_try": "试" * 80,
+        "next_step": "步" * 80,
+    }
+    copy = ReviewCopy.model_validate(fields)
+
+    for name, value in fields.items():
+        assert getattr(copy, name) == value
+
+
+def test_review_copy_truncation_keeps_other_fields_intact() -> None:
+    """单字段超限只截该字段，其余字段原样保留（截断优于整份拒绝的语义）。"""
+    copy = ReviewCopy.model_validate({**_VALID_COPY, "next_try": "试" * 81})
+
+    assert copy.next_try == "试" * 80
+    assert copy.scene_title == _VALID_COPY["scene_title"]
+    assert copy.role_label == _VALID_COPY["role_label"]
+    assert copy.highlight == _VALID_COPY["highlight"]
+    assert copy.next_step == _VALID_COPY["next_step"]
+
+
+def test_review_copy_whitespace_only_still_fails_validation() -> None:
+    """纯空白仍 ValidationError（strip 前置 + min_length=1）：failover 入口不变。"""
+    with pytest.raises(ValidationError):
+        ReviewCopy.model_validate({**_VALID_COPY, "highlight": "   "})
+
+
+def test_review_copy_empty_string_still_fails_validation() -> None:
+    """空串仍 ValidationError：min_length=1 语义不变，截断 validator 不放行空值。"""
+    with pytest.raises(ValidationError):
+        ReviewCopy.model_validate({**_VALID_COPY, "next_step": ""})

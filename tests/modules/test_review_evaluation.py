@@ -88,21 +88,34 @@ def test_chinese_dimension_flags_any_non_chinese_field() -> None:
 
 
 def test_length_dimension_matches_review_prompt_soft_bounds() -> None:
-    """长度维度逐字段对齐 REVIEW_PROMPT 软约束 40/40/120/80/80（含恰好达界）。"""
+    """长度维度逐字段对齐 REVIEW_PROMPT 软约束 40/40/120/80/80（含恰好达界）。
+
+    生产 ReviewCopy validator 已按 cap 截断（eval_prompt_fixes 批次 design 2.3）：
+    经 model_validate 构造的对象不可能超限，超限对象只能用 model_construct 绕过
+    校验构造——长度维度由此退化为"生产护栏未被移除"的回归哨兵：若有人移除生产
+    截断 validator，live 评测在此显形。
+    """
     within = evaluate_review_copy(
         case=_case(),
         copy=_copy(scene_title="咖" * 40, highlight="好" * 120, next_step="下" * 80),
     )
     assert within.length_pass is True
 
-    over_title = evaluate_review_copy(case=_case(), copy=_copy(scene_title="咖" * 41))
-    assert over_title.length_pass is False
-
-    over_highlight = evaluate_review_copy(case=_case(), copy=_copy(highlight="好" * 121))
-    assert over_highlight.length_pass is False
-
-    over_next_try = evaluate_review_copy(case=_case(), copy=_copy(next_try="试" * 81))
-    assert over_next_try.length_pass is False
+    base = {
+        "scene_title": "咖" * 40,
+        "role_label": "店" * 40,
+        "highlight": "好" * 120,
+        "next_try": "试" * 80,
+        "next_step": "步" * 80,
+    }
+    for field, over_value in (
+        ("scene_title", "咖" * 41),
+        ("highlight", "好" * 121),
+        ("next_try", "试" * 81),
+    ):
+        over_copy = ReviewCopy.model_construct(**{**base, field: over_value})
+        over_checks = evaluate_review_copy(case=_case(), copy=over_copy)
+        assert over_checks.length_pass is False, field
 
 
 def test_no_scene_id_dimension_covers_all_identifier_variants() -> None:

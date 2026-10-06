@@ -23,6 +23,7 @@ from api.modules.coach_engine.evaluation import (
     evaluate_coach_reply,
     evaluate_coach_reply_hard_checks,
     load_coach_evaluation_cases,
+    run_coach_evaluation,
 )
 from api.modules.coach_engine.prompts.coach_prompts import build_coach_system_prompt
 from api.modules.coach_engine.providers.chat_provider import MockChatProvider
@@ -69,16 +70,21 @@ def test_length_dimension_bounds_word_count() -> None:
     assert _checks("").length_pass is False
 
 
-def test_follow_up_dimension_requires_exactly_one_question_mark() -> None:
-    """追问维度：'?' 恰好 1 个——存在且不叠加（提示词 one follow-up question）。"""
+def test_follow_up_dimension_accepts_one_or_two_question_marks() -> None:
+    """追问维度：'?' 区间 [1,2]——以追问收口且不连环发问（design 2.2）。"""
     assert _checks("Nice order! Would you like it hot or iced?").follow_up_pass is True
+    # 2 个：多轮窗口引用教练自己上一问是正常形态，恰 1 判定在此必然误判。
+    assert _checks("Hot or iced? You asked me that already, remember?").follow_up_pass is True
     assert _checks("Sure thing. No question in this reply.").follow_up_pass is False
-    assert _checks("Hot or iced? And maybe a muffin too?").follow_up_pass is False
+    assert _checks("Hot or iced? And maybe a muffin too? Anything else?").follow_up_pass is False
 
 
 def test_meta_leak_dimension_flags_ai_self_disclosure() -> None:
     """meta 泄漏维度：黑名单覆盖场景台思路的教练侧扩展副本，大小写不敏感。"""
     assert _checks("Great choice! Shall we practice greetings first?").meta_leak_pass is True
+    # 收窄正例（design 2.1）：场景内合法台词"看不见眼前的屏幕"不算泄漏。
+    grounded = "I can't see the screen from here, but the menu board lists it."
+    assert _checks(grounded).meta_leak_pass is True
     for bad_text in (
         "As an AI, I would start with greetings?",
         "As a language model, I suggest ordering first?",
@@ -86,6 +92,7 @@ def test_meta_leak_dimension_flags_ai_self_disclosure() -> None:
         "I'm an AI, so let me model the dialogue?",
         "I cannot see the image, but from the anchors?",
         "I can't see the image clearly, yet we can try?",
+        "I can't see the image you sent.",
         "This image shows a counter, shall we practice?",
     ):
         assert _checks(bad_text).meta_leak_pass is False, bad_text
@@ -159,7 +166,8 @@ def test_fixture_load_contract() -> None:
     for case in cases:
         assert case.learner_message.strip()
         # mock 回复引用 recent_messages[-1].text：末条必须存在、不等于学习者
-        # 原句（no_echo 维度）且不含问号（mock 追问恰好 1 个的前提）。
+        # 原句（no_echo 维度双保险）且不含问号（追问区间 [1,2] 下防问号漂移的
+        # 双保险；fixtures 约束保留，provider 侧复读防线见 design 2.4）。
         assert case.recent_messages
         assert case.recent_messages[-1].text != case.learner_message
         assert "?" not in case.recent_messages[-1].text
@@ -300,6 +308,8 @@ def test_evaluate_coach_reply_graceful_failure_branch() -> None:
         assert getattr(result, name) is False
     assert result.hard_pass is False
     assert result.judge_result is None
+    # provider 失败时 judge 根本未被调用：graceful_failure 分支的 judge_error 恒 None。
+    assert result.judge_error is None
     assert result.final_pass is False
     assert result.failure_reason == "graceful_failure: provider exploded"
 
@@ -314,3 +324,41 @@ def test_evaluate_coach_reply_requires_reply_text_on_reply_outcome() -> None:
             prompt_hash="hash-123",
             judge_result=None,
         )
+
+
+class _ExplodingJudge:
+    """judge 假对象：judge 方法直接抛错（模拟 live 首跑实发的 ReadTimeout）。"""
+
+    def judge(self, *, case: CoachReplyEvaluationCase, reply_text: str) -> CoachJudgeResult:
+        raise RuntimeError("judge endpoint down")
+
+
+@pytest.mark.anyio
+async def test_run_coach_evaluation_survives_judge_failure(monkeypatch, tmp_path) -> None:
+    """live 发现 #1（design 2bis）：judge 故障不得炸掉整轮评测。
+
+    runner 把 judge 调用纳入兜底：失败记 judge_error、judge_result=None、
+    final_pass 回落 hard_pass（judge 缺席时以硬规则为准），结果行照常落盘。
+    """
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    cases = load_coach_evaluation_cases(FIXTURE_PATH)[:2]
+
+    results = await run_coach_evaluation(
+        cases=cases,
+        output_path=tmp_path / "results.jsonl",
+        chat_provider=MockChatProvider(),
+        judge=_ExplodingJudge(),
+    )
+
+    assert len(results) == len(cases)
+    for case, result in zip(cases, results, strict=True):
+        assert result.case_id == case.case_id
+        assert result.actual_outcome == "reply"
+        assert result.judge_result is None
+        assert result.judge_error is not None
+        assert result.judge_error.startswith("judge_failed: ")
+        assert result.hard_pass is True
+        assert result.final_pass == result.hard_pass
+    lines = (tmp_path / "results.jsonl").read_text(encoding="utf-8").splitlines()
+    assert len(lines) == len(cases)
+    assert '"judge_error":"judge_failed: judge endpoint down"' in lines[-1]

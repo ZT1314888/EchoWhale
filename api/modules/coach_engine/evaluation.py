@@ -39,15 +39,22 @@ from api.modules.coach_engine.schema import CoachReplyInput
 # evaluation.py）的扩展自持副本——刻意不做跨引擎 import（避免 coach_engine →
 # scene_engine 依赖），并按教练语境追加语言模型自暴露与"无图可看"类 token
 # （教练拿到的 visual anchors 是文本线索，回复宣称看不见输入比场景台更不可接受）。
+# "看见"类 token 只拦图像锚定的出戏形态（"看不见你发的图"）：黑名单的意图不是
+# 禁止角色扮演内的"看不见"——"I can't see the screen from here" 是场景内合法
+# 台词，裸 "i can('t|not) see" 会把这类表述误划入泄漏类（校验器语义过宽，并非
+# 拦截意图的组成部分），已收窄为图像锚定变体（eval_prompt_fixes 批次 design 2.1，
+# 行为修复由 coach_prompts 的提示词接地行并行承担）。
 COACH_META_LEAK_TOKENS = (
     "as an ai",
     "as a language model",
     "i am an ai",
     "i'm an ai",
-    "i cannot see the image",
     "i can't see the image",
-    "i cannot see",
-    "i can't see",
+    "i cannot see the image",
+    "i can't see the photo",
+    "i cannot see the photo",
+    "i can't see any image",
+    "i cannot see any image",
     "this image shows",
     "the image shows",
 )
@@ -113,7 +120,7 @@ class CoachReplyHardChecks(BaseModel):
         labels = (
             ("english_only_pass", "reply is not English only"),
             ("length_pass", "reply is empty or exceeds the length bound"),
-            ("follow_up_pass", "reply must contain exactly one follow-up question"),
+            ("follow_up_pass", "reply must end with one follow-up question (at most two)"),
             ("meta_leak_pass", "reply leaks meta/AI phrasing"),
             ("no_echo_pass", "reply echoes the learner message verbatim"),
         )
@@ -150,6 +157,10 @@ class CoachEvaluationResult(BaseModel):
     no_echo_pass: bool
     hard_pass: bool
     judge_result: dict[str, Any] | None
+    # judge 自身故障的观测键（如超时）：正常路径恒 None；graceful_failure 分支
+    # 也恒 None（provider 失败时 judge 根本未被调用）。judge 是增强信号，缺席时
+    # final_pass 回落 hard_pass，落盘多一键用于区分"judge 否决"与"judge 缺席"。
+    judge_error: str | None = None
     final_pass: bool
     actual_outcome: Literal["reply", "graceful_failure"]
     failure_reason: str
@@ -177,8 +188,8 @@ def evaluate_coach_reply_hard_checks(
 
     维度与依据（design.md 2.2）：仅英语（系统提示词 "Reply in English only"）、
     词数有界（"at most 3 short sentences plus one follow-up question"）、追问
-    存在且恰好一次（"one follow-up question"）、meta 泄漏黑名单、不复读学习者
-    原句（≥4 token 的整句连续子序列匹配，短句豁免防误报）。
+    存在且不连环发问（区间 [1,2]，见 follow_up_pass 处注释）、meta 泄漏黑名单、
+    不复读学习者原句（≥4 token 的整句连续子序列匹配，短句豁免防误报）。
     """
     words = reply_text.split()
     learner_tokens = normalize_english_tokens(learner_message)
@@ -190,8 +201,12 @@ def evaluate_coach_reply_hard_checks(
     return CoachReplyHardChecks(
         english_only_pass=not _contains_non_english_script(reply_text),
         length_pass=bool(words) and len(words) <= COACH_REPLY_MAX_WORDS,
+        # 追问区间 [1,2]（design 2.2）：下界 1 保证以追问推进对话，上界 2 容忍多轮
+        # 窗口中引用教练自己上一问的正常形态——恰 1 判定把"输入窗口含教练问句"这一
+        # 校验器输入噪声当成了产品质量缺陷；0 个（无推进）与 >=3 个（连环发问）仍
+        # 判失败，契约意图（以追问收口且不连环发问）不松。
         # 学习者原句复读已被独立维度禁止，问号不会被借道混入。
-        follow_up_pass=reply_text.count("?") == 1,
+        follow_up_pass=1 <= reply_text.count("?") <= 2,
         meta_leak_pass=not any(token in reply_text.lower() for token in COACH_META_LEAK_TOKENS),
         no_echo_pass=no_echo_pass,
     )
@@ -224,12 +239,15 @@ def evaluate_coach_reply(
     actual_outcome: Literal["reply", "graceful_failure"],
     prompt_hash: str,
     judge_result: dict[str, Any] | CoachJudgeResult | None,
+    judge_error: str | None = None,
     failure_reason: str = "",
 ) -> CoachEvaluationResult:
     """把一次模型回复折叠成统一评测结果（graceful_failure 沿 scene 分支形态）。
 
     graceful_failure 时硬规则全 False、final_pass=False：live 评测通过率因此
-    <1.0 显形，而不是静默丢样本。
+    <1.0 显形，而不是静默丢样本。judge 缺席（judge_result=None，含 judge 自身
+    故障被 runner 兜住的场景）时 final_pass 回落 hard_pass——judge 是增强信号，
+    以硬规则为准。
     """
     if actual_outcome != "reply":
         return CoachEvaluationResult(
@@ -283,6 +301,7 @@ def evaluate_coach_reply(
         no_echo_pass=checks.no_echo_pass,
         hard_pass=checks.hard_pass,
         judge_result=judge.model_dump() if judge is not None else None,
+        judge_error=judge_error,
         final_pass=final_pass,
         actual_outcome="reply",
         failure_reason=failure_reason,
@@ -408,10 +427,18 @@ async def run_coach_evaluation(
             )
         else:
             judge_result = None
+            judge_error: str | None = None
             if judge is not None and reply.text.strip():
-                judge_result = await asyncio.to_thread(
-                    judge.judge, case=case, reply_text=reply.text
-                )
+                # judge 是增强信号，其自身故障（live 首跑实发 ReadTimeout 中断整轮）
+                # 不应炸掉评测：兜住后记 judge_error、judge 置空，final_pass 在折叠
+                # 层自动回落 hard_pass（以硬规则为准）。
+                try:
+                    judge_result = await asyncio.to_thread(
+                        judge.judge, case=case, reply_text=reply.text
+                    )
+                except Exception as exc:  # noqa: BLE001 - 与 provider 兜底同口径
+                    judge_result = None
+                    judge_error = f"judge_failed: {exc}"
             results.append(
                 evaluate_coach_reply(
                     case=case,
@@ -419,6 +446,7 @@ async def run_coach_evaluation(
                     actual_outcome="reply",
                     prompt_hash=prompt_hash,
                     judge_result=judge_result,
+                    judge_error=judge_error,
                 )
             )
         output_file.write_text(

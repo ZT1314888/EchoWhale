@@ -5,12 +5,19 @@ import pytest
 from api.common.exceptions import ConfigurationError
 from api.core.config import settings
 from api.models.message_model import Message
+from api.modules.coach_engine.evaluation import (
+    evaluate_coach_reply_hard_checks,
+    normalize_english_tokens,
+)
 from api.modules.coach_engine.prompts.coach_prompts import (
     COACH_LEARNER_LEVEL,
     COACH_SYSTEM_PROMPT,
     build_coach_system_prompt,
 )
-from api.modules.coach_engine.providers.chat_provider import OpenAICompatibleChatProvider
+from api.modules.coach_engine.providers.chat_provider import (
+    MockChatProvider,
+    OpenAICompatibleChatProvider,
+)
 from api.modules.coach_engine.schema import CoachReplyInput
 from api.modules.coach_engine.service import CoachEngineService
 
@@ -36,6 +43,50 @@ async def test_coach_engine_uses_recent_messages_and_visual_anchors_to_build_rep
 
     assert "counter" in result.text.lower()
     assert "menu board" in result.text.lower()
+
+
+def _bare_learner_payload() -> CoachReplyInput:
+    """无历史 + anchors/vocab 双空的最小输入（design 2.4 的两条复读路径）。"""
+    return CoachReplyInput(
+        scene="coffee_shop",
+        role="barista",
+        learner_message="I would like to order a large latte with extra foam",
+        visual_anchors=[],
+        vocab_candidates=[],
+        recent_messages=[],
+    )
+
+
+@pytest.mark.anyio
+async def test_mock_reply_bare_input_passes_all_hard_checks() -> None:
+    """design 2.4：无历史 + 双空输入不再复读学习者原句，五维硬规则全过。"""
+    payload = _bare_learner_payload()
+    result = await MockChatProvider().reply(payload)
+
+    # 注意 keyword-only 签名：reply_text= / learner_message=。
+    checks = evaluate_coach_reply_hard_checks(
+        reply_text=result.text, learner_message=payload.learner_message
+    )
+    assert checks.hard_pass, checks.failure_reasons
+    # 中性短语开头 + 场景中性素材 + 追问收尾的三句形态保持不变。
+    assert result.text.startswith("As your barista, I hear you. ")
+    assert result.text.endswith("Would you like that hot or iced?")
+
+
+@pytest.mark.anyio
+async def test_mock_reply_bare_input_does_not_echo_learner_message() -> None:
+    """design 2.4 独立断言：学习者原句不得作为连续子序列复现在回复中。"""
+    payload = _bare_learner_payload()
+    result = await MockChatProvider().reply(payload)
+
+    learner_tokens = normalize_english_tokens(payload.learner_message)
+    reply_tokens = normalize_english_tokens(result.text)
+    width = len(learner_tokens)
+    echoed = any(
+        reply_tokens[index : index + width] == learner_tokens
+        for index in range(len(reply_tokens) - width + 1)
+    )
+    assert not echoed
 
 
 class CapturingClient:
@@ -95,6 +146,9 @@ def test_coach_system_prompt_declares_learner_level_and_constraints() -> None:
     assert "CEFR" in COACH_SYSTEM_PROMPT
     assert "English only" in COACH_SYSTEM_PROMPT
     assert "at most 3 short sentences" in COACH_SYSTEM_PROMPT
+    # 角色接地行（eval_prompt_fixes 批次 design 2.1）：visual anchors 是眼前场景
+    # 内的事物，绝不提及 images/photos/being unable to see。
+    assert "never mention images, photos, or being unable to see" in COACH_SYSTEM_PROMPT
 
 
 def test_build_coach_system_prompt_none_matches_constant_byte_for_byte() -> None:

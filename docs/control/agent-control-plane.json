@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/learner_profile_progress/feature.md",
-    "summary": "PRD v0.5 候选①收口：新增 GET /api/v1/learners/me/profile 只读端点（新 learners 资源组：routes/v1/learners.py 薄路由 + services/learner_profile_service.py 仓库透传、读路径不降级吞错 + contracts/learner.py add-only 契约，from_profile 空档案渲染全空载荷 200 而非 404）与前端 /progress 进度页（RequireAuth、UserMenu 增“我的进度”入口、CEFR 中文文案映射、错误/场景/轮数卡与空态引导）。展示映射在读侧独立实现：learner_profile.py 追加 ERROR_CATEGORY_LABELS（9 类中文展示名，服务端单一事实源）、select_display_error_types（top3 确定性排序）、select_display_scenes（经 review_builder.get_scene_title 映射展示名并合并同名场景 street/travel，cap 12），API 载荷独立硬顶 MAX_DISPLAYED_*，与注入面常数、写侧封顶互不引用；build_learner_context_lines 等既有注入函数逐字节不动（提示词格式与 API 契约解耦）。不变量守住：响应任何路径不外露原始 scene id（测试含负向断言）。文档同步 api.md §3/§12、PRD §4.8/§11 候选①标记交付、本 feature 文档含声明↔代码出处对照表。",
-    "blockers": "无新增阻塞。教练/复盘 live 评测仍未实跑（费用与真实 provider 依赖，同前）；评测暴露 4 项提示词疑似问题仍未改（另批）；eslint 批次、ReviewCopy 生产消费（候选②）待立项。Langfuse 云端账号配置为用户侧操作（文档已给步骤）。",
-    "extra_progress": "pytest 589 passed / 9 skipped（基线 578/9，+11 用例），覆盖率 89.02%（门禁 87，基线 88.91% 抬升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（基线 107），覆盖率 86.44/78.01/84.57/86.44 对阈值 76/74/78/76 四项高于基线（85.97/77.42/84.02/85.97）、阈值未动。环境注记：本机 .env 为 live 模式，tests/api/test_telemetry_e2e.py 全栈用例须 MODEL_RUNTIME_MODE=mock 进程 pin 复跑（既有环境陷阱，与本批无关）。"
+    "latest_record": "docs/features/eval_prompt_fixes/feature.md",
+    "summary": "PRD v0.5 候选③收口：coach/review live 评测首跑（教练硬规则五维 10/10、judge 8/10，复盘 length 5/6——office_b1_report next_try 83 字符超 80 触顶）+ 4 项已记录疑似问题与 3 项 live 新发现逐项分诊处置。修正：coach meta 黑名单收窄为图像锚定变体 + 系统提示词追加角色接地行（anchors=眼前场景、绝不提 images/photos/看不见）；follow_up 评测判定改区间 [1,2]（0 与 >=3 仍挂，契约语义不变）；ReviewCopy 五字段校验层截断 cap（REVIEW_COPY_MAX_CHARS 40/40/120/80/80 成为生产单一事实源，评测台改 import 消除双源，截断带 warning 观测日志，min_length=1 与 failure policy 不变）；MockChatProvider 双复读路径（空 recent_messages 首句回落、双空分支 Let's practice with {learner}）改中性短语 + 单测；评测 runner judge 调用纳入 try/except（judge_error 字段、final 回落 hard_pass——attempt-1 实发 ReadTimeout 炸整轮）；REVIEW_PROMPT next_try/next_step 契约追加短例句子句。复跑达标（阈值未放宽）：coach 五维 10/10、judge 9/10（final 0.9），复盘六维 6/6（同案 next_try 83→47）；哈希重绑 coach B1 a56c951d712e→fdcc04bc129e / B2 f0b4a2a60b3d→e03313e12ae5、review f1a6629e1263→7f82e8fef115；FEEDBACK_PROMPT 未触及。token 成本：首跑两台记账 19 次/7,637 tokens、复跑 16 次/7,146 tokens（judge 各 10 次无 sink 不入账）。API 契约与前端零改动。",
+    "blockers": "无新增阻塞。judge 主观分歧（travel_b1_ticket 连续两轮被否、理由措辞不同）留观察，见 feature.md 遗留；ReviewCopy 生产消费（候选②）、eslint 批次待立项；Langfuse 云端账号配置为用户侧操作（文档已给步骤）。",
+    "extra_progress": "pytest 596 passed / 9 skipped / 1 failed（失败为 test_telemetry_e2e 既有环境陷阱，MODEL_RUNTIME_MODE=mock 进程 pin 复跑 4 passed，等效 600 passed / 9 skipped，基线 589/9 净增 11 用例），覆盖率 89.46%（门禁 87，基线 89.02% 抬升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（与基线一致），覆盖率 86.44/78.04/84.57/86.44 高于阈值 76/74/78/76，git status 证明前端零改动。live 评测成本：llm_usage 表增量查询（见 feature.md）。"
   },
   "modules": [
     {
@@ -363,6 +363,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "评测驱动提示词修正",
+      "scope": "eval_prompt_fixes",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/coach_engine"
     }
   ],
   "test_layers": [

@@ -91,17 +91,25 @@ B1×5 + B2×5；含 learner_context 注入块 B1/B2 各 1 组、≥4 条多轮 2
 - 教练 live 评测未实跑（费用与真实 provider 依赖）：首次实跑命令
   `RUN_COACH_EVAL=1 uv run pytest tests/modules/test_coach_engine_live.py`（可先配
   `COACH_EVAL_JUDGE_*` 启用裁判）；复盘同理 `RUN_REVIEW_EVAL=1`。
-- 评测暴露的提示词疑似问题清单（**只记录不改**，留给后续提示词批次裁量）：
+  **【2026-10-06 更新】已实跑并完成修正闭环，见
+  [eval_prompt_fixes](../eval_prompt_fixes/feature.md)。**
+- 评测暴露的提示词疑似问题清单（**只记录不改**，留给后续提示词批次裁量；
+  **【2026-10-06 更新】四项均已在 eval_prompt_fixes 批次处置闭环，逐项结论见
+  [eval_prompt_fixes/feature.md 分诊表](../eval_prompt_fixes/feature.md)**）：
   1. meta 黑名单 "i cannot see / i can't see" 与教练现实存在张力——教练的视觉锚点是
      文本线索，live 模型诚实回答 "I can't see the photo, but from the menu board..."
      会被判反；首次实跑观察 meta_leak 是否 1.0，若误报应改提示词侧措辞而非放宽校验器。
+     **【已处置】黑名单收窄为图像锚定变体 + 提示词追加角色接地行（双管）。**
   2. `?` 恰好 1 次的追问判定在真实对话存在过杀风险——recent_messages 末条若是教练
      自己的问句，回复引用它会计 2 个 `?`；fixture 用"末条无问号"约束规避了 mock
      通道，live 真实对话无此约束。
+     **【已处置】follow_up 判定改为区间 [1,2]，产品契约语义（以追问收口）不变。**
   3. `ReviewCopy.scene_title/role_label` 无生产侧硬顶——消费侧 `_bound` 只截三个字段，
      40/40 上限与"禁原始 id"目前只有本评测台在守；若未来随 history 契约下发需同步补
      消费侧硬顶。
+     **【已处置】ReviewCopy 五字段校验层截断 cap（REVIEW_COPY_MAX_CHARS）落地。**
   4. `MockChatProvider` 在 anchors/vocab 双空回退分支复读学习者原句（"Let's practice
      with {learner}"），≥4 token 的真实消息在该分支会挂 no_echo——mock 质量瑕疵
      （非生产链路），fixture 已用短消息绕开，备忘。
+     **【已处置】双复读路径（含空 recent_messages 首句回落）改为中性短语 + 单测。**
 - 教练 live 评测的 B1/B2 难度适配主观质量仍需人工评估（与 P2-7 遗留同源）。
