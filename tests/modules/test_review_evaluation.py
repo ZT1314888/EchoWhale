@@ -187,6 +187,24 @@ def test_review_prompt_hash_stable_and_sensitive() -> None:
     assert len(base) == 12
 
 
+def test_review_prompt_demands_natural_chinese_display_names_and_bans_role_id() -> None:
+    """展示名消费后（review-copy-consumption）的提示词子句 always-on 断言。
+
+    scene_title / role_label 已进入生产消费（LLM 值优先）：提示词必须继续要求
+    自然中文、禁止输出原始 role id（此前 role id 禁令未显式覆盖 role_label），
+    并禁止编造给定场景与角色之外的画面外内容——这些子句是消费侧 resolver
+    字段级回退之前的第一道防线，措辞回退（放松语义）会被这里拦下。
+    """
+    assert "must be natural Chinese" in REVIEW_PROMPT
+    assert "base it on the given scene" in REVIEW_PROMPT
+    assert "base it on the given coach role" in REVIEW_PROMPT
+    assert "never output the raw scene id or role id" in REVIEW_PROMPT
+    assert "never output the raw role id or scene id" in REVIEW_PROMPT
+    assert "Do not invent scenery, characters, or events beyond the given scene and role." in (
+        REVIEW_PROMPT
+    )
+
+
 def test_fixture_load_contract() -> None:
     """fixture 载入校验：案例数、场景矩阵、feedback 契约与黑名单约束全部锁定。"""
     cases = load_review_evaluation_cases(FIXTURE_PATH)

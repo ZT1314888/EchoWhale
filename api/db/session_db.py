@@ -30,6 +30,7 @@ from api.models.message_model import Message
 from api.models.review_model import PracticeFeedback, SessionReview
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
+from api.modules.session_engine.review_builder import ReviewCopy
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,7 @@ class SessionRepository(Protocol):
         learner_message: Message,
         assistant_message: Message,
         review: SessionReview,
+        review_copy: ReviewCopy | None = None,
     ) -> Session: ...
 
     async def finalize_voice_session(
@@ -118,6 +120,10 @@ class SessionRecord(Base):
     visual_anchors: Mapped[list[str]] = mapped_column(JSON, default=list)
     vocab_candidates: Mapped[list[str]] = mapped_column(JSON, default=list)
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # LLM 复盘展示名（可空，迁移 0014）：None 走确定性展示名路径；写侧存
+    # validator 已 strip/截断的原值，读侧经 resolver 做防护校验（design 2.2）。
+    llm_scene_title: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_role_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
@@ -247,6 +253,7 @@ class SqlAlchemySessionRepository:
         learner_message: Message,
         assistant_message: Message,
         review: SessionReview,
+        review_copy: ReviewCopy | None = None,
     ) -> Session:
         # "读 max(position) → 写"窗口内若另一并发回复先落库，唯一约束会拒绝
         # 重复 position（Finding 7）。每次尝试用独立事务：冲突后整体回滚重开，
@@ -268,6 +275,11 @@ class SqlAlchemySessionRepository:
                         self._to_message_record(session_id, next_position + 1, assistant_message)
                     )
                     await self._upsert_review_record(db_session, review)
+                    # LLM 展示名随回复轮落库：review_copy=None（mock/复盘降级）
+                    # 时不触碰两列，保留上一次有效值，同轮降级不回闪（design 2.2）。
+                    if review_copy is not None:
+                        record.llm_scene_title = review_copy.scene_title
+                        record.llm_role_label = review_copy.role_label
                     record.updated_at = review.updated_at
                     await db_session.commit()
                 break
@@ -565,6 +577,8 @@ class SqlAlchemySessionRepository:
                 visual_anchors=list(session.visual_anchors),
                 vocab_candidates=list(session.vocab_candidates),
                 labels=list(session.labels),
+                llm_scene_title=session.llm_scene_title,
+                llm_role_label=session.llm_role_label,
                 created_at=session.created_at,
                 updated_at=session.updated_at,
             )
@@ -580,6 +594,8 @@ class SqlAlchemySessionRepository:
         record.visual_anchors = list(session.visual_anchors)
         record.vocab_candidates = list(session.vocab_candidates)
         record.labels = list(session.labels)
+        record.llm_scene_title = session.llm_scene_title
+        record.llm_role_label = session.llm_role_label
         record.created_at = session.created_at
         record.updated_at = session.updated_at
         return record
@@ -687,6 +703,8 @@ def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Ses
         visual_anchors=visual_anchors,
         vocab_candidates=vocab_candidates,
         labels=list(record.labels or []),
+        llm_scene_title=record.llm_scene_title,
+        llm_role_label=record.llm_role_label,
         messages=[
             Message(
                 id=message.id,
@@ -719,6 +737,8 @@ def _to_session_head(record: SessionRecord) -> Session:
         visual_anchors=visual_anchors,
         vocab_candidates=vocab_candidates,
         labels=list(record.labels or []),
+        llm_scene_title=record.llm_scene_title,
+        llm_role_label=record.llm_role_label,
         messages=[],
         created_at=record.created_at,
         updated_at=record.updated_at,

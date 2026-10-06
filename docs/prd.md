@@ -153,7 +153,7 @@ EchoWhale 是一个面向日常口语初中级学习者的情景式英语陪练�
 
 ### 4.10 场景文案服务端下发
 
-- 场景展示名（`scene_title`）与角色标签（`role_label`）由后端单一事实源下发（预设文案或自然语言回退），前端不再维护副本，任何路径不暴露原始场景 id
+- 场景展示名（`scene_title`）与角色标签（`role_label`）由后端单一事实源下发（LLM 复盘产出可用时优先消费，无效按字段级回退预设文案或自然语言组合），前端不再维护副本，任何路径不暴露原始场景 id
 
 ### 4.11 历史记录
 
@@ -390,9 +390,16 @@ api/modules/
 下一阶段候选方向（仅意图，不含时间表，逐项独立立项）：
 
 1. **档案读取 API 与前端进度页**（已交付 2026-10-06：`GET /api/v1/learners/me/profile` + `/progress` 页，能力并入 §4.8，见 docs/features/learner_profile_progress）
-2. **LLM ReviewCopy 生产消费扩展**：复盘 LLM 产出的部分字段（如 scene_title / role_label）尚未被复盘卡片消费，评估接入与硬顶
+2. **LLM ReviewCopy 生产消费扩展**（已交付 2026-10-06：`scene_title` / `role_label`
+   接入响应展示名——LLM 值优先、字段级回退确定性路径，随回复轮/语音收口落库保证
+   reply / stream / voice / history / GET 各消费点单源一致；REVIEW_PROMPT 补展示名
+   子句并复跑 live 评测达标（6/6），见 docs/features/review_copy_consumption）
 3. **评测驱动提示词修正**（已交付 2026-10-06：coach/review live 评测首跑、4 项已记录
    疑似问题 + 3 项 live 新发现逐项分诊处置（meta 黑名单收窄 + 提示词接地行、follow_up
    区间、ReviewCopy 五字段截断 cap、mock 复读路径修复、judge 兜底、REVIEW_PROMPT 短例句
    子句），复跑达标，见 docs/features/eval_prompt_fixes）
 4. **可观测性（OTel / Langfuse）**（OTel 三层 span 已交付，见 docs/features/otel_engine_spans 与 [observability.md](observability.md)；Langfuse 对接为用户侧配置）：在现有 request id 与结构化日志基础上接入链路追踪与 LLM 调用观测
+
+> **v0.5 四候选全部完成**（2026-10-06）：①档案读取 API 与进度页、②LLM ReviewCopy
+> 生产消费、③评测驱动提示词修正、④OTel 引擎 span 均已交付，能力并入 §4 相应小节，
+> 逐批次记录见 docs/features/ 与 docs/versions/。

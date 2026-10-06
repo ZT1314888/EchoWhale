@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/eval_prompt_fixes/feature.md`
-- 本轮结论：PRD v0.5 候选③收口：coach/review live 评测首跑（教练硬规则五维 10/10、judge 8/10，复盘 length 5/6——office_b1_report next_try 83 字符超 80 触顶）+ 4 项已记录疑似问题与 3 项 live 新发现逐项分诊处置。修正：coach meta 黑名单收窄为图像锚定变体 + 系统提示词追加角色接地行（anchors=眼前场景、绝不提 images/photos/看不见）；follow_up 评测判定改区间 [1,2]（0 与 >=3 仍挂，契约语义不变）；ReviewCopy 五字段校验层截断 cap（REVIEW_COPY_MAX_CHARS 40/40/120/80/80 成为生产单一事实源，评测台改 import 消除双源，截断带 warning 观测日志，min_length=1 与 failure policy 不变）；MockChatProvider 双复读路径（空 recent_messages 首句回落、双空分支 Let's practice with {learner}）改中性短语 + 单测；评测 runner judge 调用纳入 try/except（judge_error 字段、final 回落 hard_pass——attempt-1 实发 ReadTimeout 炸整轮）；REVIEW_PROMPT next_try/next_step 契约追加短例句子句。复跑达标（阈值未放宽）：coach 五维 10/10、judge 9/10（final 0.9），复盘六维 6/6（同案 next_try 83→47）；哈希重绑 coach B1 a56c951d712e→fdcc04bc129e / B2 f0b4a2a60b3d→e03313e12ae5、review f1a6629e1263→7f82e8fef115；FEEDBACK_PROMPT 未触及。token 成本：首跑两台记账 19 次/7,637 tokens、复跑 16 次/7,146 tokens（judge 各 10 次无 sink 不入账）。API 契约与前端零改动。
-- 当前主要阻塞：无新增阻塞。judge 主观分歧（travel_b1_ticket 连续两轮被否、理由措辞不同）留观察，见 feature.md 遗留；ReviewCopy 生产消费（候选②）、eslint 批次待立项；Langfuse 云端账号配置为用户侧操作（文档已给步骤）。
-- 补充进展：pytest 596 passed / 9 skipped / 1 failed（失败为 test_telemetry_e2e 既有环境陷阱，MODEL_RUNTIME_MODE=mock 进程 pin 复跑 4 passed，等效 600 passed / 9 skipped，基线 589/9 净增 11 用例），覆盖率 89.46%（门禁 87，基线 89.02% 抬升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（与基线一致），覆盖率 86.44/78.04/84.57/86.44 高于阈值 76/74/78/76，git status 证明前端零改动。live 评测成本：llm_usage 表增量查询（见 feature.md）。
+- 最新归档：`docs/features/review_copy_consumption/feature.md`
+- 本轮结论：PRD v0.5 候选②收口（四候选全清）：ReviewCopy.scene_title / role_label 接入响应展示名——LLM 值优先（非空/≤REVIEW_COPY_MAX_CHARS/无原始 id 泄漏逐字段判定），无效按字段级回退确定性 SCENE_COPY 路径，不抛错（failure policy 不变）。单一接缝：Session 域模型与 sessions 表新增 llm_scene_title/llm_role_label 可空列（迁移 0014，可逆），save_reply_turn 携带 review_copy时写列、None 保留上一次有效值（不回闪），voice 收口并入快照；SessionResponse/HistoryEntryResponse/HistorySessionMetaResponse 三个 from_session 统一改走 review_builder.resolve_scene_title/resolve_role_label——reply/stream/voice/history/GET 各消费点单源一致。防护单源：identifier_variants 从评测台迁移 review_builder 公开导出，评测台改 import（泄漏正反例语义逐字节不变）；存原值读侧校验，回退留 scene_display_fallback warning。REVIEW_PROMPT 补展示名子句（自然中文/基于给定场景角色/role id 禁令/不编造画面外内容），哈希重绑 7f82e8fef115→4b476ab8542b，review live 评测复跑达标（structure 6/6 硬门 + 余四维 6/6，阈值未放宽；gym 非预设场景获'健身房/健身教练'贴切展示名）；coach/feedback 提示词未触及。档案场景频次展示维持确定性映射（聚合键稳定）。API 契约零改动（仅 from_session 方法体），前端零改动。live 成本：复跑 6 次/4,086 tokens（llm_usage 增量，复盘评测无 judge 全入账）。
+- 当前主要阻塞：无新增阻塞。resolver 泄漏检测 scope 与评测台一致（仅本会话 scene/role id，跨场景回声不防，见 feature.md 已知边界）；eslint 批次待立项；Langfuse 云端账号配置为用户侧操作（文档已给步骤）。
+- 补充进展：pytest 622 passed / 9 skipped（MODEL_RUNTIME_MODE=mock 进程 pin 含 telemetry e2e，基线 596/9 净增 26 用例），覆盖率 89.42%（门禁 87；同日干净基线实测 89.34%，同口径上升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（与基线一致），覆盖率 86.44/78.01/84.57/86.44 高于阈值 76/74/78/76，git status 证明前端零改动。
 
 ## 模块看板
 
@@ -83,6 +83,7 @@
 | OTel 可观测性三层 span | `otel_engine_spans` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 学员档案读取 API 与进度页 | `learner_profile_progress` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 评测驱动提示词修正 | `eval_prompt_fixes` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
+| LLM ReviewCopy 生产消费 | `review_copy_consumption` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 
 ## 测试门
 

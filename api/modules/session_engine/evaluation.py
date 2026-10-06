@@ -27,6 +27,7 @@ from api.modules.session_engine.review_builder import (
 )
 from api.modules.session_engine.review_builder import (
     ReviewCopy,
+    identifier_variants,
 )
 from api.modules.session_engine.review_summarizer import ReviewSummarizerAgent
 
@@ -271,12 +272,6 @@ def _copy_fields(copy: ReviewCopy) -> dict[str, str]:
 def _contains_cjk(text: str) -> bool:
     """检测是否至少含 1 个 CJK 统一表意文字（复盘文案必须中文）。"""
     return any("\u4e00" <= char <= "\u9fff" for char in text)
-
-
-def identifier_variants(identifier: str) -> set[str]:
-    """原始 id 的下划线↔空格变体集合（小写化）；空串剔除防子串恒真误判。"""
-    normalized = identifier.strip().lower()
-    return {normalized, normalized.replace("_", " "), normalized.replace(" ", "_")} - {""}
 
 
 def _scene_or_role_id_leaks(copy: ReviewCopy, scene: str, role: str) -> bool:

@@ -57,6 +57,9 @@ class FakeSessionRepository:
         self.reviews: dict[str, object] = {}
         self.events: dict[str, list[SessionEvent]] = {}
         self.voice_facts: dict[str, VoiceSessionFact] = {}
+        # 记录每轮透传的 LLM 复盘文案：断言 reply/编排层把 review_copy 原样
+        # 交给仓储（透传契约），None 表示 mock/降级路径。
+        self.saved_review_copies: dict[str, object] = {}
 
     async def save_session(self, session: Session) -> Session:
         self.sessions[session.id] = session
@@ -72,12 +75,18 @@ class FakeSessionRepository:
         return session
 
     async def save_reply_turn(
-        self, session_id: str, learner_message: Message, assistant_message: Message, review
+        self,
+        session_id: str,
+        learner_message: Message,
+        assistant_message: Message,
+        review,
+        review_copy=None,
     ) -> Session:
         session = self.sessions[session_id]
         session.messages.extend([learner_message, assistant_message])
         self.sessions[session_id] = session
         self.reviews[session_id] = review
+        self.saved_review_copies[session_id] = review_copy
         return session
 
     async def finalize_voice_session(
@@ -1406,6 +1415,164 @@ def test_complete_voice_session_live_mode_consumes_llm_review_copy(
     assert completed.review.next_try == "下一轮补一句杯型或口味细节。"
     assert completed.review.feedback.next_step.body == "把 useful_words 里的词带进下一轮回答。"
     assert summarizer.calls[0]["learner_message"] == "Could I get an iced latte, please?"
+
+
+def test_reply_mock_mode_passes_no_review_copy_to_repository(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """mock 模式 reply 透传给仓储的 review_copy 是 None：落库行为与现状一致。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_reply_fixture_session(fake_session_repository, "sess_mock_copy_none")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_mock_copy_none", learner_message="I would like a latte")
+        )
+    )
+
+    assert fake_session_repository.saved_review_copies["sess_mock_copy_none"] is None
+
+
+def test_reply_passes_review_copy_to_repository(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """live 模式 reply 把 LLM 复盘文案原样透传仓储（展示名落库的前提）。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _save_reply_fixture_session(fake_session_repository, "sess_copy_passthrough")
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.coach_engine = RecordingCoachEngine()
+    copy = ReviewCopy(
+        scene_title="咖啡馆柜台点单",
+        role_label="店员服务",
+        highlight="这轮你把点单需求说完整了。",
+        next_try="下一轮补一句杯型或口味细节。",
+        next_step="把 useful_words 里的词带进下一轮回答。",
+    )
+    agent.review_summarizer = FakeReviewSummarizer(copy)
+
+    asyncio.run(
+        agent.reply(
+            ReplyInput(session_id="sess_copy_passthrough", learner_message="I would like a latte")
+        )
+    )
+
+    assert fake_session_repository.saved_review_copies["sess_copy_passthrough"] is copy
+
+
+def test_complete_voice_session_persists_llm_display_names(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """语音收口把 LLM 展示名并入收口快照：响应与落库快照都带两字段。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    session = Session(
+        id="sess_voice_llm_names",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["latte"],
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    asyncio.run(fake_session_repository.save_session(session))
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    agent.review_summarizer = FakeReviewSummarizer(
+        ReviewCopy(
+            scene_title="咖啡店柜台点单",
+            role_label="店员服务",
+            highlight="这轮你把点单需求说完整了。",
+            next_try="下一轮补一句杯型或口味细节。",
+            next_step="把 useful_words 里的词带进下一轮回答。",
+        )
+    )
+
+    completed = asyncio.run(
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_llm_names",
+                conversation=[
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+    )
+
+    assert completed.session.llm_scene_title == "咖啡店柜台点单"
+    assert completed.session.llm_role_label == "店员服务"
+    stored = fake_session_repository.sessions["sess_voice_llm_names"]
+    assert stored.llm_scene_title == "咖啡店柜台点单"
+    assert stored.llm_role_label == "店员服务"
+
+
+def test_complete_voice_session_mock_mode_keeps_existing_display_names(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """mock 模式语音收口不触碰展示名：沿用读取时的既有值（不回闪）。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    session = Session(
+        id="sess_voice_llm_keep",
+        user_id="demo-user",
+        media_id="med_123",
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+        visual_anchors=["counter"],
+        vocab_candidates=["latte"],
+        llm_scene_title="咖啡店柜台点单",
+        llm_role_label="店员服务",
+        messages=[
+            Message(
+                id="msg_1",
+                role="assistant",
+                text="Hi there, what can I get started for you today?",
+            )
+        ],
+    )
+    asyncio.run(fake_session_repository.save_session(session))
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+
+    completed = asyncio.run(
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_llm_keep",
+                conversation=[
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+    )
+
+    assert completed.session.llm_scene_title == "咖啡店柜台点单"
+    assert completed.session.llm_role_label == "店员服务"
 
 
 def test_unknown_scene_labels_use_natural_language_fallback() -> None:

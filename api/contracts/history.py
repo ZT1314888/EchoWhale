@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from api.contracts.sessions import SessionReviewResponse
 from api.models.message_model import Message
 from api.models.session_model import Session
-from api.modules.session_engine.review_builder import get_role_label, get_scene_title
+from api.modules.session_engine.review_builder import resolve_role_label, resolve_scene_title
 
 
 class HistoryEntryResponse(BaseModel):
@@ -23,12 +23,15 @@ class HistoryEntryResponse(BaseModel):
 
     @classmethod
     def from_session(cls, session: Session, review: SessionReviewResponse) -> HistoryEntryResponse:
+        # 展示名与 SessionResponse 同一 resolver 语义（design 2.3）：此处此前用
+        # 单参 get_scene_title（不带 role 组合），统一为三参后行为收敛——未知
+        # 场景历史条目也展示"场景 · 角色 情景对话"组合与 LLM 值。
         return cls(
             id=session.id,
             practiced_at=_format_practiced_at(session.updated_at),
             status=_format_status(session),
-            scene_title=get_scene_title(session.scene),
-            role_label=get_role_label(session.scene, session.role),
+            scene_title=resolve_scene_title(session.scene, session.role, session.llm_scene_title),
+            role_label=resolve_role_label(session.scene, session.role, session.llm_role_label),
             preview=review.highlight,
             vocab_candidates=list(session.vocab_candidates),
             review_title=review.title,
@@ -58,8 +61,8 @@ class HistorySessionMetaResponse(BaseModel):
             media_id=session.media_id,
             scene=session.scene,
             role=session.role,
-            scene_title=get_scene_title(session.scene, session.role),
-            role_label=get_role_label(session.scene, session.role),
+            scene_title=resolve_scene_title(session.scene, session.role, session.llm_scene_title),
+            role_label=resolve_role_label(session.scene, session.role, session.llm_role_label),
             opener=session.opener,
             status=session.status.value,
             visual_anchors=list(session.visual_anchors),

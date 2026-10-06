@@ -366,6 +366,7 @@ class SessionEngineAgent:
             learner_message,
             assistant_message,
             review,
+            review_copy=review_copy,
         )
         # 档案更新在消息落库成功之后（独立事务）：写失败只降级不影响已提交的回复轮。
         await self._update_learner_profile_for_turn(session_head, feedback)
@@ -451,22 +452,27 @@ class SessionEngineAgent:
                 coach_chunks.append(delta)
                 yield ("delta", delta)
 
+            # 复盘收口只有一次：先有界等待任务产出，再同时喂给复盘构建与
+            # 落库——重复 collect 会二次等待已取消的任务，CancelledError
+            # （BaseException）会绕过降级处理器直接外抛。
+            review_copy = await self._collect_review_task(
+                session_head.id,
+                review_task,
+            )
             learner_message, assistant_message, review = _build_reply_turn(
                 session_head,
                 recent_messages,
                 learner_text=payload.learner_message,
                 coach_text="".join(coach_chunks),
                 feedback=feedback,
-                review_copy=await self._collect_review_task(
-                    session_head.id,
-                    review_task,
-                ),
+                review_copy=review_copy,
             )
             session = await self.session_repository.save_reply_turn(
                 session_head.id,
                 learner_message,
                 assistant_message,
                 review,
+                review_copy=review_copy,
             )
             # 档案更新在落库成功之后、session 事件下发之前：客户端拿到
             # session 事件时，本轮的档案累积已确定（增强分支失败只降级）。
@@ -699,6 +705,15 @@ class SessionEngineAgent:
             feedback,
             feedback_degraded=False,
         )
+        # LLM 展示名在复盘产出后并入收口快照（design 2.2）：review_copy=None
+        # （mock/复盘降级）时沿用 get_session 读出的既有列值，不回闪。
+        if review_copy is not None:
+            updated_session = updated_session.model_copy(
+                update={
+                    "llm_scene_title": review_copy.scene_title,
+                    "llm_role_label": review_copy.role_label,
+                }
+            )
         review = build_session_review(updated_session, feedback, copy=review_copy)
         existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(
             payload.session_id

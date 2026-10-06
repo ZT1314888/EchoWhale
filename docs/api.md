@@ -71,6 +71,8 @@
 
 示例场景枚举：`sample_scene_id ∈ {coffee, office, street}`（[schema.py](../api/modules/session_engine/schema.py) `SampleSceneId`）。
 
+会话与历史响应中的 `scene_title` / `role_label` 展示名：LLM 复盘产出可用时优先消费（ReviewCopy 字段，随回复轮落库），无效或缺失时按字段级回退确定性映射（预设文案或自然语言回退）；任何路径不输出原始 scene/role id。档案 `scenes` 的展示名键维持确定性映射（跨会话聚合需稳定键，§12）。
+
 ## 4. 统一信封与错误码
 
 所有业务接口返回信封 `ApiResponse{code, message, data}`（[responses.py](../api/common/responses.py)）：

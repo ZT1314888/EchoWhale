@@ -367,3 +367,35 @@ def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypat
 
     inspector = sa.inspect(engine)
     assert "llm_usage" not in inspector.get_table_names()
+
+
+def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypatch) -> None:
+    """迁移 0014（PRD v0.5 候选②）：up 到 head 后 sessions 带两展示名可空列，
+    旧行读出 NULL；downgrade 到 0013 后两列消失。"""
+    engine, config = _run_alembic(tmp_path, monkeypatch)
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("sessions")}
+    assert "llm_scene_title" in columns
+    assert "llm_role_label" in columns
+    with engine.begin() as conn:
+        # 旧行（迁移前既有会话）不受影响：新列保持 NULL，消费侧走确定性路径。
+        conn.execute(
+            sa.text(
+                "INSERT INTO sessions (id, user_id, scene, role, opener, status, "
+                "visual_anchors, vocab_candidates, labels, created_at, updated_at) "
+                "VALUES ('sess_old', 'demo-user', 'gym', 'coach', 'Hi', 'active', "
+                "'[]', '[]', '[]', '2026-10-06 00:00:00.000000', '2026-10-06 00:00:00.000000')"
+            )
+        )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa.text("SELECT llm_scene_title, llm_role_label FROM sessions WHERE id = 'sess_old'")
+        ).one()
+    assert row[0] is None
+    assert row[1] is None
+
+    command.downgrade(config, "20261002_0013")
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("sessions")}
+    assert "llm_scene_title" not in columns
+    assert "llm_role_label" not in columns

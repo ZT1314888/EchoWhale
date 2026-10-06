@@ -14,6 +14,7 @@ from api.db.session_db import SqlAlchemySessionRepository
 from api.models.message_model import Message
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
+from api.modules.session_engine.review_builder import ReviewCopy
 
 try:
     from api.models.review_model import (
@@ -630,3 +631,151 @@ async def test_sqlalchemy_session_repository_lists_recent_messages_in_order(tmp_
 
     with pytest.raises(NotFoundError):
         await repository.list_recent_messages("sess_missing", limit=2)
+
+
+def _build_review_for(session_id: str) -> SessionReview:
+    """构造最小可用的会话复盘对象，供展示名落库测试复用。"""
+    assert SessionReview is not None
+    assert PracticeFeedback is not None
+    assert FeedbackMetric is not None
+    assert UsefulWordsMetric is not None
+    return SessionReview(
+        session_id=session_id,
+        title="本轮回响",
+        highlight="你已经说清楚主要需求。",
+        next_try="下一轮再补一条细节。",
+        feedback=PracticeFeedback(
+            grammar=FeedbackMetric(title="Grammar", body="ok"),
+            more_natural=FeedbackMetric(title="More Natural", body="ok"),
+            useful_words=UsefulWordsMetric(title="Useful Words", words=["ok"], body="ok"),
+            next_step=FeedbackMetric(title="Next Step", body="ok"),
+        ),
+    )
+
+
+def _build_display_copy() -> ReviewCopy:
+    """构造一份带展示名字段的复盘文案（validator 已 strip/截断后的形态）。"""
+    return ReviewCopy(
+        scene_title="健身房力量训练",
+        role_label="教练指导",
+        highlight="这轮你把训练组数说清楚了。",
+        next_try="下一轮补一句组数或重量细节。",
+        next_step="把新学的词带进下一轮回答。",
+    )
+
+
+@pytest.mark.anyio
+async def test_save_reply_turn_persists_llm_display_names(tmp_path) -> None:
+    """save_reply_turn 携带 review_copy 时写两列：get_session / head 往返一致。"""
+    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-names.db'}")
+    await create_all_tables_async(engine)
+    repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
+
+    session = Session(
+        id="sess_llm_names",
+        user_id="demo-user",
+        media_id=None,
+        scene="gym",
+        role="fitness coach",
+        opener="Hi there",
+        messages=[Message(id="msg_1", role="assistant", text="Hi there")],
+    )
+    await repository.save_session(session)
+
+    await repository.save_reply_turn(
+        "sess_llm_names",
+        Message(id="msg_2", role="user", text="I train legs today"),
+        Message(id="msg_3", role="assistant", text="Nice, keep going."),
+        _build_review_for("sess_llm_names"),
+        review_copy=_build_display_copy(),
+    )
+
+    loaded = await repository.get_session("sess_llm_names")
+    head = await repository.get_session_head("sess_llm_names")
+    assert loaded.llm_scene_title == "健身房力量训练"
+    assert loaded.llm_role_label == "教练指导"
+    assert head.llm_scene_title == "健身房力量训练"
+    assert head.llm_role_label == "教练指导"
+
+
+@pytest.mark.anyio
+async def test_save_reply_turn_without_review_copy_keeps_existing_display_names(tmp_path) -> None:
+    """review_copy=None（mock/复盘降级）不触碰两列：同轮降级保留上一次有效值。"""
+    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-keep.db'}")
+    await create_all_tables_async(engine)
+    repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
+
+    # 先造一行带 LLM 展示名的会话，模拟此前某轮已写入有效值。
+    session = Session(
+        id="sess_llm_keep",
+        user_id="demo-user",
+        media_id=None,
+        scene="gym",
+        role="fitness coach",
+        opener="Hi there",
+        llm_scene_title="健身房力量训练",
+        llm_role_label="教练指导",
+        messages=[Message(id="msg_1", role="assistant", text="Hi there")],
+    )
+    await repository.save_session(session)
+
+    await repository.save_reply_turn(
+        "sess_llm_keep",
+        Message(id="msg_2", role="user", text="I train legs today"),
+        Message(id="msg_3", role="assistant", text="Nice, keep going."),
+        _build_review_for("sess_llm_keep"),
+    )
+
+    loaded = await repository.get_session("sess_llm_keep")
+    assert loaded.llm_scene_title == "健身房力量训练"
+    assert loaded.llm_role_label == "教练指导"
+
+
+@pytest.mark.anyio
+async def test_finalize_voice_session_persists_llm_display_names(tmp_path) -> None:
+    """语音收口快照携带展示名时，_upsert_session_record 把两列一并持久化。"""
+    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-voice.db'}")
+    await create_all_tables_async(engine)
+    repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
+
+    original = Session(
+        id="sess_llm_voice",
+        user_id="demo-user",
+        media_id=None,
+        scene="gym",
+        role="fitness coach",
+        opener="Hi there",
+        messages=[Message(id="msg_1", role="assistant", text="Hi there")],
+    )
+    await repository.save_session(original)
+
+    finalized_session = original.model_copy(
+        update={
+            "messages": [
+                *original.messages,
+                Message(id="msg_2", role="user", text="I train legs today"),
+            ],
+            "llm_scene_title": "健身房力量训练",
+            "llm_role_label": "教练指导",
+        }
+    )
+    review = _build_review_for("sess_llm_voice")
+    voice_fact = VoiceSessionFact(
+        session_id="sess_llm_voice",
+        status="completed",
+        termination_reason="user_ended",
+        transcript_turn_count=2,
+        completed_at=review.updated_at,
+        updated_at=review.updated_at,
+    )
+    await repository.finalize_voice_session(
+        session=finalized_session,
+        new_messages=[Message(id="msg_2", role="user", text="I train legs today")],
+        review=review,
+        voice_fact=voice_fact,
+        events=[],
+    )
+
+    loaded = await repository.get_session("sess_llm_voice")
+    assert loaded.llm_scene_title == "健身房力量训练"
+    assert loaded.llm_role_label == "教练指导"

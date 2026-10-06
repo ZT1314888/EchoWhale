@@ -20,7 +20,7 @@ from api.modules.session_engine.schema import ReplyInput
 class RecordingSessionRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
-        self.saved_turns: list[tuple[str, Message, Message, object]] = []
+        self.saved_turns: list[tuple[str, Message, Message, object, object]] = []
 
     async def get_session_head(self, session_id: str) -> Session:
         return self.session
@@ -28,8 +28,12 @@ class RecordingSessionRepository:
     async def list_recent_messages(self, session_id: str, *, limit: int) -> list[Message]:
         return list(self.session.messages[-limit:])
 
-    async def save_reply_turn(self, session_id, learner_message, assistant_message, review):
-        self.saved_turns.append((session_id, learner_message, assistant_message, review))
+    async def save_reply_turn(
+        self, session_id, learner_message, assistant_message, review, review_copy=None
+    ):
+        self.saved_turns.append(
+            (session_id, learner_message, assistant_message, review, review_copy)
+        )
         self.session.messages.extend([learner_message, assistant_message])
         return self.session
 
@@ -294,16 +298,14 @@ async def test_stream_reply_builds_review_from_llm_copy(monkeypatch) -> None:
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
-    summarizer = FakeReviewSummarizer(
-        ReviewCopy(
-            scene_title="咖啡店柜台点单",
-            role_label="店员对话",
-            highlight="这轮你把主需求说完整了。",
-            next_try="下一轮补一句杯型或口味细节。",
-            next_step="把 useful_words 里的词带进下一轮回答。",
-        )
+    copy = ReviewCopy(
+        scene_title="咖啡店柜台点单",
+        role_label="店员对话",
+        highlight="这轮你把主需求说完整了。",
+        next_try="下一轮补一句杯型或口味细节。",
+        next_step="把 useful_words 里的词带进下一轮回答。",
     )
-    agent.review_summarizer = summarizer
+    agent.review_summarizer = summarizer = FakeReviewSummarizer(copy)
 
     events = [
         event
@@ -318,6 +320,8 @@ async def test_stream_reply_builds_review_from_llm_copy(monkeypatch) -> None:
     assert review.next_try == "下一轮补一句杯型或口味细节。"
     assert review.feedback.next_step.body == "把 useful_words 里的词带进下一轮回答。"
     assert summarizer.calls[0]["scene"] == "coffee_shop"
+    # LLM 复盘文案原样透传仓储（展示名落库的前提）：与 reply 路径同一契约。
+    assert repository.saved_turns[0][4] is copy
 
 
 @pytest.mark.anyio
@@ -342,6 +346,8 @@ async def test_stream_reply_degrades_review_when_summarizer_fails(monkeypatch, c
     assert review.highlight.startswith("你已经围绕“咖啡店柜台点单”")
     assert "session_review_copy_failed" in caplog.text
     assert "degraded=true" in caplog.text
+    # 降级轮透传 None：仓储不触碰展示名列，保留上一次有效值（不回闪）。
+    assert repository.saved_turns[0][4] is None
 
 
 @pytest.mark.anyio

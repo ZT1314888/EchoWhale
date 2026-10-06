@@ -49,6 +49,7 @@ class InMemorySessionRepository:
         learner_message: Message,
         assistant_message: Message,
         review: Any,
+        review_copy: Any = None,
     ) -> Session:
         # 顺带探测落库时 current span 是否在记录（关闭态锁定用）。
         self.span_recordings.append(trace.get_current_span().is_recording())

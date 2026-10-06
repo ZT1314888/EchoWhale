@@ -17,6 +17,10 @@ class Session(BaseModel):
     visual_anchors: list[str] = Field(default_factory=list)
     vocab_candidates: list[str] = Field(default_factory=list)
     labels: list[str] = Field(default_factory=list)
+    # LLM 复盘展示名（PRD v0.5 候选②）：可空，默认 None——mock 模式/复盘降级/
+    # 历史旧行消费时走确定性展示名路径，全部既有构造点零改动。
+    llm_scene_title: str | None = None
+    llm_role_label: str | None = None
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

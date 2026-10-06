@@ -54,6 +54,30 @@ REVIEW_COPY_MAX_CHARS: dict[str, int] = {
 }
 
 
+def identifier_variants(identifier: str) -> set[str]:
+    """原始 id 的下划线↔空格变体集合（小写化）；空串剔除防子串恒真误判。
+
+    单一事实源：评测台 session_engine/evaluation.py 的泄漏检测从本函数 import，
+    生产消费侧（resolve_scene_title / resolve_role_label）与评测台因此共享同一
+    变体归集规则，杜绝"评测判干净、生产判泄漏"的双源漂移。
+    """
+    normalized = identifier.strip().lower()
+    return {normalized, normalized.replace("_", " "), normalized.replace(" ", "_")} - {""}
+
+
+def contains_identifier_variant(value: str, *identifiers: str) -> bool:
+    """值的小写形态包含任一原始 id 变体即判定泄漏（大小写不敏感子串检测）。
+
+    供展示名逐字段防护检测使用：任一命中即说明该字段不能直接当展示名消费。
+    """
+    normalized = value.lower()
+    return any(
+        variant in normalized
+        for identifier in identifiers
+        for variant in identifier_variants(identifier)
+    )
+
+
 class ReviewCopy(BaseModel):
     """LLM 复盘文案契约（审计 Finding 20）。
 
@@ -183,6 +207,76 @@ def get_role_label(scene: str, role: str) -> str:
     if preset is not None:
         return preset
     return f"角色 · {_humanize_identifier(role)}"
+
+
+def resolve_scene_title(scene: str, role: str | None, llm_title: str | None) -> str:
+    """场景展示名解析：LLM 复盘值优先，无效按字段级回退确定性路径。
+
+    优先级矩阵（design 2.1，逐字段独立判定）：
+    - None / 空白 → 确定性路径（已知场景预设文案，未知场景 humanize 组合回退）；
+    - 超长（> cap）→ 确定性回退；
+    - 含原始 scene/role id 变体 → 确定性回退 + scene_display_fallback warning；
+    - 有效（非空、≤cap、无泄漏）→ 消费 LLM 值（开放集场景获得贴切展示名的核心收益）。
+
+    本函数只判定 scene_title 字段，role_label 由 resolve_role_label 独立判定，
+    两个字段互不牵连：scene_title 有效而 role_label 泄漏时各自走各自分支。
+    """
+    identifiers = (scene, role) if role else (scene,)
+    return _resolve_display_value(
+        "scene_title",
+        llm_title,
+        get_scene_title(scene, role),
+        identifiers,
+    )
+
+
+def resolve_role_label(scene: str, role: str, llm_label: str | None) -> str:
+    """角色标签解析：语义与 resolve_scene_title 对称，只判定 role_label 字段。"""
+    return _resolve_display_value(
+        "role_label",
+        llm_label,
+        get_role_label(scene, role),
+        (scene, role),
+    )
+
+
+def _resolve_display_value(
+    field: str,
+    llm_value: str | None,
+    fallback: str,
+    identifiers: tuple[str, ...],
+) -> str:
+    """LLM 展示名的字段级有效性判定与回退（两个 resolver 共用单一实现）。
+
+    有效性判定：非 None、strip 后非空、原值长度在 REVIEW_COPY_MAX_CHARS 内
+    （对原值而非 strip 后判定——ReviewCopy validator 已在生产写侧截断，正常值
+    天然达标，超长分支只拦截绕过校验器入库的历史脏值）、strip 后值不含原始
+    scene/role id 变体。有效返回 strip 后的 LLM 值；无效回退确定性路径。
+
+    为什么不抛错：展示名是纯展示属性，解析失败回退可信基线（预设文案或
+    humanize 组合）即可——任何响应路径都不得因展示名问题整轮失败，也不得
+    输出原始 scene id（审计 Finding 20 不变量）。None 静默走确定性路径
+    （mock 模式/复盘降级/历史旧行的常态，不刷日志），仅当 LLM 值存在但无效
+    时留 scene_display_fallback warning 供观测。
+    """
+    if llm_value is None:
+        return fallback
+    stripped = llm_value.strip()
+    if not stripped:
+        reason = "empty"
+    elif len(llm_value) > REVIEW_COPY_MAX_CHARS[field]:
+        reason = "too_long"
+    elif contains_identifier_variant(stripped, *identifiers):
+        reason = "raw_id_leak"
+    else:
+        return stripped
+    logger.warning(
+        "scene_display_fallback field=%s reason=%s identifiers=%s",
+        field,
+        reason,
+        ",".join(identifiers),
+    )
+    return fallback
 
 
 def get_next_try(scene: str) -> str:

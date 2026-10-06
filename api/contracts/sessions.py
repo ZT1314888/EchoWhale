@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
-from api.modules.session_engine.review_builder import get_role_label, get_scene_title
+from api.modules.session_engine.review_builder import resolve_role_label, resolve_scene_title
 from api.modules.session_engine.schema import (
     LearnerMessagePayload,
     SampleSceneId,
@@ -80,13 +80,15 @@ class SessionResponse(BaseModel):
 
     @classmethod
     def from_session(cls, session: Session) -> SessionResponse:
+        # 展示名统一走 resolver（LLM 复盘值优先，无效字段级回退确定性路径）：
+        # 全部响应消费点共用同一优先级，no-raw-id 不变量在唯一出口成立。
         return cls(
             session_id=session.id,
             media_id=session.media_id,
             scene=session.scene,
             role=session.role,
-            scene_title=get_scene_title(session.scene, session.role),
-            role_label=get_role_label(session.scene, session.role),
+            scene_title=resolve_scene_title(session.scene, session.role, session.llm_scene_title),
+            role_label=resolve_role_label(session.scene, session.role, session.llm_role_label),
             opener=session.opener,
             status=session.status.value,
             visual_anchors=list(session.visual_anchors),
