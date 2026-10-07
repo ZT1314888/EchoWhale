@@ -537,10 +537,19 @@ class FakeVoiceSettingsBuilder:
     def __init__(self) -> None:
         self.calls: list[Session] = []
         self.contexts: list[str | None] = []
+        # think 代理 endpoint 由编排层按门控传入（None = 未配置代理），记录
+        # 供签发接线用例断言；None 时不写键，与真实 builder 语义一致。
+        self.endpoints: list[dict[str, object] | None] = []
 
-    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]:
+    def build(
+        self,
+        session: Session,
+        learner_context: str | None = None,
+        think_proxy_endpoint: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         self.calls.append(session)
         self.contexts.append(learner_context)
+        self.endpoints.append(think_proxy_endpoint)
         return {
             "type": "Settings",
             "agent": {
@@ -1971,3 +1980,173 @@ def test_complete_voice_session_persists_learner_profile(
     assert profile.scene_counts == {"coffee_shop": 1}
     assert profile.practiced_turn_count == 1
     assert profile.cefr_estimate == "B2"
+
+
+class FakeThinkTokenIssuer:
+    """think 代理令牌签发替身：确定性令牌串，记录 (sid, generation) 调用。"""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, int]] = []
+
+    def issue(self, session_id: str, *, generation: int = 0) -> str:
+        self.calls.append((session_id, generation))
+        return f"think-token-{generation}"
+
+
+def _save_voice_session(session_id: str, repository: FakeSessionRepository) -> None:
+    asyncio.run(
+        repository.save_session(
+            Session(
+                id=session_id,
+                user_id="demo-user",
+                media_id="med_123",
+                scene="coffee_shop",
+                role="barista",
+                opener="Hi there, what can I get started for you today?",
+                visual_anchors=["counter", "menu board"],
+                vocab_candidates=["latte", "menu"],
+                messages=[
+                    Message(
+                        id="msg_1",
+                        role="assistant",
+                        text="Hi there, what can I get started for you today?",
+                    )
+                ],
+            )
+        )
+    )
+
+
+def test_bootstrap_voice_session_issues_think_token_with_generation(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """配置代理地址时：按代数签发 think 令牌并内嵌 endpoint，fact 落代数 1。"""
+    # 显式 pin 配置态：本地 .env 的 ambient 值不得影响用例方向。
+    monkeypatch.setattr(
+        settings, "deepgram_agent_think_proxy_public_base_url", "https://proxy.example.com"
+    )
+    _save_voice_session("sess_voice_gen", fake_session_repository)
+    settings_builder = FakeVoiceSettingsBuilder()
+    think_issuer = FakeThinkTokenIssuer()
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.voice_token_issuer = FakeVoiceTokenIssuer()
+    agent.voice_settings_builder = settings_builder
+    agent.voice_think_token_issuer = think_issuer
+
+    asyncio.run(agent.bootstrap_voice_session("sess_voice_gen"))
+
+    assert think_issuer.calls == [("sess_voice_gen", 1)]
+    assert settings_builder.endpoints == [
+        {
+            "url": "https://proxy.example.com/api/v1/deepgram/think/chat/completions",
+            "headers": {"Authorization": "Bearer think-token-1"},
+        }
+    ]
+    saved_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice_gen")
+    )
+    assert saved_fact is not None
+    assert saved_fact.status == "active"
+    assert saved_fact.token_generation == 1
+
+
+def test_bootstrap_voice_session_increments_generation_on_rebootstrap(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """重复 bootstrap：代数递增，新代数令牌替换旧代数（旧令牌由代理侧拒绝）。"""
+    monkeypatch.setattr(
+        settings, "deepgram_agent_think_proxy_public_base_url", "https://proxy.example.com"
+    )
+    _save_voice_session("sess_voice_regen", fake_session_repository)
+    settings_builder = FakeVoiceSettingsBuilder()
+    think_issuer = FakeThinkTokenIssuer()
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.voice_token_issuer = FakeVoiceTokenIssuer()
+    agent.voice_settings_builder = settings_builder
+    agent.voice_think_token_issuer = think_issuer
+
+    asyncio.run(agent.bootstrap_voice_session("sess_voice_regen"))
+    asyncio.run(agent.bootstrap_voice_session("sess_voice_regen"))
+
+    assert think_issuer.calls == [
+        ("sess_voice_regen", 1),
+        ("sess_voice_regen", 2),
+    ]
+    saved_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice_regen")
+    )
+    assert saved_fact is not None
+    assert saved_fact.token_generation == 2
+
+
+def test_bootstrap_voice_session_skips_think_token_without_proxy_url(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """未配置代理地址（本地开发/托管 open_ai 部署）：不签发不内嵌，行为与历史版本一致。"""
+    monkeypatch.setattr(settings, "deepgram_agent_think_proxy_public_base_url", "")
+    _save_voice_session("sess_voice_noproxy", fake_session_repository)
+    settings_builder = FakeVoiceSettingsBuilder()
+    think_issuer = FakeThinkTokenIssuer()
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.voice_token_issuer = FakeVoiceTokenIssuer()
+    agent.voice_settings_builder = settings_builder
+    agent.voice_think_token_issuer = think_issuer
+
+    asyncio.run(agent.bootstrap_voice_session("sess_voice_noproxy"))
+
+    assert think_issuer.calls == []
+    assert settings_builder.endpoints == [None]
+    # 代数照常递增：代理是可选路径，计数语义不随门控漂移。
+    saved_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice_noproxy")
+    )
+    assert saved_fact is not None
+    assert saved_fact.token_generation == 1
+
+
+def test_complete_voice_session_preserves_token_generation(
+    fake_session_repository: FakeSessionRepository,
+    monkeypatch,
+) -> None:
+    """收口只置状态不清代数：token_generation 必须从既有 fact 回带。"""
+    monkeypatch.setattr(settings, "model_runtime_mode", "mock")
+    _save_voice_session("sess_voice_keep_gen", fake_session_repository)
+    agent = SessionEngineAgent(session_repository=fake_session_repository)
+    agent.feedback_engine = FakeFeedbackEngine()
+    asyncio.run(
+        fake_session_repository.save_voice_session_fact(
+            VoiceSessionFact(
+                session_id="sess_voice_keep_gen",
+                status="active",
+                transcript_turn_count=1,
+                token_generation=5,
+            )
+        )
+    )
+
+    asyncio.run(
+        agent.complete_voice_session(
+            VoiceCompleteInput(
+                session_id="sess_voice_keep_gen",
+                conversation=[
+                    VoiceConversationTurn(
+                        role="assistant", content="Hi there, what can I get started for you today?"
+                    ),
+                    VoiceConversationTurn(
+                        role="user", content="Could I get an iced latte, please?"
+                    ),
+                ],
+                termination_reason="user_ended",
+            )
+        )
+    )
+
+    saved_fact = asyncio.run(
+        fake_session_repository.get_latest_voice_session_fact("sess_voice_keep_gen")
+    )
+    assert saved_fact is not None
+    assert saved_fact.status == "completed"
+    assert saved_fact.token_generation == 5

@@ -26,6 +26,7 @@ from api.common.request_context import (
 from api.core.config import settings
 from api.db.session_db import SessionRepository, build_session_repository
 from api.integrations.deepgram import (
+    DEEPGRAM_THINK_PROXY_GENERATION_CLAIM,
     DeepgramThinkProxyTokenCodec,
     build_deepgram_think_upstream_url,
     validate_deepgram_think_upstream_settings,
@@ -79,6 +80,7 @@ async def proxy_deepgram_think_chat_completions(
             error_type="authentication_error",
         )
     session_id = _extract_session_id(claims)
+    generation = _extract_generation(claims)
 
     try:
         validate_deepgram_think_upstream_settings()
@@ -135,6 +137,39 @@ async def proxy_deepgram_think_chat_completions(
         session_head = await session_repository.get_session_head(session_id)
     except NotFoundError:
         logger.warning("Deepgram think proxy rejected unknown session id")
+        return _error_response(
+            status_code=401,
+            message="Proxy authorization required",
+            error_type="authentication_error",
+        )
+
+    # 生命周期绑定（审计 F12 Better fix）：令牌必须命中当前活跃的语音会话
+    # 代数——fact 不存在（从未 bootstrap）、已收口（voice/complete）、代数落后
+    # （re-bootstrap 过）或令牌缺 gen claim（部署前签发的旧令牌）一律 401。
+    # 拒绝原因只进服务端日志，响应与既有 401 同形，防枚举。fact 是 PK 点查，
+    # 与上一条 sid 存在性同级别；不合并 JOIN——head 承担归属接缝，fact 承担
+    # 生命周期，各自复用既有仓储方法。
+    voice_fact = await session_repository.get_latest_voice_session_fact(session_id)
+    if (
+        generation is None
+        or voice_fact is None
+        or voice_fact.status != "active"
+        or voice_fact.token_generation != generation
+    ):
+        reason = (
+            "missing_generation_claim"
+            if generation is None
+            else (
+                "missing_fact"
+                if voice_fact is None
+                else "inactive_fact" if voice_fact.status != "active" else "generation_mismatch"
+            )
+        )
+        logger.warning(
+            "Deepgram think proxy rejected stale token for session=%s reason=%s",
+            session_id,
+            reason,
+        )
         return _error_response(
             status_code=401,
             message="Proxy authorization required",
@@ -281,6 +316,17 @@ def _error_response(*, status_code: int, message: str, error_type: str) -> JSONR
 def _extract_session_id(claims: dict[str, Any]) -> str:
     session_id = claims.get("sid")
     return session_id if isinstance(session_id, str) and session_id else "unknown"
+
+
+def _extract_generation(claims: dict[str, Any]) -> int | None:
+    """读取令牌里的代数 claim；缺失或类型不对返回 None（校验链按不匹配拒绝）。
+
+    bool 是 int 的子类，必须显式排除，否则 True 会顶替代数 1 通过校验。
+    """
+    value = claims.get(DEEPGRAM_THINK_PROXY_GENERATION_CLAIM)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 def _extract_error_type(payload: Any) -> str:

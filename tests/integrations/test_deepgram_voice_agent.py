@@ -210,3 +210,61 @@ def test_settings_builder_passes_learner_context_into_think_prompt(
     )
 
     assert "Learner profile: estimated CEFR B1." in payload["agent"]["think"]["prompt"]
+
+
+def test_think_proxy_codec_carries_generation_claim() -> None:
+    """issue 显式代数时令牌写入 gen claim，decode 回读 sid + gen 供代理校验。"""
+    from api.integrations.deepgram.voice_agent import (
+        DEEPGRAM_THINK_PROXY_GENERATION_CLAIM,
+        DeepgramThinkProxyTokenCodec,
+    )
+
+    token = DeepgramThinkProxyTokenCodec().issue("sess_gen", generation=3)
+    claims = DeepgramThinkProxyTokenCodec().decode(token)
+
+    assert claims["sid"] == "sess_gen"
+    assert claims[DEEPGRAM_THINK_PROXY_GENERATION_CLAIM] == 3
+
+
+def test_think_proxy_codec_defaults_generation_to_zero() -> None:
+    """默认代数 0：既有铸令牌调用点（未显式传代数）语义不变、令牌仍带 claim。"""
+    from api.integrations.deepgram.voice_agent import (
+        DEEPGRAM_THINK_PROXY_GENERATION_CLAIM,
+        DeepgramThinkProxyTokenCodec,
+    )
+
+    token = DeepgramThinkProxyTokenCodec().issue("sess_default")
+    claims = DeepgramThinkProxyTokenCodec().decode(token)
+
+    assert claims[DEEPGRAM_THINK_PROXY_GENERATION_CLAIM] == 0
+
+
+def test_settings_builder_embeds_think_proxy_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """配置代理时编排层传入的 endpoint 原样落在 agent.think.endpoint（BYO LLM 形态）。"""
+    from api.integrations.deepgram.voice_agent import DeepgramThinkProxyTokenCodec
+
+    monkeypatch.setattr(
+        "api.integrations.deepgram.voice_agent.settings.deepgram_agent_think_model",
+        "gpt-4o-mini",
+    )
+    session = Session(
+        id="sess_voice",
+        user_id="user:user_123",
+        media_id=None,
+        scene="coffee_shop",
+        role="barista",
+        opener="Hi there, what can I get started for you today?",
+    )
+    think_token = DeepgramThinkProxyTokenCodec().issue("sess_voice", generation=1)
+    endpoint = {
+        "url": "https://api.example.com/api/v1/deepgram/think/chat/completions",
+        "headers": {"Authorization": f"Bearer {think_token}"},
+    }
+
+    payload = DeepgramSettingsBuilder().build(session, think_proxy_endpoint=endpoint)
+
+    assert payload["agent"]["think"]["endpoint"] == endpoint
+    assert payload["agent"]["think"]["provider"] == {
+        "type": "open_ai",
+        "model": "gpt-4o-mini",
+    }

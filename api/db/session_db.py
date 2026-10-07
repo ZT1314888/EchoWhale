@@ -191,6 +191,10 @@ class VoiceSessionFactRecord(Base):
     status: Mapped[str] = mapped_column(String(32), index=True)
     termination_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     transcript_turn_count: Mapped[int] = mapped_column(Integer, default=0)
+    # 与迁移 0016 对应：server_default 让迁移前的旧行落 0（"无活跃绑定"语义）。
+    token_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     client_diagnostics: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -631,6 +635,7 @@ class SqlAlchemySessionRepository:
                     status=fact.status,
                     termination_reason=fact.termination_reason,
                     transcript_turn_count=fact.transcript_turn_count,
+                    token_generation=fact.token_generation,
                     client_diagnostics=dict(fact.client_diagnostics),
                     started_at=fact.started_at,
                     completed_at=fact.completed_at,
@@ -642,6 +647,7 @@ class SqlAlchemySessionRepository:
         record.status = fact.status
         record.termination_reason = fact.termination_reason
         record.transcript_turn_count = fact.transcript_turn_count
+        record.token_generation = fact.token_generation
         record.client_diagnostics = dict(fact.client_diagnostics)
         record.started_at = fact.started_at
         record.completed_at = fact.completed_at
@@ -773,6 +779,7 @@ def _to_voice_session_fact(record: VoiceSessionFactRecord) -> VoiceSessionFact:
         status=record.status,
         termination_reason=record.termination_reason,
         transcript_turn_count=record.transcript_turn_count,
+        token_generation=record.token_generation,
         client_diagnostics=dict(record.client_diagnostics or {}),
         started_at=record.started_at,
         completed_at=record.completed_at,

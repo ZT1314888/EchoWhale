@@ -15,24 +15,39 @@ from api.models.session_model import Session
 logger = logging.getLogger(__name__)
 DEEPGRAM_THINK_PROXY_PATH = "/api/v1/deepgram/think/chat/completions"
 DEEPGRAM_THINK_PROXY_TOKEN_TYPE = "deepgram_think_proxy"
+# 令牌里的代数 claim 名：与 sid 同款短命名风格。代数绑定语音会话事实的
+# token_generation 计数，会话结束/重开即令旧令牌失效（审计 F12 Better fix）。
+DEEPGRAM_THINK_PROXY_GENERATION_CLAIM = "gen"
 
 
 class VoiceTokenIssuer(Protocol):
     def issue_token(self, ttl_seconds: int) -> tuple[str, float]: ...
 
 
+class ThinkProxyTokenIssuer(Protocol):
+    def issue(self, session_id: str, *, generation: int = 0) -> str: ...
+
+
 class VoiceSettingsBuilder(Protocol):
-    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]: ...
+    def build(
+        self,
+        session: Session,
+        learner_context: str | None = None,
+        think_proxy_endpoint: dict[str, object] | None = None,
+    ) -> dict[str, object]: ...
 
 
 class DeepgramThinkProxyTokenCodec:
-    def issue(self, session_id: str) -> str:
+    def issue(self, session_id: str, *, generation: int = 0) -> str:
         return create_service_token(
             subject="deepgram-think-proxy",
             token_type=DEEPGRAM_THINK_PROXY_TOKEN_TYPE,
             secret=settings.auth_jwt_secret,
             expires_in_seconds=settings.deepgram_agent_think_token_ttl_seconds,
-            extra_claims={"sid": session_id},
+            extra_claims={
+                "sid": session_id,
+                DEEPGRAM_THINK_PROXY_GENERATION_CLAIM: generation,
+            },
         )
 
     def decode(self, token: str) -> dict[str, object]:
@@ -62,8 +77,25 @@ class DeepgramTokenIssuer:
 
 
 class DeepgramSettingsBuilder:
-    def build(self, session: Session, learner_context: str | None = None) -> dict[str, object]:
+    def build(
+        self,
+        session: Session,
+        learner_context: str | None = None,
+        think_proxy_endpoint: dict[str, object] | None = None,
+    ) -> dict[str, object]:
         validate_deepgram_think_settings()
+        think: dict[str, object] = {
+            "provider": {
+                "type": "open_ai",
+                "model": settings.deepgram_agent_think_model,
+            },
+            "prompt": build_voice_agent_prompt(session, learner_context),
+        }
+        # BYO LLM 自建代理形态（Deepgram agent.think.endpoint：出现时 url +
+        # headers 必填）。endpoint 由编排层按"是否配置代理地址"的门控传入；
+        # 未传入时不写键，保持原生 open_ai provider 形态逐字节不变。
+        if think_proxy_endpoint is not None:
+            think["endpoint"] = think_proxy_endpoint
         return {
             "type": "Settings",
             "audio": {
@@ -82,13 +114,7 @@ class DeepgramSettingsBuilder:
                 "listen": {
                     "provider": build_listen_provider_settings(),
                 },
-                "think": {
-                    "provider": {
-                        "type": "open_ai",
-                        "model": settings.deepgram_agent_think_model,
-                    },
-                    "prompt": build_voice_agent_prompt(session, learner_context),
-                },
+                "think": think,
                 "speak": {
                     "provider": {
                         "type": "deepgram",

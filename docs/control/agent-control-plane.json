@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/ci_pg_parity_and_eslint_gate/feature.md",
-    "summary": "交付门禁批次收口：R1 CI 新增 backend-postgres job（postgres:16 service + pg_isready；uv sync --frozen → alembic upgrade head 在真实 PG 验证迁移链（核心价值）→ 全量 pytest --cov=api 同 87 门禁），方言机制落 tests/support/dialect.py（ECHOWHALE_TEST_DATABASE_URL 显式方言开关、绝不取 settings.database_url 以免本地测试写 dev 库；enforce_foreign_keys SQLite PRAGMA/PG no-op；Windows psycopg async 切 Selector loop），FK 顺序三用例方言化改写（PG 真实 FK 强制验证同一意图，ID 加 per-test 随机后缀防共享库残留），4 个迁移 down/up 可逆性用例 sqlite_only 显式 skip 且理由成文（PG 口径由 upgrade head 步骤承担）；R2 前端 eslint 10 flat config（ts recommended + react-hooks v7 + react-refresh，禁止全局关规则、豁免逐条附理由），npm run lint + CI frontend Lint 步骤前置，存量 9 违规清零：UserMenu 条件 useEffect 真 bug 修复（hook 提前到早退前）、AuthProviders 回调链 useCallback 稳定化补真实依赖、HistoryPage/HistoryDetailPanel 改渲染期重置模式、HomeUploadPage 删冗余 setState（初始化器覆盖）、voice hook 卸载清理与 StartupLoadingPage 外部系统同步按条豁免附理由；R3 SampleScene.liveHint 零消费清理（数据 3 处 + 类型 1 处，grep 零残留）。",
-    "blockers": "无新增阻塞。遗留：registry 推送待外部凭证、think 一次性票据独立立项、judge 主观分歧留观察、PG 口径迁移 downgrade 与全仓储 PG 参数化留后续批次。",
-    "extra_progress": "本地等价验证（Docker 未运行，用本机真实 PG 独立库 echowhale_ci，验证后已清理）：alembic 全链 0001→0015 通过（head=20261006_0015，14 表建成）；PG 口径 631 passed / 13 skipped（13=9 既有+4 sqlite_only）、覆盖率 90.01%，3 个 FK 用例真实 PG 通过；覆盖率分母差异 276 语句全部为迁移脚本模块（PG 口径 skip 后不进分母），两口径均过 87。SQLite 基线回归确认 635 passed / 9 skipped、覆盖率 89.56% 不变；ruff / black 全绿；前端 lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.81/84.1/86.35 全过阈值（76/74/78/76）。CI PG job 与 frontend Lint 步骤以推送后 GitHub Actions 实测为准（本机 Docker 未运行，YAML 已过语法校验）。"
+    "latest_record": "docs/features/think_token_lifecycle_binding/feature.md",
+    "summary": "审计 Finding 12 Better fix 收口：think 代理令牌与语音会话生命周期绑定（方案 A）。voice_session_facts 增 token_generation 计数（迁移 20261007_0016 可逆，每次 bootstrap +1，收口回带不清零）；think 令牌 payload 增 gen claim（issue 默认 0 保证既有铸令牌调用点语义不变）；补全签发接线——规划期核实发现 issue()/build_deepgram_think_proxy_url 生产零消费、settings builder 无 think.endpoint（api.md bootstrap 签发描述与实现有落差），现配置 DEEPGRAM_AGENT_THINK_PROXY_PUBLIC_BASE_URL 时按代数签发并内嵌 agent.think.endpoint（Deepgram BYO LLM 形态），未配置时行为与历史版本逐字节一致，bootstrap 响应 schema 与前端零改动；代理校验链追加生命周期校验（fact 存在 + active + 代数一致，缺 claim fail-closed），统一 401 不泄露原因。效果：voice/complete 或 re-bootstrap 即刻杀死未过期旧令牌，复用窗口收敛到单次活跃语音会话内。",
+    "blockers": "无新增阻塞。遗留：方案 B 一次性票据维持独立立项（TTL + bootstrap 限流已覆盖延迟使用窗口大半）、Deepgram 语音令牌自身 TTL 语义属 Deepgram 侧、registry 推送待外部凭证、PG 口径迁移 downgrade 实测与全仓储 PG 参数化留后续批次。",
+    "extra_progress": "本地验证：SQLite 口径 647 passed / 9 skipped（覆盖率 89.65%，基线 635/89.56% 只升不降，门禁 87）；PG 口径用本机真实 PG 独立库 echowhale_ci（ECHOWHALE_TEST_DATABASE_URL，验证后已清理）642 passed / 14 skipped（基线 631/13：+11 本批新用例、+1 迁移 0016 可逆性用例 sqlite_only 显式 skip）；ruff / black 全绿；前端零改动回归全绿：lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.81/84.1/86.35 全过阈值（76/74/78/76）。新增测试 12 个：路由层生命周期拒绝 4（completed / 代数不匹配 / 缺 gen claim / fact 缺失，401 同形且断言不转发上游）、integrations 3（codec gen claim 显式/默认、builder endpoint 两态）、模块层 4（配置态签发接线、re-bootstrap 代数递增、未配置态零签发、收口回带代数）、迁移可逆性 1；既有用例零改动（仅共享替身补 get_latest_voice_session_fact 方法、FakeVoiceSettingsBuilder 扩参、新增 bootstrap 用例补 FakeVoiceTokenIssuer 杜绝 live .env 下真签发器打真实 Deepgram Auth API 的网络 flake）。文档同步：docs/api.md 端点表与 §11（生命周期绑定语义 + 401 场景扩为五类）、PRD §4.7/§7.6、docs/features/think_token_lifecycle_binding/feature.md。"
   },
   "modules": [
     {
@@ -388,6 +388,13 @@
     {
       "name": "CI PG平价验证与前端eslint门禁",
       "scope": "ci_pg_parity_and_eslint_gate",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "think代理令牌生命周期绑定",
+      "scope": "think_token_lifecycle_binding",
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"

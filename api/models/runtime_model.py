@@ -19,6 +19,10 @@ class VoiceSessionFact(BaseModel):
     status: str
     termination_reason: str | None = None
     transcript_turn_count: int = 0
+    # think 代理令牌代数：每次 bootstrap +1。代理校验链要求令牌里的 gen claim
+    # 与该值一致，voice/complete 或 re-bootstrap 即令旧令牌失效（审计 F12）；
+    # 默认 0 兼容迁移前的旧行语义（"无活跃绑定"）。
+    token_generation: int = 0
     client_diagnostics: dict[str, Any] = Field(default_factory=dict)
     started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None

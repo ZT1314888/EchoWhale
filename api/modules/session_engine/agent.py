@@ -30,7 +30,13 @@ from api.db.scene_analysis_db import (
     build_scene_analysis_store,
 )
 from api.db.session_db import SessionRepository, build_session_repository
-from api.integrations.deepgram import DeepgramSettingsBuilder, DeepgramTokenIssuer
+from api.integrations.deepgram import (
+    DeepgramSettingsBuilder,
+    DeepgramThinkProxyTokenCodec,
+    DeepgramTokenIssuer,
+    ThinkProxyTokenIssuer,
+    build_deepgram_think_proxy_url,
+)
 from api.integrations.storage.r2 import R2StorageService
 from api.models.learner_profile_model import LearnerProfile
 from api.models.message_model import Message
@@ -71,6 +77,7 @@ class SessionEngineAgent:
         scene_analysis_store: SceneAnalysisStore | None = None,
         scene_dispatcher: Callable[[str], bool] | None = None,
         learner_profile_repository: LearnerProfileRepository | None = None,
+        voice_think_token_issuer: ThinkProxyTokenIssuer | None = None,
     ) -> None:
         """装配会话编排依赖，包括媒体、存储、三段 agent 和语音组件。"""
         self.media_lookup = media_lookup or build_media_repository()
@@ -90,6 +97,9 @@ class SessionEngineAgent:
         # 永不发起调用；live 失败/超时由 _review_copy_for_turn 统一降级模板复盘。
         self.review_summarizer = ReviewSummarizerAgent()
         self.voice_token_issuer = DeepgramTokenIssuer()
+        # think 代理令牌签发器（审计 F12 Better fix）：bootstrap 时按会话代数
+        # 签发并内嵌进 agent_settings.think.endpoint，代理侧校验代数一致性。
+        self.voice_think_token_issuer = voice_think_token_issuer or DeepgramThinkProxyTokenCodec()
         self.voice_settings_builder = DeepgramSettingsBuilder()
 
     async def start(self, payload: StartSessionInput) -> Session | SceneAnalysisPending:
@@ -641,10 +651,30 @@ class SessionEngineAgent:
         """
         session = await self.session_repository.get_session(session_id)
         learner_context, _learner_cefr = await self._learner_context_for_turn(session)
+        # 代数绑定（审计 F12 Better fix）：每次 bootstrap 递增 voice_session_facts
+        # 的 token_generation，think 代理令牌携带该代数——voice/complete（转
+        # completed）或再次 bootstrap（代数 +1）都会令先前签发的未过期令牌
+        # 在代理校验链上失效，把可复用 bearer 的滥用窗口收敛到单次活跃会话内。
+        existing_fact = await self.session_repository.get_latest_voice_session_fact(session_id)
+        generation = (existing_fact.token_generation if existing_fact else 0) + 1
         token, expires_in = await asyncio.to_thread(
             self.voice_token_issuer.issue_token,
             settings.deepgram_agent_token_ttl_seconds,
         )
+        # 仅当代理公网地址已配置才签发 think 令牌并内嵌 endpoint（Deepgram
+        # BYO LLM 形态）；未配置时保持原生 open_ai provider 形态不变，bootstrap
+        # 响应与历史版本逐字节一致。
+        think_proxy_endpoint: dict[str, object] | None = None
+        if settings.deepgram_agent_think_proxy_public_base_url.strip():
+            think_token = await asyncio.to_thread(
+                self.voice_think_token_issuer.issue,
+                session.id,
+                generation=generation,
+            )
+            think_proxy_endpoint = {
+                "url": build_deepgram_think_proxy_url(),
+                "headers": {"Authorization": f"Bearer {think_token}"},
+            }
         bootstrap = VoiceBootstrapResult(
             session_id=session.id,
             deepgram_access_token=token,
@@ -653,6 +683,7 @@ class SessionEngineAgent:
             agent_settings=self.voice_settings_builder.build(
                 session,
                 learner_context=learner_context,
+                think_proxy_endpoint=think_proxy_endpoint,
             ),
             session=session,
         )
@@ -661,6 +692,7 @@ class SessionEngineAgent:
                 session_id=session.id,
                 status="active",
                 transcript_turn_count=len(session.messages),
+                token_generation=generation,
             )
         )
         await self.session_repository.save_session_event(
@@ -731,6 +763,12 @@ class SessionEngineAgent:
             status="completed",
             termination_reason=payload.termination_reason,
             transcript_turn_count=len(payload.conversation),
+            # 收口只置状态不改代数：token_generation 必须回带既有值，否则
+            # upsert 清零会让 re-bootstrap 的代数从 1 重来、旧令牌重新"复活"
+            # （审计 F12 的生命周期绑定语义）。
+            token_generation=(
+                existing_voice_fact.token_generation if existing_voice_fact is not None else 0
+            ),
             client_diagnostics=dict(payload.client_diagnostics),
             started_at=(
                 existing_voice_fact.started_at

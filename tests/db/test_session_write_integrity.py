@@ -441,3 +441,41 @@ def test_migration_0015_llm_usage_attribution_up_and_down(tmp_path, monkeypatch)
     columns = {column["name"] for column in sa.inspect(engine).get_columns("llm_usage")}
     assert "owner_id" not in columns
     assert "session_id" not in columns
+
+
+# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的迁移链
+# 验证由 CI backend-postgres job 的 `alembic upgrade head` 步骤在真实 PG 上覆盖。
+@pytest.mark.sqlite_only(
+    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+)
+def test_migration_0016_voice_fact_token_generation_up_and_down(tmp_path, monkeypatch) -> None:
+    """迁移 0016（审计 F12 Better fix）：up 到 head 后 voice_session_facts 带
+    token_generation 非空列且旧行 server_default 落 0；downgrade 到 0015 后列消失
+    （up/down 对称可逆）。"""
+    engine, config = _run_alembic(tmp_path, monkeypatch)
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("voice_session_facts")}
+    assert "token_generation" in columns
+    with engine.begin() as conn:
+        # 旧行（迁移前已收口的会话事实）不提供该列：server_default 落 0，
+        # 语义是"无活跃绑定"，与代理侧 fail-closed 校验自洽。
+        conn.execute(
+            sa.text(
+                "INSERT INTO voice_session_facts (session_id, status, transcript_turn_count, "
+                "client_diagnostics, started_at, updated_at) "
+                "VALUES ('sess_old', 'completed', 3, '{}', "
+                "'2026-10-07 00:00:00.000000', '2026-10-07 00:00:00.000000')"
+            )
+        )
+    with engine.connect() as conn:
+        row = conn.execute(
+            sa.text(
+                "SELECT token_generation FROM voice_session_facts WHERE session_id = 'sess_old'"
+            )
+        ).one()
+    assert row[0] == 0
+
+    command.downgrade(config, "20261006_0015")
+
+    columns = {column["name"] for column in sa.inspect(engine).get_columns("voice_session_facts")}
+    assert "token_generation" not in columns

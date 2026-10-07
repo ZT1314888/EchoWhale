@@ -15,6 +15,7 @@ from api.integrations.deepgram.voice_agent import (
     DeepgramThinkProxyTokenCodec,
 )
 from api.main import app
+from api.models.runtime_model import VoiceSessionFact
 from api.models.session_model import Session
 from api.services.llm_rate_limit import (
     InMemoryLLMRateLimiter,
@@ -24,7 +25,11 @@ from api.services.llm_rate_limit import (
 
 
 class StubSessionHeadRepository:
-    """既有用例的会话头仓储替身：令牌里的 sid 一律视为已存在的会话。"""
+    """既有用例的会话头仓储替身：令牌里的 sid 一律视为已存在的会话。
+
+    语音事实同样按"活跃且代数 0"下发：既有用例的令牌由 issue() 默认代数签出
+    （gen=0），与该事实匹配即通过生命周期校验——替身只补能力，不改用例语义。
+    """
 
     async def get_session_head(self, session_id: str) -> Session:
         return Session(
@@ -34,6 +39,13 @@ class StubSessionHeadRepository:
             scene="coffee_shop",
             role="barista",
             opener="Hi there, what can I get started for you today?",
+        )
+
+    async def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact:
+        return VoiceSessionFact(
+            session_id=session_id,
+            status="active",
+            token_generation=0,
         )
 
 
@@ -610,3 +622,166 @@ def test_deepgram_think_proxy_rejects_token_without_sid_claim(
             "type": "authentication_error",
         }
     }
+
+
+class LifecycleFactRepository(StubSessionHeadRepository):
+    """生命周期用例替身：在既有 stub 之上覆盖语音事实，模拟各生命周期状态。"""
+
+    def __init__(self, fact: VoiceSessionFact | None) -> None:
+        self._fact = fact
+
+    async def get_latest_voice_session_fact(self, session_id: str) -> VoiceSessionFact | None:
+        return self._fact
+
+
+def _assert_uniform_auth_rejected(response: httpx.Response, captured: dict[str, object]) -> None:
+    """生命周期类拒绝与既有 401 逐字节同形，且绝不转发上游（防枚举纪律）。"""
+    assert response.status_code == 401
+    assert response.json() == {
+        "error": {
+            "message": "Proxy authorization required",
+            "type": "authentication_error",
+        }
+    }
+    assert "called" not in captured
+
+
+def _issue_stale_token_setup(
+    monkeypatch: pytest.MonkeyPatch,
+    repository: LifecycleFactRepository,
+) -> None:
+    # 用例间清空共享捕获字典：四个生命周期用例都断言"未转发上游"，不重置的话
+    # 未来首个用例若意外转发，会让后续用例连锁失败且根因误导。
+    captured.clear()
+    monkeypatch.setattr(
+        "api.routes.v1.deepgram.settings.deepgram_agent_think_upstream_base_url",
+        "https://gateway.example.com/v1",
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.deepgram.settings.deepgram_agent_think_upstream_api_key",
+        "gateway-secret",
+    )
+    monkeypatch.setattr(
+        "api.routes.v1.deepgram.settings.deepgram_agent_think_model",
+        "qwen-plus",
+    )
+    app.dependency_overrides[build_session_repository] = lambda: repository
+
+    class RecordingHttpxClient:
+        async def post(
+            self, url: str, *, headers: dict[str, str], json: dict[str, object]
+        ) -> httpx.Response:
+            captured["called"] = True
+            return httpx.Response(200, json={"choices": []})
+
+    monkeypatch.setattr(
+        "api.routes.v1.deepgram._build_deepgram_async_client",
+        lambda timeout: RecordingHttpxClient(),
+    )
+
+
+captured: dict[str, object] = {}
+
+
+def test_deepgram_think_proxy_rejects_completed_session_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """voice/complete（fact 转 completed）后，TTL 未过的 think 令牌即刻失效。"""
+    _issue_stale_token_setup(
+        monkeypatch,
+        LifecycleFactRepository(
+            VoiceSessionFact(session_id="sess_done", status="completed", token_generation=1)
+        ),
+    )
+    token = DeepgramThinkProxyTokenCodec().issue("sess_done", generation=1)
+
+    response = client.post(
+        "/api/v1/deepgram/think/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "qwen-plus",
+            "messages": [{"role": "user", "content": "Say hello."}],
+        },
+    )
+
+    _assert_uniform_auth_rejected(response, captured)
+
+
+def test_deepgram_think_proxy_rejects_stale_generation_token(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """re-bootstrap 使代数 +1：旧 generation 令牌即使会话仍活跃也被拒。"""
+    _issue_stale_token_setup(
+        monkeypatch,
+        LifecycleFactRepository(
+            VoiceSessionFact(session_id="sess_reboot", status="active", token_generation=2)
+        ),
+    )
+    token = DeepgramThinkProxyTokenCodec().issue("sess_reboot", generation=1)
+
+    response = client.post(
+        "/api/v1/deepgram/think/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "qwen-plus",
+            "messages": [{"role": "user", "content": "Say hello."}],
+        },
+    )
+
+    _assert_uniform_auth_rejected(response, captured)
+
+
+def test_deepgram_think_proxy_rejects_token_without_generation_claim(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """合法签名但缺 gen claim 的令牌（部署前签发的旧令牌）fail-closed 拒绝。"""
+    _issue_stale_token_setup(
+        monkeypatch,
+        LifecycleFactRepository(
+            VoiceSessionFact(session_id="sess_legacy", status="active", token_generation=0)
+        ),
+    )
+    token = create_service_token(
+        subject="deepgram-think-proxy",
+        token_type=DEEPGRAM_THINK_PROXY_TOKEN_TYPE,
+        secret=settings.auth_jwt_secret,
+        expires_in_seconds=300,
+        extra_claims={"sid": "sess_legacy"},  # 没有 gen claim
+    )
+
+    response = client.post(
+        "/api/v1/deepgram/think/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "qwen-plus",
+            "messages": [{"role": "user", "content": "Say hello."}],
+        },
+    )
+
+    _assert_uniform_auth_rejected(response, captured)
+
+
+def test_deepgram_think_proxy_rejects_when_voice_fact_missing(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """会话存在但从未 bootstrap 语音（无 fact）：令牌不得命中代理。"""
+    _issue_stale_token_setup(
+        monkeypatch,
+        LifecycleFactRepository(None),
+    )
+    token = DeepgramThinkProxyTokenCodec().issue("sess_nofact", generation=1)
+
+    response = client.post(
+        "/api/v1/deepgram/think/chat/completions",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "model": "qwen-plus",
+            "messages": [{"role": "user", "content": "Say hello."}],
+        },
+    )
+
+    _assert_uniform_auth_rejected(response, captured)

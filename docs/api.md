@@ -59,7 +59,7 @@
 | | POST | `/api/v1/sessions/{session_id}/reply` | 回复（整包） |
 | | POST | `/api/v1/sessions/{session_id}/reply/stream` | 回复（SSE 流式，§6） |
 | | GET | `/api/v1/sessions/{session_id}/review` | 会话复盘 |
-| | POST | `/api/v1/sessions/{session_id}/voice/bootstrap` | 语音会话引导（签发 Deepgram 令牌） |
+| | POST | `/api/v1/sessions/{session_id}/voice/bootstrap` | 语音会话引导（签发 Deepgram 令牌与 think 代理令牌，§11） |
 | | POST | `/api/v1/sessions/{session_id}/voice/complete` | 语音会话收口 |
 | History | GET | `/api/v1/history/sessions` | 会话列表（认证用户，游标分页 §8） |
 | | GET | `/api/v1/history/sessions/{session_id}` | 会话详情（含复盘与消息总数） |
@@ -221,12 +221,13 @@ history 列表与消息回放均为游标分页（[history.py](../api/routes/v1/
 
 `POST /api/v1/deepgram/think/chat/completions` 的调用方是 Deepgram Agent（不是前端），协议刻意偏离统一信封（[deepgram.py](../api/routes/v1/deepgram.py)）：
 
-- 认证：`Authorization: Bearer <受限签名令牌>`——语音 bootstrap 签发、内含会话 sid；缺失 / 非法 / 会话不存在 → 401
+- 认证：`Authorization: Bearer <受限签名令牌>`——语音 bootstrap 签发、内含会话 `sid` 与代数 `gen`；缺失 / 非法 / 会话不存在 / 生命周期失效 → 401
+- **生命周期绑定**：令牌与语音会话事实（`voice_session_facts`）的代数绑定——每次 bootstrap 代数 +1，令牌携带签发时的代数；代理校验要求会话存在、语音事实 `status=active` 且代数一致。`voice/complete`（事实转 `completed`）或再次 bootstrap（代数 +1）即刻令未过期旧令牌失效，复用窗口收敛到单次活跃语音会话内。拒绝统一 401 且不区分具体原因（防枚举）。`DEEPGRAM_AGENT_THINK_PROXY_PUBLIC_BASE_URL` 未配置时 bootstrap 不签发该令牌（原生 open_ai provider，无 endpoint）
 - **错误格式为 OpenAI 风格 `{error: {message, type}}`，不走统一信封**：
 
 | HTTP | type | 场景 |
 | --- | --- | --- |
-| 401 | `authentication_error` | 令牌缺失 / 解码失败 / 会话不存在 |
+| 401 | `authentication_error` | 令牌缺失 / 解码失败 / 会话不存在 / 会话已结束 / 代数过期 |
 | 400 | `invalid_request_error` | JSON 非法 / payload 校验失败 / 模型不在白名单 |
 | 429 | `rate_limit_error` | per-sid 配额超限（§5） |
 | 500 | `configuration_error` | 代理上游配置缺失 |
