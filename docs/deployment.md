@@ -31,6 +31,9 @@ docker build -f infra/docker/Dockerfile -t echowhale:<tag> .
 
 - API 容器启动命令内置 `alembic upgrade head`（失败即退出，不产生假就绪）。
 - 手动执行：`uv run alembic upgrade head`；回滚：`uv run alembic downgrade <revision>`（迁移均实现 down）。
+- 迁移的 up **与** down 往返由 CI `backend-postgres` job 在真实 PG 上验证：pytest 之后运行
+  `uv run python -m tools.pg_migration_roundtrip`（重置 schema → upgrade head → 灌种子 →
+  downgrade base → upgrade head → 断言回 head），down() 回归在上库前被 CI 拦截。
 - 迁移 0011 之前的历史库需先核查 `session_messages` 无重复 `(session_id, position)`（唯一约束会拒绝脏数据）：
   `SELECT session_id, position, count(*) FROM session_messages GROUP BY 1,2 HAVING count(*) > 1;`
 

@@ -106,6 +106,14 @@ jobs:
         # skip（理由见各用例标记）。CI 无 .env，model_runtime_mode 默认 mock。
         run: uv run pytest tests --cov=api
 
+      - name: Verify migration downgrade round-trip (seed data included)
+        # 顺序刻意在 pytest 后：此时共享库刚被测试踩过、处于任意状态，直接
+        # downgrade 是非确定性的。脚本自带"重置 → upgrade head → 灌种子数据 →
+        # downgrade base → upgrade head → 断言回 head"全流程——重置保证从确定
+        # 状态开始，种子数据（FK-safe 顺序覆盖 13 张表）让 down 步骤在有数据
+        # （FK/CASCADE/列依赖）时被真实踩到。
+        run: uv run python -m tools.pg_migration_roundtrip
+
   docker:
     name: docker (image build)
     runs-on: ubuntu-latest

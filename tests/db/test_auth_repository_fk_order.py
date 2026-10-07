@@ -12,32 +12,16 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from api.db.auth_db import SqlAlchemyAuthRepository
-from api.db.database import (
-    create_all_tables,
-    create_database_engine,
-    create_session_factory,
-)
+from api.db.database import create_all_tables, create_session_factory
 from api.models.user_model import RefreshTokenRecordModel, User
-from tests.support.dialect import (
-    dialect_database_url,
-    dialect_is_postgres,
-    enforce_foreign_keys,
-    to_psycopg_url,
-)
+from tests.support.dialect import enforce_foreign_keys
 
 
-def _build_engine():
-    """方言感知测试引擎：PG 方言连测试库（+psycopg 归一化），否则内存 SQLite。"""
-    if dialect_is_postgres():
-        engine = create_database_engine(to_psycopg_url(dialect_database_url()))
-    else:
-        engine = create_database_engine("sqlite:///:memory:")
+def test_create_user_persists_parent_before_credentials_when_foreign_keys_are_enforced(
+    dialect_engine,
+) -> None:
+    engine = dialect_engine
     enforce_foreign_keys(engine)
-    return engine
-
-
-def test_create_user_persists_parent_before_credentials_when_foreign_keys_are_enforced() -> None:
-    engine = _build_engine()
     run_id = uuid4().hex[:8]
 
     create_all_tables(engine)
@@ -58,8 +42,9 @@ def test_create_user_persists_parent_before_credentials_when_foreign_keys_are_en
     assert stored.id == f"user_fk_order_{run_id}"
 
 
-def test_rotate_refresh_token_consumes_old_token_only_once() -> None:
-    engine = _build_engine()
+def test_rotate_refresh_token_consumes_old_token_only_once(dialect_engine) -> None:
+    engine = dialect_engine
+    enforce_foreign_keys(engine)
     run_id = uuid4().hex[:8]
 
     create_all_tables(engine)

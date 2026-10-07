@@ -5,10 +5,10 @@
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/think_token_lifecycle_binding/feature.md",
-    "summary": "审计 Finding 12 Better fix 收口：think 代理令牌与语音会话生命周期绑定（方案 A）。voice_session_facts 增 token_generation 计数（迁移 20261007_0016 可逆，每次 bootstrap +1，收口回带不清零）；think 令牌 payload 增 gen claim（issue 默认 0 保证既有铸令牌调用点语义不变）；补全签发接线——规划期核实发现 issue()/build_deepgram_think_proxy_url 生产零消费、settings builder 无 think.endpoint（api.md bootstrap 签发描述与实现有落差），现配置 DEEPGRAM_AGENT_THINK_PROXY_PUBLIC_BASE_URL 时按代数签发并内嵌 agent.think.endpoint（Deepgram BYO LLM 形态），未配置时行为与历史版本逐字节一致，bootstrap 响应 schema 与前端零改动；代理校验链追加生命周期校验（fact 存在 + active + 代数一致，缺 claim fail-closed），统一 401 不泄露原因。效果：voice/complete 或 re-bootstrap 即刻杀死未过期旧令牌，复用窗口收敛到单次活跃语音会话内。",
-    "blockers": "无新增阻塞。遗留：方案 B 一次性票据维持独立立项（TTL + bootstrap 限流已覆盖延迟使用窗口大半）、Deepgram 语音令牌自身 TTL 语义属 Deepgram 侧、registry 推送待外部凭证、PG 口径迁移 downgrade 实测与全仓储 PG 参数化留后续批次。",
-    "extra_progress": "本地验证：SQLite 口径 647 passed / 9 skipped（覆盖率 89.65%，基线 635/89.56% 只升不降，门禁 87）；PG 口径用本机真实 PG 独立库 echowhale_ci（ECHOWHALE_TEST_DATABASE_URL，验证后已清理）642 passed / 14 skipped（基线 631/13：+11 本批新用例、+1 迁移 0016 可逆性用例 sqlite_only 显式 skip）；ruff / black 全绿；前端零改动回归全绿：lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.81/84.1/86.35 全过阈值（76/74/78/76）。新增测试 12 个：路由层生命周期拒绝 4（completed / 代数不匹配 / 缺 gen claim / fact 缺失，401 同形且断言不转发上游）、integrations 3（codec gen claim 显式/默认、builder endpoint 两态）、模块层 4（配置态签发接线、re-bootstrap 代数递增、未配置态零签发、收口回带代数）、迁移可逆性 1；既有用例零改动（仅共享替身补 get_latest_voice_session_fact 方法、FakeVoiceSettingsBuilder 扩参、新增 bootstrap 用例补 FakeVoiceTokenIssuer 杜绝 live .env 下真签发器打真实 Deepgram Auth API 的网络 flake）。文档同步：docs/api.md 端点表与 §11（生命周期绑定语义 + 401 场景扩为五类）、PRD §4.7/§7.6、docs/features/think_token_lifecycle_binding/feature.md。"
+    "latest_record": "docs/features/pg_downgrade_repo_dialect_parity/feature.md",
+    "summary": "PG 补强批次收口（上批 CI PG 平价明确推迟的两件事）。R1：新增 tools/pg_migration_roundtrip.py 六步往返脚本（重置 schema → upgrade head → 单事务 FK-safe 灌 13 表种子 → downgrade base → upgrade head → 断言回 head），CI backend-postgres job 在 pytest 之后执行（从有数据的 schema 往下砍），15 个迁移 down() 在真实 PG 上首次全量验证且零修改；本地 scratch 库 echowhale_ci 等价验证通过后已 DROP。R2：11 个测试文件的硬编码 SQLite 引擎全量参数化——新增 tests/support/engine.py 作为方言分支唯一归属地（PG 共享库按用例 drop 全部 metadata 表，固定主键/邮箱天然隔离；SQLite tmp 文件库行为与基线逐字节一致），conftest 提供 dialect_engine / dialect_async_engine fixture 并统一 anyio_backend 的 PG Selector loop 前置；新增 tests/test_dialect_hygiene.py 防再犯守卫（禁止 tests/ 下 sqlite:// 字面量，允许清单逐项写理由）；5 个迁移链用例维持 sqlite_only 并更新理由为往返脚本覆盖。生产代码（api/、frontend/）零 diff。",
+    "blockers": "无新增阻塞。遗留：registry 推送流水线（等用户定 registry 目标与凭证）、think 一次性票据方案 B（独立立项）、judge 主观分歧留观察、CI 首跑实测（push 后用户侧确认）、守卫为轻量静态扫描（pysqlite 裸驱动名等边界见 feature.md 已知缺口）。",
+    "extra_progress": "前后对比：SQLite 口径 647→649 passed / 9 skipped（+2 新用例：守卫与往返单测），覆盖率 89.65%→90.47%（门禁 87）；PG 口径 642→644 passed / 14 skipped、覆盖率 90.41%；PG job 内真实在 PG 上执行的用例 0→47（session 13、写路径 4、learner 3、scene 4、media 1、llm_usage 7、auth service 14、mock 冒烟 1），仓储六域在 PG 上被直接覆盖。方言差异修复（修测试不放宽生产语义）：scene store 三用例补 media 父行（FK 在 PG 真实强制）、时间戳断言显式方言分支、冒烟 _prepare 补 engine.dispose()（psycopg 连接绑定创建它的 loop）；往返脚本种子改逐条 add+flush（UOW 无 relationship 不保证 FK-safe 排序，SQLite FK 默认关曾掩盖，PG 暴露），与仓储层 parent-first flush 纪律同源。前端零改动回归全绿：lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.84/84.1/86.35 全过阈值（76/74/78/76）；ruff / black 全绿。文档同步：docs/features/pg_downgrade_repo_dialect_parity/feature.md、docs/deployment.md §3、.trellis/spec/backend/{database-guidelines,quality-guidelines}.md。"
   },
   "modules": [
     {
@@ -395,6 +395,13 @@
     {
       "name": "think代理令牌生命周期绑定",
       "scope": "think_token_lifecycle_binding",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "PG迁移downgrade往返验证与全仓储方言参数化",
+      "scope": "pg_downgrade_repo_dialect_parity",
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"

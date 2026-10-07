@@ -1,14 +1,10 @@
-"""user_learning_profiles 仓储直测：真仓储 + aiosqlite，防止 fake 盲区。"""
+"""user_learning_profiles 仓储直测：真仓储 + 方言无关引擎（tests/support/engine.py），防止 fake 盲区。"""
 
 from __future__ import annotations
 
 import pytest
 
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.learner_profile_db import (
     SqlAlchemyLearnerProfileRepository,
     build_learner_profile_repository,
@@ -29,19 +25,11 @@ def _profile(user_id: str = "user:learner", **overrides) -> LearnerProfile:
     return LearnerProfile(**fields)
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
-@pytest.fixture
-def engine_url(tmp_path) -> str:
-    return f"sqlite+aiosqlite:///{tmp_path / 'profiles.db'}"
-
-
 @pytest.mark.anyio
-async def test_repository_first_read_returns_none_and_upsert_round_trips(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_repository_first_read_returns_none_and_upsert_round_trips(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemyLearnerProfileRepository(create_async_session_factory(engine))
 
@@ -64,8 +52,10 @@ async def test_repository_first_read_returns_none_and_upsert_round_trips(engine_
 
 
 @pytest.mark.anyio
-async def test_repository_second_upsert_overwrites_single_row(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_repository_second_upsert_overwrites_single_row(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = build_learner_profile_repository(create_async_session_factory(engine))
 
@@ -103,8 +93,10 @@ async def test_repository_second_upsert_overwrites_single_row(engine_url) -> Non
 
 
 @pytest.mark.anyio
-async def test_repository_upsert_returns_domain_model_with_timestamps(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_repository_upsert_returns_domain_model_with_timestamps(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = build_learner_profile_repository(create_async_session_factory(engine))
 

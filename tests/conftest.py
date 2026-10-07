@@ -37,7 +37,37 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
 
 @pytest.fixture
 def anyio_backend() -> str:
+    from tests.support.dialect import dialect_is_postgres, ensure_psycopg_async_compatible_loop
+
+    # psycopg async 在 Windows 默认 ProactorEventLoop 上不可用；PG 方言验证前
+    # 切 Selector loop（CI ubuntu 默认即 Selector，无感）。必须在 loop 创建前
+    # 调用（anyio runner 惰性建 loop），SQLite 方言不触碰策略。
+    if dialect_is_postgres():
+        ensure_psycopg_async_compatible_loop()
     return "asyncio"
+
+
+@pytest.fixture
+def dialect_engine(tmp_path):
+    """方言无关 sync 引擎：PG 共享库（构建时先重置）/ SQLite tmp 文件库。
+
+    方言分支全部收敛在 tests/support/engine.py，测试文件不得自拼 SQLite URL 字面量。
+    """
+    from tests.support.engine import build_dialect_sync_engine
+
+    engine = build_dialect_sync_engine(tmp_path, "dialect")
+    yield engine
+    engine.dispose()
+
+
+@pytest.fixture
+async def dialect_async_engine(tmp_path):
+    """方言无关 async 引擎：语义同 dialect_engine 的异步版（anyio 与用例同 loop）。"""
+    from tests.support.engine import build_dialect_async_engine
+
+    engine = await build_dialect_async_engine(tmp_path, "dialect")
+    yield engine
+    await engine.dispose()
 
 
 @pytest.fixture

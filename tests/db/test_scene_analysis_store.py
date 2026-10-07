@@ -1,4 +1,4 @@
-"""scene_analyses 仓储直测：真仓储 + aiosqlite，防止 fake 盲区。"""
+"""scene_analyses 仓储直测：真仓储 + 方言无关引擎（tests/support/engine.py），防止 fake 盲区。"""
 
 from __future__ import annotations
 
@@ -8,11 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from api.common.enums import MediaUploadStatus
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.media_db import MediaRecord, SqlAlchemyMediaRepository
 from api.db.scene_analysis_db import (
     SCENE_ANALYSIS_STATUS_FAILED,
@@ -37,26 +33,22 @@ def _media(media_id: str = "med_cache") -> Media:
     )
 
 
-@pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
-@pytest.fixture
-def engine_url(tmp_path) -> str:
-    return f"sqlite+aiosqlite:///{tmp_path / 'scene.db'}"
-
-
 def _enable_sqlite_foreign_keys(engine) -> None:
     """方言感知 FK 强制：SQLite 装 PRAGMA，PG 天生强制（复用 dialect helper）。"""
     enforce_foreign_keys(engine)
 
 
+async def _save_media_parent(engine) -> None:
+    """scene_analyses.media_id 对 media 有 FK（PG 真实强制）：store 用例先落父行。"""
+    await SqlAlchemyMediaRepository(create_async_session_factory(engine)).save_media(_media())
+
+
 @pytest.mark.anyio
-async def test_store_round_trip_pending_ready_and_failure(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_store_round_trip_pending_ready_and_failure(dialect_async_engine) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     store = SqlAlchemySceneAnalysisStore(create_async_session_factory(engine))
+    await _save_media_parent(engine)
 
     assert await store.get("med_missing") is None
 
@@ -101,10 +93,11 @@ async def test_store_round_trip_pending_ready_and_failure(engine_url) -> None:
 
 
 @pytest.mark.anyio
-async def test_store_upsert_keeps_single_row_per_media(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_store_upsert_keeps_single_row_per_media(dialect_async_engine) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     store = SqlAlchemySceneAnalysisStore(create_async_session_factory(engine))
+    await _save_media_parent(engine)
 
     await store.save_pending("med_cache", "v1")
     await store.save_result(
@@ -146,8 +139,8 @@ async def test_store_upsert_keeps_single_row_per_media(engine_url) -> None:
 
 
 @pytest.mark.anyio
-async def test_store_rows_cascade_with_media_delete(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_store_rows_cascade_with_media_delete(dialect_async_engine) -> None:
+    engine = dialect_async_engine
     _enable_sqlite_foreign_keys(engine)
     await create_all_tables_async(engine)
     session_factory = create_async_session_factory(engine)
@@ -177,10 +170,11 @@ async def test_store_rows_cascade_with_media_delete(engine_url) -> None:
 
 
 @pytest.mark.anyio
-async def test_store_snapshot_carries_updated_at(engine_url) -> None:
-    engine = create_async_database_engine(engine_url)
+async def test_store_snapshot_carries_updated_at(dialect_async_engine) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     store = build_scene_analysis_store(create_async_session_factory(engine))
+    await _save_media_parent(engine)
 
     before = datetime.now(UTC)
     await asyncio.sleep(0)
@@ -188,7 +182,10 @@ async def test_store_snapshot_carries_updated_at(engine_url) -> None:
     snapshot = await store.get("med_cache")
     assert snapshot is not None
     assert snapshot.updated_at is not None
-    assert (
-        snapshot.updated_at >= before.replace(tzinfo=None) or snapshot.updated_at.tzinfo is not None
-    )
+    # 时区回显方言差异显式分支：PG timestamptz 回读带 tzinfo（直接与 aware 的
+    # before 比大小），SQLite 回读 naive（剥掉 before 的 tzinfo 再比）。
+    if snapshot.updated_at.tzinfo is not None:
+        assert snapshot.updated_at >= before
+    else:
+        assert snapshot.updated_at >= before.replace(tzinfo=None)
     await engine.dispose()

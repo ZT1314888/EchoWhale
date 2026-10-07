@@ -5,11 +5,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from api.common.exceptions import NotFoundError
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.session_db import SqlAlchemySessionRepository
 from api.models.message_model import Message
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
@@ -31,9 +27,10 @@ except ImportError:  # pragma: no cover - expected during red phase
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session.db'}"
-    engine = create_async_database_engine(database_url)
+async def test_sqlalchemy_session_repository_persists_session_and_messages(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -82,14 +79,15 @@ async def test_sqlalchemy_session_repository_persists_session_and_messages(tmp_p
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_persists_review_snapshots(
+    dialect_async_engine,
+) -> None:
     assert SessionReview is not None
     assert PracticeFeedback is not None
     assert FeedbackMetric is not None
     assert UsefulWordsMetric is not None
 
-    database_url = f"sqlite:///{tmp_path / 'session-review.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -145,9 +143,10 @@ async def test_sqlalchemy_session_repository_persists_review_snapshots(tmp_path)
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-order.db'}"
-    engine = create_async_database_engine(database_url)
+async def test_sqlalchemy_session_repository_lists_latest_sessions_first(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -208,10 +207,9 @@ async def test_sqlalchemy_session_repository_lists_latest_sessions_first(tmp_pat
 
 @pytest.mark.anyio
 async def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_legacy_labels(
-    tmp_path,
+    dialect_async_engine,
 ) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-legacy.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -237,10 +235,9 @@ async def test_sqlalchemy_session_repository_backfills_vocab_candidates_from_leg
 
 @pytest.mark.anyio
 async def test_sqlalchemy_session_repository_persists_sample_sessions_without_media_id(
-    tmp_path,
+    dialect_async_engine,
 ) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-sample.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -273,10 +270,9 @@ async def test_sqlalchemy_session_repository_persists_sample_sessions_without_me
 
 @pytest.mark.anyio
 async def test_sqlalchemy_session_repository_persists_session_events_and_voice_facts(
-    tmp_path,
+    dialect_async_engine,
 ) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-runtime.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -343,14 +339,15 @@ async def test_sqlalchemy_session_repository_persists_session_events_and_voice_f
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(tmp_path) -> None:
+async def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(
+    dialect_async_engine,
+) -> None:
     assert SessionReview is not None
     assert PracticeFeedback is not None
     assert FeedbackMetric is not None
     assert UsefulWordsMetric is not None
 
-    database_url = f"sqlite:///{tmp_path / 'session-voice-finalize.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -455,15 +452,14 @@ async def test_sqlalchemy_session_repository_finalizes_voice_session_atomically(
 
 @pytest.mark.anyio
 async def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_batch(
-    tmp_path,
+    dialect_async_engine,
 ) -> None:
     assert SessionReview is not None
     assert PracticeFeedback is not None
     assert FeedbackMetric is not None
     assert UsefulWordsMetric is not None
 
-    database_url = f"sqlite:///{tmp_path / 'session-history-page.db'}"
-    engine = create_async_database_engine(database_url)
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -552,9 +548,10 @@ async def test_sqlalchemy_session_repository_lists_history_page_and_reviews_in_b
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_lists_replay_messages_page(tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-replay-page.db'}"
-    engine = create_async_database_engine(database_url)
+async def test_sqlalchemy_session_repository_lists_replay_messages_page(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -597,9 +594,10 @@ async def test_sqlalchemy_session_repository_lists_replay_messages_page(tmp_path
 
 
 @pytest.mark.anyio
-async def test_sqlalchemy_session_repository_lists_recent_messages_in_order(tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'session-recent.db'}"
-    engine = create_async_database_engine(database_url)
+async def test_sqlalchemy_session_repository_lists_recent_messages_in_order(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -665,9 +663,9 @@ def _build_display_copy() -> ReviewCopy:
 
 
 @pytest.mark.anyio
-async def test_save_reply_turn_persists_llm_display_names(tmp_path) -> None:
+async def test_save_reply_turn_persists_llm_display_names(dialect_async_engine) -> None:
     """save_reply_turn 携带 review_copy 时写两列：get_session / head 往返一致。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-names.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -699,9 +697,11 @@ async def test_save_reply_turn_persists_llm_display_names(tmp_path) -> None:
 
 
 @pytest.mark.anyio
-async def test_save_reply_turn_without_review_copy_keeps_existing_display_names(tmp_path) -> None:
+async def test_save_reply_turn_without_review_copy_keeps_existing_display_names(
+    dialect_async_engine,
+) -> None:
     """review_copy=None（mock/复盘降级）不触碰两列：同轮降级保留上一次有效值。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-keep.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -732,9 +732,9 @@ async def test_save_reply_turn_without_review_copy_keeps_existing_display_names(
 
 
 @pytest.mark.anyio
-async def test_finalize_voice_session_persists_llm_display_names(tmp_path) -> None:
+async def test_finalize_voice_session_persists_llm_display_names(dialect_async_engine) -> None:
     """语音收口快照携带展示名时，_upsert_session_record 把两列一并持久化。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'session-llm-voice.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 

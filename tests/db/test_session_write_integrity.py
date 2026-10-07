@@ -24,11 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from api.common.exceptions import InvalidStateError
 from api.core.config import settings
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.session_db import MessageRecord, SqlAlchemySessionRepository
 from api.models.message_model import Message
 from api.models.review_model import (
@@ -99,9 +95,11 @@ async def _fetch_message_rows(engine: AsyncEngine, session_id: str) -> list[tupl
 
 
 @pytest.mark.anyio
-async def test_duplicate_position_is_rejected_by_database_constraint(tmp_path) -> None:
+async def test_duplicate_position_is_rejected_by_database_constraint(
+    dialect_async_engine,
+) -> None:
     """唯一约束在 DB 层兜底：同会话重复 position 直接 IntegrityError（Finding 7）。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'position-unique.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -126,10 +124,10 @@ async def test_duplicate_position_is_rejected_by_database_constraint(tmp_path) -
 
 @pytest.mark.anyio
 async def test_save_reply_turn_retries_once_after_position_conflict(
-    tmp_path, monkeypatch, caplog
+    dialect_async_engine, monkeypatch, caplog
 ) -> None:
     """首次写入撞唯一约束后回滚重读 max(position) 重试，两条消息序号正确不重复。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'retry-conflict.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
     await _save_session_with_messages(repository, "sess_retry", count=2)
@@ -174,10 +172,10 @@ async def test_save_reply_turn_retries_once_after_position_conflict(
 
 @pytest.mark.anyio
 async def test_save_reply_turn_raises_invalid_state_error_when_retry_also_conflicts(
-    tmp_path, monkeypatch
+    dialect_async_engine, monkeypatch
 ) -> None:
     """两次尝试都撞约束说明并发方持续写入，按状态冲突收敛为 InvalidStateError。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'retry-exhausted.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
     await _save_session_with_messages(repository, "sess_deadlock", count=2)
@@ -202,9 +200,11 @@ async def test_save_reply_turn_raises_invalid_state_error_when_retry_also_confli
 
 
 @pytest.mark.anyio
-async def test_finalize_voice_session_appends_without_touching_existing_messages(tmp_path) -> None:
+async def test_finalize_voice_session_appends_without_touching_existing_messages(
+    dialect_async_engine,
+) -> None:
     """语音收口 append-only：既有消息行原样保留，新消息 position 接续（Finding 8）。"""
-    engine = create_async_database_engine(f"sqlite:///{tmp_path / 'finalize-append.db'}")
+    engine = dialect_async_engine
     await create_all_tables_async(engine)
     repository = SqlAlchemySessionRepository(create_async_session_factory(engine))
 
@@ -319,10 +319,11 @@ def _insert_duplicate_positions(engine: sa.Engine) -> None:
             )
 
 
-# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的迁移链
-# 验证由 CI backend-postgres job 的 `alembic upgrade head` 步骤在真实 PG 上覆盖。
+# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的 down/up
+# 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子
+# 数据）在真实 PG 上覆盖。
 @pytest.mark.sqlite_only(
-    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+    reason="PG 口径的 down/up 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子数据）在真实 PG 上覆盖；本用例锁定 SQLite 口径的迁移回归"
 )
 def test_migration_0011_up_and_down_are_reversible(tmp_path, monkeypatch) -> None:
     """迁移链完整：up 到 head 后约束与复合索引生效，downgrade 到 0010 后两者消失。"""
@@ -345,7 +346,7 @@ def test_migration_0011_up_and_down_are_reversible(tmp_path, monkeypatch) -> Non
 
 
 @pytest.mark.sqlite_only(
-    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+    reason="PG 口径的 down/up 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子数据）在真实 PG 上覆盖；本用例锁定 SQLite 口径的迁移回归"
 )
 def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypatch) -> None:
     """迁移链完整：up 到 head 后 llm_usage 可写入且 created_at 有服务端默认值，
@@ -378,7 +379,7 @@ def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypat
 
 
 @pytest.mark.sqlite_only(
-    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+    reason="PG 口径的 down/up 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子数据）在真实 PG 上覆盖；本用例锁定 SQLite 口径的迁移回归"
 )
 def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypatch) -> None:
     """迁移 0014（PRD v0.5 候选②）：up 到 head 后 sessions 带两展示名可空列，
@@ -413,7 +414,7 @@ def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypat
 
 
 @pytest.mark.sqlite_only(
-    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+    reason="PG 口径的 down/up 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子数据）在真实 PG 上覆盖；本用例锁定 SQLite 口径的迁移回归"
 )
 def test_migration_0015_llm_usage_attribution_up_and_down(tmp_path, monkeypatch) -> None:
     """迁移 0015（usage 归因）：up 到 head 后 llm_usage 带 owner/session 可空列，
@@ -443,10 +444,11 @@ def test_migration_0015_llm_usage_attribution_up_and_down(tmp_path, monkeypatch)
     assert "session_id" not in columns
 
 
-# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的迁移链
-# 验证由 CI backend-postgres job 的 `alembic upgrade head` 步骤在真实 PG 上覆盖。
+# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的 down/up
+# 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子
+# 数据）在真实 PG 上覆盖。
 @pytest.mark.sqlite_only(
-    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+    reason="PG 口径的 down/up 往返由 CI backend-postgres job 的 `tools.pg_migration_roundtrip` 步骤（含种子数据）在真实 PG 上覆盖；本用例锁定 SQLite 口径的迁移回归"
 )
 def test_migration_0016_voice_fact_token_generation_up_and_down(tmp_path, monkeypatch) -> None:
     """迁移 0016（审计 F12 Better fix）：up 到 head 后 voice_session_facts 带

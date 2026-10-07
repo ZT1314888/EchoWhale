@@ -8,10 +8,11 @@ from urllib.request import Request, urlopen
 import pytest
 
 from api.common.enums import MediaUploadStatus
-from api.db.database import create_all_tables, create_database_engine, create_session_factory
+from api.db.database import create_all_tables, create_session_factory
 from api.db.media_db import SqlAlchemyMediaRepository
 from api.integrations.storage.r2 import R2StorageService
 from api.services.media_service import MediaService
+from tests.support.engine import build_dialect_sync_engine
 
 PNG_BYTES = (
     b"\x89PNG\r\n\x1a\n"
@@ -31,8 +32,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_uploads_media_to_real_r2_and_serves_signed_access_url(tmp_path: Path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'r2-media.db'}"
-    engine = create_database_engine(database_url)
+    engine = build_dialect_sync_engine(tmp_path, "r2-media")
     create_all_tables(engine)
     repository = SqlAlchemyMediaRepository(create_session_factory(engine))
     storage = R2StorageService()

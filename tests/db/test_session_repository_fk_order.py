@@ -11,43 +11,19 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine
 
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.session_db import SqlAlchemySessionRepository
 from api.models.message_model import Message
 from api.models.session_model import Session
-from tests.support.dialect import (
-    dialect_database_url,
-    dialect_is_postgres,
-    enforce_foreign_keys,
-    ensure_psycopg_async_compatible_loop,
-)
-
-
-@pytest.fixture
-def anyio_backend() -> str:
-    # psycopg async 在 Windows 默认 ProactorEventLoop 上不可用；PG 方言验证前
-    # 切 Selector loop（CI ubuntu 默认即 Selector，无感）。SQLite 方言不触碰策略。
-    if dialect_is_postgres():
-        ensure_psycopg_async_compatible_loop()
-    return "asyncio"
+from tests.support.dialect import enforce_foreign_keys
 
 
 @pytest.mark.anyio
-async def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced() -> (
-    None
-):
-    # PG 方言连测试库（create_async_database_engine 自带 postgresql:// → +psycopg
-    # 转换，这里仍显式归一化保持两侧一致），否则内存 SQLite。
-    if dialect_is_postgres():
-        engine: AsyncEngine = create_async_database_engine(dialect_database_url())
-    else:
-        engine = create_async_database_engine("sqlite+aiosqlite:///:memory:")
+async def test_save_session_persists_parent_before_messages_when_foreign_keys_are_enforced(
+    dialect_async_engine,
+) -> None:
+    engine = dialect_async_engine
     enforce_foreign_keys(engine)
     run_id = uuid4().hex[:8]
 

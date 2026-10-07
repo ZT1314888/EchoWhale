@@ -1,4 +1,4 @@
-"""mock 冒烟：TestClient + aiosqlite 走真实 HTTP 全链路。
+"""mock 冒烟：TestClient + 方言无关引擎走真实 HTTP 全链路。
 
 覆盖验收口径：
 - 上传后的 media 两次开课：第一次内联 mock 分析并写穿缓存，第二次命中缓存
@@ -19,11 +19,7 @@ from api.common.enums import MediaUploadStatus
 from api.common.ownership import build_visitor_owner
 from api.core.config import settings
 from api.core.security import sign_value
-from api.db.database import (
-    create_all_tables_async,
-    create_async_database_engine,
-    create_async_session_factory,
-)
+from api.db.database import create_all_tables_async, create_async_session_factory
 from api.db.media_db import SqlAlchemyMediaRepository
 from api.db.scene_analysis_db import SqlAlchemySceneAnalysisStore
 from api.db.session_db import SqlAlchemySessionRepository
@@ -34,6 +30,8 @@ from api.modules.session_engine.service import SessionEngineService
 from api.routes.v1.media import get_media_repository, get_scene_analysis_store
 from api.routes.v1.sessions import get_llm_rate_limiter, get_session_service
 from api.services.llm_rate_limit import InMemoryLLMRateLimiter
+from tests.support.dialect import ensure_psycopg_async_compatible_loop
+from tests.support.engine import build_dialect_async_engine
 
 
 class RecordingQualityGate:
@@ -56,11 +54,6 @@ class FakeReadUrlSigner:
 
 
 @pytest.fixture
-def anyio_backend() -> str:
-    return "asyncio"
-
-
-@pytest.fixture
 def smoke(tmp_path, monkeypatch):
     # 陷阱 #3：本地 .env 可能是 live，冒烟必须钉死 mock。
     monkeypatch.setattr(settings, "model_runtime_mode", "mock")
@@ -69,7 +62,8 @@ def smoke(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "scene_analysis_prompt_version", "v1")
 
     async def _prepare() -> tuple[object, ...]:
-        engine = create_async_database_engine(f"sqlite+aiosqlite:///{tmp_path / 'smoke.db'}")
+        # 自管引擎（不经 fixture）：asyncio.run 自管 loop；builder 内含 PG 重置。
+        engine = await build_dialect_async_engine(tmp_path, "smoke")
         await create_all_tables_async(engine)
         session_factory = create_async_session_factory(engine)
         media_repository = SqlAlchemyMediaRepository(session_factory)
@@ -86,10 +80,16 @@ def smoke(tmp_path, monkeypatch):
                 upload_status=MediaUploadStatus.uploaded,
             )
         )
+        # _prepare 的循环即将随 asyncio.run 关闭，而 psycopg async 连接绑定创建它的
+        # 循环；先清空池，让 TestClient 门户循环上按需建新连接（SQLite 无感）。
+        await engine.dispose()
         return engine, media_repository, session_repository, scene_store
 
     import asyncio
 
+    # Windows 本地 PG：psycopg async 需 Selector loop，必须在 asyncio.run 建 loop 前
+    # 设置策略（CI ubuntu 是 no-op）。
+    ensure_psycopg_async_compatible_loop()
     engine, media_repository, session_repository, scene_store = asyncio.run(_prepare())
 
     gate = RecordingQualityGate()

@@ -22,11 +22,7 @@ from api.common.request_context import (
     set_request_owner,
     set_request_session,
 )
-from api.db.database import (
-    create_all_tables,
-    create_database_engine,
-    create_session_factory,
-)
+from api.db.database import create_all_tables, create_session_factory
 from api.db.llm_usage_db import LlmUsageRecord, SqlAlchemyLlmUsageSink, build_llm_usage_sink
 
 
@@ -55,9 +51,9 @@ def _read_attribution_rows(engine: sa.Engine) -> list[tuple[str | None, str | No
         )
 
 
-def test_sink_records_usage_inline_without_event_loop(tmp_path) -> None:
+def test_sink_records_usage_inline_without_event_loop(dialect_engine) -> None:
     """同步调用路径：record 直接写一行，四个字段原样落库。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-sync.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
@@ -67,9 +63,9 @@ def test_sink_records_usage_inline_without_event_loop(tmp_path) -> None:
     assert rows == [("demo-model", 12, 3, 15)]
 
 
-def test_sink_allows_null_token_fields(tmp_path) -> None:
+def test_sink_allows_null_token_fields(dialect_engine) -> None:
     """字段缺省容错：上游 usage 缺 token 字段时按 NULL 落库，而非拒绝写入。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-null.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
@@ -80,9 +76,9 @@ def test_sink_allows_null_token_fields(tmp_path) -> None:
 
 
 @pytest.mark.anyio
-async def test_sink_hops_to_thread_inside_event_loop(tmp_path) -> None:
+async def test_sink_hops_to_thread_inside_event_loop(dialect_engine) -> None:
     """async 调用路径：写入在线程池完成，等待在途写入后行可见且事件循环未被阻塞。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-async.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
@@ -95,9 +91,10 @@ async def test_sink_hops_to_thread_inside_event_loop(tmp_path) -> None:
     assert rows == [("demo-model", 7, 2, 9)]
 
 
-def test_sink_write_failure_degrades_to_warning(tmp_path, caplog) -> None:
+def test_sink_write_failure_degrades_to_warning(dialect_engine, caplog) -> None:
     """写入失败（此处为表缺失）只记 llm_usage_sink_failed warning，不向上抛。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'bare.db'}")  # 无 llm_usage 表
+    # 无 create_all：SQLite 落空文件库、PG 分支构建时已重置共享库，"无表"两侧天然成立。
+    engine = dialect_engine
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
     with caplog.at_level(logging.WARNING, logger="api.db.llm_usage_db"):
@@ -112,9 +109,9 @@ def test_build_llm_usage_sink_is_singleton() -> None:
     assert build_llm_usage_sink() is build_llm_usage_sink()
 
 
-def test_sink_records_null_attribution_without_request_context(tmp_path) -> None:
+def test_sink_records_null_attribution_without_request_context(dialect_engine) -> None:
     """无请求上下文（启动期 / 后台任务）：归因列 NULL 落库，不抛错（旁路纪律）。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-noctx.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
@@ -123,9 +120,9 @@ def test_sink_records_null_attribution_without_request_context(tmp_path) -> None
     assert _read_attribution_rows(engine) == [(None, None)]
 
 
-def test_sink_persists_attribution_on_sync_path(tmp_path) -> None:
+def test_sink_persists_attribution_on_sync_path(dialect_engine) -> None:
     """同步路径：调用线程上的 owner/session 上下文随行落库（访客 owner 照记）。"""
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-sync-attr.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 
@@ -141,13 +138,13 @@ def test_sink_persists_attribution_on_sync_path(tmp_path) -> None:
 
 
 @pytest.mark.anyio
-async def test_sink_persists_attribution_captured_on_event_loop_thread(tmp_path) -> None:
+async def test_sink_persists_attribution_captured_on_event_loop_thread(dialect_engine) -> None:
     """async 路径：归因必须在事件循环线程上捕获后以参数传入线程池。
 
     ContextVar 不跨线程传播——若在线程内读取，run_in_executor 的工作线程上
     只会拿到 None，行归因全部丢失。等待在途写入后断言归因仍然命中。
     """
-    engine = create_database_engine(f"sqlite:///{tmp_path / 'usage-async-attr.db'}")
+    engine = dialect_engine
     create_all_tables(engine)
     sink = SqlAlchemyLlmUsageSink(create_session_factory(engine))
 

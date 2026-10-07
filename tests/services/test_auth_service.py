@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
-from sqlalchemy import event
+from sqlalchemy import Engine
 from sqlalchemy.exc import IntegrityError
 
 from api.common.exceptions import (
@@ -16,9 +15,10 @@ from api.common.exceptions import (
 )
 from api.core.security import hash_password, hash_refresh_token
 from api.db.auth_db import SqlAlchemyAuthRepository
-from api.db.database import create_all_tables, create_database_engine, create_session_factory
+from api.db.database import create_all_tables, create_session_factory
 from api.models.user_model import User
 from api.services.auth_service import AuthService
+from tests.support.dialect import enforce_foreign_keys
 
 
 @dataclass
@@ -99,7 +99,7 @@ class FakeEmailVerificationStore:
 
 
 def _build_service(
-    database_path: Path,
+    engine: Engine,
     *,
     mail_queue_publisher: FakeAuthMailQueuePublisher | None = None,
     verification_store: FakeEmailVerificationStore | None = None,
@@ -109,14 +109,8 @@ def _build_service(
     FakeAuthMailQueuePublisher,
     FakeEmailVerificationStore,
 ]:
-    engine = create_database_engine(f"sqlite:///{database_path}")
-
-    @event.listens_for(engine, "connect")
-    def enable_foreign_keys(dbapi_connection, _connection_record) -> None:
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
+    # FK 强制复用 support 层 helper：SQLite 装 PRAGMA，PG 天生强制（no-op）。
+    enforce_foreign_keys(engine)
     create_all_tables(engine)
     repository = SqlAlchemyAuthRepository(create_session_factory(engine))
     active_mail_queue_publisher = mail_queue_publisher or FakeAuthMailQueuePublisher()
@@ -133,10 +127,8 @@ def _build_service(
     )
 
 
-def test_register_persists_user_without_issuing_session(tmp_path: Path) -> None:
-    service, repository, publisher, verification_store = _build_service(
-        tmp_path / "auth-register.db"
-    )
+def test_register_persists_user_without_issuing_session(dialect_engine) -> None:
+    service, repository, publisher, verification_store = _build_service(dialect_engine)
 
     user = service.register(
         nickname="Echo Learner",
@@ -157,8 +149,8 @@ def test_register_persists_user_without_issuing_session(tmp_path: Path) -> None:
     assert verification_store.issue_calls == [("learner@example.com", "127.0.0.1")]
 
 
-def test_register_normalizes_email_and_nickname_in_service(tmp_path: Path) -> None:
-    service, repository, _, _ = _build_service(tmp_path / "auth-register-normalize.db")
+def test_register_normalizes_email_and_nickname_in_service(dialect_engine) -> None:
+    service, repository, _, _ = _build_service(dialect_engine)
 
     user = service.register(
         nickname="  Echo Learner  ",
@@ -175,8 +167,8 @@ def test_register_normalizes_email_and_nickname_in_service(tmp_path: Path) -> No
     assert stored_user.nickname == "Echo Learner"
 
 
-def test_register_rejects_blank_nickname_in_service(tmp_path: Path) -> None:
-    service, _, _, _ = _build_service(tmp_path / "auth-register-blank-nickname.db")
+def test_register_rejects_blank_nickname_in_service(dialect_engine) -> None:
+    service, _, _, _ = _build_service(dialect_engine)
 
     with pytest.raises(ValidationError, match="Nickname is required"):
         service.register(
@@ -187,8 +179,8 @@ def test_register_rejects_blank_nickname_in_service(tmp_path: Path) -> None:
         )
 
 
-def test_register_rejects_invalid_email_format_in_service(tmp_path: Path) -> None:
-    service, _, _, _ = _build_service(tmp_path / "auth-register-invalid-email.db")
+def test_register_rejects_invalid_email_format_in_service(dialect_engine) -> None:
+    service, _, _, _ = _build_service(dialect_engine)
 
     with pytest.raises(ValidationError, match="Invalid email format"):
         service.register(
@@ -199,8 +191,8 @@ def test_register_rejects_invalid_email_format_in_service(tmp_path: Path) -> Non
         )
 
 
-def test_login_rejects_wrong_password(tmp_path: Path) -> None:
-    service, _, _, verification_store = _build_service(tmp_path / "auth-login.db")
+def test_login_rejects_wrong_password(dialect_engine) -> None:
+    service, _, _, verification_store = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -213,8 +205,8 @@ def test_login_rejects_wrong_password(tmp_path: Path) -> None:
         service.login(email="learner@example.com", password="wrong-pass")
 
 
-def test_login_rejects_pending_verification_user(tmp_path: Path) -> None:
-    service, _, _, _ = _build_service(tmp_path / "auth-pending-login.db")
+def test_login_rejects_pending_verification_user(dialect_engine) -> None:
+    service, _, _, _ = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -226,8 +218,8 @@ def test_login_rejects_pending_verification_user(tmp_path: Path) -> None:
         service.login(email="learner@example.com", password="secret123")
 
 
-def test_refresh_rotates_and_revokes_previous_refresh_token(tmp_path: Path) -> None:
-    service, repository, _, verification_store = _build_service(tmp_path / "auth-refresh.db")
+def test_refresh_rotates_and_revokes_previous_refresh_token(dialect_engine) -> None:
+    service, repository, _, verification_store = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -253,8 +245,8 @@ def test_refresh_rotates_and_revokes_previous_refresh_token(tmp_path: Path) -> N
     assert active_token.revoked_at is None
 
 
-def test_login_rejects_disabled_user(tmp_path: Path) -> None:
-    service, repository, _, _ = _build_service(tmp_path / "auth-disabled-login.db")
+def test_login_rejects_disabled_user(dialect_engine) -> None:
+    service, repository, _, _ = _build_service(dialect_engine)
     repository.create_user(
         user=User(
             id="user_disabled",
@@ -269,10 +261,8 @@ def test_login_rejects_disabled_user(tmp_path: Path) -> None:
         service.login(email="disabled@example.com", password="secret123")
 
 
-def test_verify_email_activates_user_and_consumes_token(tmp_path: Path) -> None:
-    service, repository, publisher, verification_store = _build_service(
-        tmp_path / "auth-verify-email.db"
-    )
+def test_verify_email_activates_user_and_consumes_token(dialect_engine) -> None:
+    service, repository, publisher, verification_store = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -292,8 +282,8 @@ def test_verify_email_activates_user_and_consumes_token(tmp_path: Path) -> None:
         service.verify_email(email="learner@example.com", code=verification_code or "")
 
 
-def test_resend_verification_overwrites_previous_code(tmp_path: Path) -> None:
-    service, _, publisher, verification_store = _build_service(tmp_path / "auth-resend.db")
+def test_resend_verification_overwrites_previous_code(dialect_engine) -> None:
+    service, _, publisher, verification_store = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -309,10 +299,10 @@ def test_resend_verification_overwrites_previous_code(tmp_path: Path) -> None:
     assert publisher.deliveries[-1].code == "654321"
 
 
-def test_resend_verification_raises_when_frequency_limit_exceeded(tmp_path: Path) -> None:
+def test_resend_verification_raises_when_frequency_limit_exceeded(dialect_engine) -> None:
     verification_store = FakeEmailVerificationStore()
     service, _, _, _ = _build_service(
-        tmp_path / "auth-resend-rate-limit.db",
+        dialect_engine,
         verification_store=verification_store,
     )
     service.register(
@@ -328,11 +318,9 @@ def test_resend_verification_raises_when_frequency_limit_exceeded(tmp_path: Path
 
 
 def test_reset_password_rotates_credentials_and_revokes_existing_refresh_tokens(
-    tmp_path: Path,
+    dialect_engine,
 ) -> None:
-    service, repository, publisher, verification_store = _build_service(
-        tmp_path / "auth-reset-password.db"
-    )
+    service, repository, publisher, verification_store = _build_service(dialect_engine)
     service.register(
         nickname="Echo Learner",
         email="learner@example.com",
@@ -388,11 +376,11 @@ def test_register_translates_duplicate_email_conflict_into_validation_error() ->
         )
 
 
-def test_register_raises_when_mail_job_cannot_be_enqueued(tmp_path: Path) -> None:
+def test_register_raises_when_mail_job_cannot_be_enqueued(dialect_engine) -> None:
     publisher = FakeAuthMailQueuePublisher()
     publisher.raise_on_enqueue = ValidationError("queue unavailable")
     service, _, _, _ = _build_service(
-        tmp_path / "auth-register-enqueue-failure.db",
+        dialect_engine,
         mail_queue_publisher=publisher,
     )
 
