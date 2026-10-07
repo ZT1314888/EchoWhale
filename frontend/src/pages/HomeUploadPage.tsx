@@ -39,7 +39,10 @@ export function HomeUploadPage() {
       return;
     }
 
-    setShowLoginSuccess(true);
+    // 提示的展示值已在 useState 初始化时从 route state 读取（登录页必然跨路由
+    // 跳回首页，本组件必经重新挂载，初始化器总会执行）。effect 只负责用 replace
+    // 清掉 route state，防止刷新后 loginSuccess 残留导致提示复现——清路由是
+    // 对外部系统（router）的合法 effect 副作用。
     navigate(location.pathname, { replace: true, state: null });
   }, [location.pathname, location.state, navigate]);
 

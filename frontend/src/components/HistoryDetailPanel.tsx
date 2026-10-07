@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import type { HistoryDetail, PracticeMessage } from "../types/app";
@@ -21,10 +21,13 @@ export function HistoryDetailPanel({
   onLoadMoreReplay,
 }: HistoryDetailPanelProps) {
   const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
+  // 换一个会话详情时重置展开状态。用"渲染期调整 state"模式（React 官方推荐替代
+  // effect 重置）：同一次渲染内完成重置，避免 effect 先渲染一帧旧展开态再级联重渲。
+  const [renderedSessionId, setRenderedSessionId] = useState(detail.session.id);
+  if (renderedSessionId !== detail.session.id) {
+    setRenderedSessionId(detail.session.id);
     setExpandedMessages({});
-  }, [detail.session.id]);
+  }
 
   return (
     <section className="history-detail">

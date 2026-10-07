@@ -16,10 +16,9 @@ export function UserMenu({ variant = "default" }: UserMenuProps) {
   const [open, setOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  if (!auth.user) {
-    return null;
-  }
-
+  // 卸载时清掉未触发的关闭定时器。必须放在 `!auth.user` 早退之前：
+  // hooks 只能在每次渲染都以相同顺序调用，早退后再调用会在登录态
+  // 从无到有的那次渲染里改变 hook 数量，直接触发 React 运行时错误。
   useEffect(() => {
     return () => {
       if (closeTimerRef.current) {
@@ -27,6 +26,10 @@ export function UserMenu({ variant = "default" }: UserMenuProps) {
       }
     };
   }, []);
+
+  if (!auth.user) {
+    return null;
+  }
 
   function cancelScheduledClose() {
     if (closeTimerRef.current) {

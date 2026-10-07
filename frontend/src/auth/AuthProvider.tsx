@@ -1,6 +1,7 @@
 import {
   createContext,
   startTransition,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -33,7 +34,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
   });
 
-  function applyAuthenticatedState(session: AuthSession) {
+  // 回调链整体 useCallback 稳定化：挂载 effect 与 context value 的 memo 都依赖
+  // 这些函数，稳定身份让 exhaustive-deps 可以如实声明依赖而不引入重复执行。
+  // 捕获项只有 setState（恒稳定）与 isMountedRef（ref 对象恒稳定），依赖列为空是安全的。
+  const applyAuthenticatedState = useCallback((session: AuthSession) => {
     setAccessToken(session.accessToken);
     if (!isMountedRef.current) {
       return session.accessToken;
@@ -45,9 +49,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     });
     return session.accessToken;
-  }
+  }, []);
 
-  function applyAnonymousState() {
+  const applyAnonymousState = useCallback(() => {
     setAccessToken(null);
     if (!isMountedRef.current) {
       return;
@@ -58,12 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: null,
       });
     });
-  }
+  }, []);
 
-  async function refreshSession() {
+  const refreshSession = useCallback(async () => {
     const session = await refreshRequest();
     return applyAuthenticatedState(session);
-  }
+  }, [applyAuthenticatedState]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -73,29 +77,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     refreshSession().catch(() => {
-        applyAnonymousState();
-      });
+      applyAnonymousState();
+    });
 
     return () => {
       isMountedRef.current = false;
       resetApiClientAuth();
     };
+  }, [refreshSession, applyAnonymousState]);
+
+  const login = useCallback(
+    async (credentials: AuthCredentials): Promise<AuthSession> => {
+      const session = await loginRequest(credentials);
+      applyAuthenticatedState(session);
+      return session;
+    },
+    [applyAuthenticatedState],
+  );
+
+  const register = useCallback(async (payload: RegisterPayload): Promise<void> => {
+    await registerRequest(payload);
   }, []);
 
-  async function login(credentials: AuthCredentials): Promise<AuthSession> {
-    const session = await loginRequest(credentials);
-    applyAuthenticatedState(session);
-    return session;
-  }
-
-  async function register(payload: RegisterPayload): Promise<void> {
-    await registerRequest(payload);
-  }
-
-  async function logout() {
+  const logout = useCallback(async () => {
     await logoutRequest();
     applyAnonymousState();
-  }
+  }, [applyAnonymousState]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -104,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
     }),
-    [state],
+    [state, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

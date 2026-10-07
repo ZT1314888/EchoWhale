@@ -319,6 +319,11 @@ def _insert_duplicate_positions(engine: sa.Engine) -> None:
             )
 
 
+# sqlite_only 理由：down/up 可逆性是 SQLite 口径的迁移回归锁；PG 口径的迁移链
+# 验证由 CI backend-postgres job 的 `alembic upgrade head` 步骤在真实 PG 上覆盖。
+@pytest.mark.sqlite_only(
+    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+)
 def test_migration_0011_up_and_down_are_reversible(tmp_path, monkeypatch) -> None:
     """迁移链完整：up 到 head 后约束与复合索引生效，downgrade 到 0010 后两者消失。"""
     engine, config = _run_alembic(tmp_path, monkeypatch)
@@ -339,6 +344,9 @@ def test_migration_0011_up_and_down_are_reversible(tmp_path, monkeypatch) -> Non
     _insert_duplicate_positions(engine)
 
 
+@pytest.mark.sqlite_only(
+    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+)
 def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypatch) -> None:
     """迁移链完整：up 到 head 后 llm_usage 可写入且 created_at 有服务端默认值，
     downgrade 到 0011 后表随索引一起消失。"""
@@ -369,6 +377,9 @@ def test_migration_0012_llm_usage_up_and_down_are_reversible(tmp_path, monkeypat
     assert "llm_usage" not in inspector.get_table_names()
 
 
+@pytest.mark.sqlite_only(
+    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+)
 def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypatch) -> None:
     """迁移 0014（PRD v0.5 候选②）：up 到 head 后 sessions 带两展示名可空列，
     旧行读出 NULL；downgrade 到 0013 后两列消失。"""
@@ -401,6 +412,9 @@ def test_migration_0014_llm_display_name_columns_up_and_down(tmp_path, monkeypat
     assert "llm_role_label" not in columns
 
 
+@pytest.mark.sqlite_only(
+    reason="迁移 down/up 可逆性锁定 SQLite 口径，PG 口径由 CI backend-postgres job 的 alembic upgrade head 覆盖"
+)
 def test_migration_0015_llm_usage_attribution_up_and_down(tmp_path, monkeypatch) -> None:
     """迁移 0015（usage 归因）：up 到 head 后 llm_usage 带 owner/session 可空列，
     旧行读出 NULL；downgrade 到 0014 后两列消失（up/down 对称可逆）。"""

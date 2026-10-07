@@ -59,6 +59,53 @@ jobs:
         # 阈值与口径集中在 pyproject，CI 与本地 `uv run pytest --cov` 同源。
         run: uv run pytest tests --cov=api
 
+  backend-postgres:
+    name: backend (postgres parity)
+    runs-on: ubuntu-latest
+    # 生产库是 PostgreSQL 而既有 backend job 只在 SQLite 上跑：迁移链与仓储行为
+    # （FK 强制、约束、JSON 列）从未被 CI 在真实 PG 上验证过，本 job 补这一层平价。
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: echowhale
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # alembic（api/migrations/env.py 读 settings.database_url）与测试方言共用本库。
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/echowhale
+      # 测试方言开关（tests/support/dialect.py）：让 FK 顺序用例落在真实 PG 上、
+      # SQLite 专属用例显式 skip。不用 settings.database_url 做方言源，是为了
+      # 不影响本地 .env 指向 dev 库时的默认测试行为。
+      ECHOWHALE_TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/echowhale
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies (frozen lockfile)
+        run: uv sync --frozen
+
+      - name: Run migrations against real PostgreSQL
+        # 本 job 核心价值：完整 alembic 迁移链在真实 PG 上从零 upgrade 到 head，
+        # 替代 SQLite 口径的 create_all（只验模型不验迁移脚本）。
+        run: uv run alembic upgrade head
+
+      - name: Run backend tests
+        # 覆盖率门禁同 pyproject fail_under=87；SQLite 专属用例在此 job 显式
+        # skip（理由见各用例标记）。CI 无 .env，model_runtime_mode 默认 mock。
+        run: uv run pytest tests --cov=api
+
   docker:
     name: docker (image build)
     runs-on: ubuntu-latest
@@ -91,6 +138,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Lint (eslint)
+        # Lint 先于 typecheck：hooks 依赖数组错误与 fast-refresh 边界问题
+        # tsc 抓不住，先拦语义类回归再跑类型检查。
+        run: npm run lint
 
       - name: Typecheck
         run: npm run typecheck

@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/resilience_closing_batch/feature.md`
-- 本轮结论：审计尾部六项韧性收尾全清：R1 语音收口反馈失败降级占位反馈（复用 _degraded_feedback_with_log 单一转换点 + degraded=true 日志），收口照常落库返回，既有'失败不落库'测试翻转为'降级并落库'，failure policy 在 reply/stream/voice 三链路对齐；R2 llm_usage 加可空 owner_id/session_id 归因列（迁移 0015 可逆，只写不读暂不加索引），owner 走 async yield 依赖 get_attribution_owner（同步依赖进线程池会丢 ContextVar），session 在 reply/voice handler 与 SSE 生成器内部首行 set（handler 返回后才迭代），sink 在调用线程捕获后以参数传线程池，无上下文记 NULL 不抛错，访客 visitor:* 照记，think 代理因 service token 认证边界改为会话确认后 handler 内 set（user_id 即 owner 形态），span 补 echowhale.owner_id，流式末帧归因传播有测试；R3 两个 Redis 限流器经 register_script 单 Lua 脚本原子化（INCR+首次 EXPIRE），键构造与降级路径不变，fake Redis 增 EVAL 语义模拟、既有用例一条未删；R4 agent_ops bootstrap 补 <feature-name>/<bug-name>/<module-name>/<YYYY-MM-DD or blank> 四映射，四子命令参数化回归（本批次 feature.md 即由修复后工具产出自证）；R5 根 AGENTS.md 读取顺序第 4 项改指 docs/control/agent-governance.md，.codex/ 引用全部清理（.gitignore local-only，不产生第二协议源）；R6 telemetry e2e fixture 层 pin MODEL_RUNTIME_MODE=mock，裸跑（live .env）4 passed 确定性通过。。
-- 当前主要阻塞：无新增阻塞。遗留：think 一次性票据独立立项、CI PG service 容器与前端 eslint 归交付门禁批次、registry 推送待外部凭证、judge 主观分歧留观察。
-- 补充进展：pytest 635 passed / 9 skipped（MODEL_RUNTIME_MODE=mock 进程 pin；基线 622/9 净增 13 用例：语音降级落库翻转、归因三态 sink、SSE 流末帧归因传播、迁移 0015 可逆、限流 script 路径、bootstrap 四子命令回归等），覆盖率 89.56%（门禁 87；基线 89.42%，同口径上升）；ruff / black 全绿；前端 typecheck 通过、vitest 16 文件 115 passed（与基线一致），git status 证明前端零改动；R6 专项裸跑（live .env 无环境 pin）tests/api/test_telemetry_e2e.py 4 passed 确定性通过。
+- 最新归档：`docs/features/ci_pg_parity_and_eslint_gate/feature.md`
+- 本轮结论：交付门禁批次收口：R1 CI 新增 backend-postgres job（postgres:16 service + pg_isready；uv sync --frozen → alembic upgrade head 在真实 PG 验证迁移链（核心价值）→ 全量 pytest --cov=api 同 87 门禁），方言机制落 tests/support/dialect.py（ECHOWHALE_TEST_DATABASE_URL 显式方言开关、绝不取 settings.database_url 以免本地测试写 dev 库；enforce_foreign_keys SQLite PRAGMA/PG no-op；Windows psycopg async 切 Selector loop），FK 顺序三用例方言化改写（PG 真实 FK 强制验证同一意图，ID 加 per-test 随机后缀防共享库残留），4 个迁移 down/up 可逆性用例 sqlite_only 显式 skip 且理由成文（PG 口径由 upgrade head 步骤承担）；R2 前端 eslint 10 flat config（ts recommended + react-hooks v7 + react-refresh，禁止全局关规则、豁免逐条附理由），npm run lint + CI frontend Lint 步骤前置，存量 9 违规清零：UserMenu 条件 useEffect 真 bug 修复（hook 提前到早退前）、AuthProviders 回调链 useCallback 稳定化补真实依赖、HistoryPage/HistoryDetailPanel 改渲染期重置模式、HomeUploadPage 删冗余 setState（初始化器覆盖）、voice hook 卸载清理与 StartupLoadingPage 外部系统同步按条豁免附理由；R3 SampleScene.liveHint 零消费清理（数据 3 处 + 类型 1 处，grep 零残留）。
+- 当前主要阻塞：无新增阻塞。遗留：registry 推送待外部凭证、think 一次性票据独立立项、judge 主观分歧留观察、PG 口径迁移 downgrade 与全仓储 PG 参数化留后续批次。
+- 补充进展：本地等价验证（Docker 未运行，用本机真实 PG 独立库 echowhale_ci，验证后已清理）：alembic 全链 0001→0015 通过（head=20261006_0015，14 表建成）；PG 口径 631 passed / 13 skipped（13=9 既有+4 sqlite_only）、覆盖率 90.01%，3 个 FK 用例真实 PG 通过；覆盖率分母差异 276 语句全部为迁移脚本模块（PG 口径 skip 后不进分母），两口径均过 87。SQLite 基线回归确认 635 passed / 9 skipped、覆盖率 89.56% 不变；ruff / black 全绿；前端 lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.81/84.1/86.35 全过阈值（76/74/78/76）。CI PG job 与 frontend Lint 步骤以推送后 GitHub Actions 实测为准（本机 Docker 未运行，YAML 已过语法校验）。
 
 ## 模块看板
 
@@ -85,6 +85,7 @@
 | 评测驱动提示词修正 | `eval_prompt_fixes` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
 | LLM ReviewCopy 生产消费 | `review_copy_consumption` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
 | 后端韧性收尾批次 | `resilience_closing_batch` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| CI PG平价验证与前端eslint门禁 | `ci_pg_parity_and_eslint_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 
 ## 测试门
 

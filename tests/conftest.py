@@ -9,6 +9,31 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# SQLite 专属用例标记：CI backend-postgres job（ECHOWHALE_TEST_DATABASE_URL 指向 PG）
+# 下显式 skip，skip message 必须携带理由（理由成文是验收项）。
+SQLITE_ONLY_MARKER = "sqlite_only"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        f"{SQLITE_ONLY_MARKER}(reason=None): SQLite 专属用例，PG 方言下 skip（需给 reason）",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    from tests.support.dialect import dialect_is_postgres
+
+    if not dialect_is_postgres():
+        return
+
+    for item in items:
+        marker = item.get_closest_marker(SQLITE_ONLY_MARKER)
+        if marker is None:
+            continue
+        reason = marker.kwargs.get("reason") or "SQLite 专属用例（未写明理由）"
+        item.add_marker(pytest.mark.skip(reason=f"SQLite 专属：{reason}"))
+
 
 @pytest.fixture
 def anyio_backend() -> str:

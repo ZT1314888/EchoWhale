@@ -26,6 +26,21 @@ export function HistoryPage() {
   const [hasMoreReplay, setHasMoreReplay] = useState(false);
   const [loadingMoreReplay, setLoadingMoreReplay] = useState(false);
 
+  // 退出选中（activeId 清空）时清掉详情态。用"渲染期调整 state"模式（React 官方
+  // 推荐替代 effect 重置）：同一渲染内完成清空，避免先渲染一帧旧详情再级联重渲。
+  // prevActiveId 无条件跟踪变化，保证"空→id→空"往返时第二次也能正确清空；
+  // activeId 在非空 id 之间的切换不走这里，由下方的拉取 effect 用新数据替换。
+  const [prevActiveId, setPrevActiveId] = useState(activeId);
+  if (prevActiveId !== activeId) {
+    setPrevActiveId(activeId);
+    if (!activeId) {
+      setDetail(null);
+      setMessages([]);
+      setHasMoreReplay(false);
+      setNextReplayCursor(null);
+    }
+  }
+
   useEffect(() => {
     let alive = true;
 
@@ -72,15 +87,15 @@ export function HistoryPage() {
   }
 
   useEffect(() => {
+    // 空 activeId 时不清状态也不拉取：清空已由上方渲染期重置完成。
     if (!activeId) {
-      setDetail(null);
-      setMessages([]);
-      setHasMoreReplay(false);
-      setNextReplayCursor(null);
       return;
     }
 
     let alive = true;
+    // 拉取开始时同步置 loading：loadingReplay 是本次请求的即时反馈（外部请求
+    // 生命周期的同步镜像），放到异步回调里会出现"无 loading 空窗"。
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 见上：请求生命周期的同步镜像
     setLoadingMoreReplay(true);
 
     Promise.all([

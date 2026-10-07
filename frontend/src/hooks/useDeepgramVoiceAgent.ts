@@ -181,6 +181,10 @@ export function useDeepgramVoiceAgent() {
     return () => {
       void cleanup();
     };
+    // 卸载期一次性 teardown：cleanup 每次渲染重建且内部读取大量 ref 状态，
+    // 纳入依赖数组会让 effect 随每次渲染重跑，等于在语音会话进行中反复执行
+    // 清理（断开连接、停掉音频管线）。挂载只跑一次是这里的语义。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function startSession(bootstrap: VoiceBootstrapResult): Promise<void> {

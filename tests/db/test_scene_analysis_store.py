@@ -6,7 +6,6 @@ import asyncio
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import event as sa_event
 
 from api.common.enums import MediaUploadStatus
 from api.db.database import (
@@ -23,6 +22,7 @@ from api.db.scene_analysis_db import (
     build_scene_analysis_store,
 )
 from api.models.media_model import Media
+from tests.support.dialect import enforce_foreign_keys
 
 
 def _media(media_id: str = "med_cache") -> Media:
@@ -48,11 +48,8 @@ def engine_url(tmp_path) -> str:
 
 
 def _enable_sqlite_foreign_keys(engine) -> None:
-    @sa_event.listens_for(engine.sync_engine, "connect")
-    def _turn_on(dbapi_connection, _record):  # pragma: no cover - sqlite 专属
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
+    """方言感知 FK 强制：SQLite 装 PRAGMA，PG 天生强制（复用 dialect helper）。"""
+    enforce_foreign_keys(engine)
 
 
 @pytest.mark.anyio

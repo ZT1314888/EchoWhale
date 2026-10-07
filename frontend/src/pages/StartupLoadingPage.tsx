@@ -60,6 +60,11 @@ export function StartupLoadingPage() {
     };
   }, []);
 
+  // 该 effect 是"路由 state（外部系统）→ 上传流程编排"的正当 effect 用法：
+  // draft 变化时同步落 uploading/error 初值并启动异步上传。同步 setState 是
+  // 请求生命周期的镜像（异步回调里才置位会出现"既不在上传也无错误"的空窗态），
+  // 因此整块豁免 set-state-in-effect；draft 重来（retryKey）也依赖这里的同步重置。
+  /* eslint-disable react-hooks/set-state-in-effect -- 外部系统同步 + 上传编排，见上 */
   useEffect(() => {
     if (draft?.source !== "file") {
       setUploading(false);
@@ -105,6 +110,7 @@ export function StartupLoadingPage() {
       active = false;
     };
   }, [draft, retryKey]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const holdingForAnalysis = analysisPending && latestAnalysisStatus !== "ready";
   const displayStage = holdingForAnalysis ? Math.min(stageIndex, ANALYSIS_HOLD_STAGE) : stageIndex;

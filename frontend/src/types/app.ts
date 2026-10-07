@@ -9,7 +9,6 @@ export type SampleScene = {
   roleLabel: string;
   openingPrompt: string;
   tags: string[];
-  liveHint: string;
 };
 
 export type UploadDraft = {

@@ -15,7 +15,6 @@ export const sampleScenes: SampleScene[] = [
     roleLabel: "角色 · 友好的店员",
     openingPrompt: "开场提示：店员先向你问好。先用一句简短英文回应，把对话顺利打开。",
     tags: ["点单菜单", "轻松语气"],
-    liveHint: "先用更短的开场句，再把额外细节放到第二句里，会更稳。",
   },
   {
     id: "office",
@@ -26,7 +25,6 @@ export const sampleScenes: SampleScene[] = [
     roleLabel: "角色 · 项目同事",
     openingPrompt: "开场提示：同事先问你进度。先回答状态，再补一句下一步动作。",
     tags: ["简短汇报", "工作日常"],
-    liveHint: "先说结果，再说原因，会更像真实办公室沟通。",
   },
   {
     id: "street",
@@ -37,6 +35,5 @@ export const sampleScenes: SampleScene[] = [
     roleLabel: "角色 · 路人",
     openingPrompt: "开场提示：先用一句英文礼貌发问，再补目的地信息。",
     tags: ["问路确认", "生活场景"],
-    liveHint: "先说目的地，再问路线，会更容易得到清晰回复。",
   },
 ];
