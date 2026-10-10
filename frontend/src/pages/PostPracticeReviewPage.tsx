@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
-import { BrandHeader } from "../components/BrandHeader";
 import { getPracticeReview as getRealPracticeReview } from "../services/reviewApi";
 import type { ReviewSummary } from "../types/app";
 
@@ -34,7 +33,6 @@ export function PostPracticeReviewPage() {
     return (
       <div className="page-shell">
         <div className="page-frame">
-          <BrandHeader />
           <main className="empty-stage">
             <h1>练后反馈还没准备好</h1>
             <Link className="primary-button" to={`/session/${sessionId}`}>
@@ -50,7 +48,6 @@ export function PostPracticeReviewPage() {
     return (
       <div className="page-shell">
         <div className="page-frame">
-          <BrandHeader />
           <main className="empty-stage">
             <h1>正在生成练后反馈…</h1>
           </main>
@@ -62,7 +59,6 @@ export function PostPracticeReviewPage() {
   return (
     <div className="page-shell">
       <div className="page-frame">
-        <BrandHeader />
 
         <main className="panel-section">
           <div className="section-header">

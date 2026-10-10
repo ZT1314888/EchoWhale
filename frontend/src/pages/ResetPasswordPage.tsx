@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
-import { BrandHeader } from "../components/BrandHeader";
 import { resetPassword } from "../services/authApi";
 
 export function ResetPasswordPage() {
@@ -68,7 +67,6 @@ export function ResetPasswordPage() {
   return (
     <div className="page-shell page-shell--auth">
       <div className="page-frame">
-        <BrandHeader />
 
         <main className="auth-layout">
           <section className="panel-card auth-aside">

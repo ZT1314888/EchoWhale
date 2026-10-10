@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import { BrandHeader } from "../components/BrandHeader";
 import { HistoryDetailPanel } from "../components/HistoryDetailPanel";
 import { HistoryList } from "../components/HistoryList";
 import {
@@ -151,7 +150,6 @@ export function HistoryPage() {
   return (
     <div className="page-shell">
       <div className="page-frame">
-        <BrandHeader />
 
         <main className="page-grid page-grid--history">
           <section className="panel-section">

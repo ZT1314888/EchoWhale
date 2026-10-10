@@ -1,7 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { BrandHeader } from "../components/BrandHeader";
 import { resendVerification, verifyEmail } from "../services/authApi";
 
 type VerificationState = "ready" | "sending" | "sent" | "verifying" | "verified" | "error";
@@ -71,7 +70,6 @@ export function VerifyEmailPage() {
   return (
     <div className="page-shell page-shell--auth">
       <div className="page-frame">
-        <BrandHeader />
 
         <main className="auth-layout">
           <section className="panel-card auth-aside">

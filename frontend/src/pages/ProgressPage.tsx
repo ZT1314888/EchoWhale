@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { BrandHeader } from "../components/BrandHeader";
 import { getLearnerProfile } from "../services/learnerApi";
 import type { LearnerProfileOverview } from "../types/app";
 
@@ -56,7 +55,6 @@ export function ProgressPage() {
   return (
     <div className="page-shell">
       <div className="page-frame">
-        <BrandHeader />
 
         <main className="page-grid page-grid--progress">
           <section className="panel-section">
