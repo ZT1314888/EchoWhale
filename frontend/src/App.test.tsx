@@ -158,15 +158,16 @@ describe("App", () => {
     await renderApp();
 
     expect(screen.getByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /选择图片/i })).toBeInTheDocument();
-    expect(screen.getByText(/试试一个示例场景/i)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Topics/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Upload/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Paste/ })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "咖啡店柜台与点单场景" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "办公室内的工作交流场景" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "街头出行与问路场景" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Log in" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start free" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /主导航/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /历史记录/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /主导航/i })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /六屏预览切换/i })).not.toBeInTheDocument();
   });
 
@@ -180,7 +181,7 @@ describe("App", () => {
     vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
     await renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: /使用示例场景/i }));
+    fireEvent.click(screen.getByRole("button", { name: /咖啡店点单/ }));
     expect(screen.getByRole("heading", { name: /正在分析你的上传内容/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /进入练习/i })).toBeDisabled();
     expect(screen.queryByRole("navigation", { name: /主导航/i })).toBeInTheDocument();
@@ -817,7 +818,7 @@ describe("App", () => {
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
-  it("shows an authenticated nickname menu and restores anonymous actions after logout", async () => {
+  it("shows the authenticated account chip and restores anonymous actions after logout", async () => {
     vi.spyOn(authApi, "refresh").mockResolvedValue({
       accessToken: "access-token-1",
       user: {
@@ -830,24 +831,18 @@ describe("App", () => {
 
     await renderApp(["/"]);
 
-    const nicknameTrigger = await screen.findByRole("button", { name: /echo learner/i });
-    const menuContainer = nicknameTrigger.closest(".user-menu");
+    // chip 是指向 /progress 的链接，登出是同级图标按钮——没有下拉菜单，
+    // 也就不存在 .user-menu 这层 DOM 耦合。
+    expect(await screen.findByRole("link", { name: /echo learner/i })).toHaveAttribute("href", "/progress");
+    expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument();
 
-    expect(menuContainer).not.toBeNull();
-    expect(screen.queryByRole("link", { name: /登录 \/ 注册/i })).not.toBeInTheDocument();
-
-    fireEvent.mouseEnter(menuContainer!);
-    const logoutButton = await screen.findByRole("menuitem", { name: /退出登录/i });
-
-    fireEvent.mouseLeave(menuContainer!);
-    expect(screen.getByRole("menuitem", { name: /退出登录/i })).toBeInTheDocument();
-    fireEvent.click(logoutButton);
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
     await waitFor(() => {
       expect(authApi.logout).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /echo learner/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Log in" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /echo learner/i })).not.toBeInTheDocument();
   });
 
   it("navigates between login and register routes", async () => {
