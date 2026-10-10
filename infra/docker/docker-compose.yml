@@ -25,17 +25,27 @@ services:
 
   api:
     build:
-      context: ..
+      context: ../..
       dockerfile: infra/docker/Dockerfile
     # 迁移先行：alembic upgrade head 成功后才启动 API（失败即退出，避免假就绪）。
     command: sh -c "alembic upgrade head && uvicorn api.main:app --host 0.0.0.0 --port 8000"
     environment:
-      APP_ENV: production
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/echowhale
       REDIS_URL: redis://redis:6379/0
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?set AUTH_JWT_SECRET}
-      # 生产其余必填项（AUTH_COOKIE_SECURE / ALLOWED_ORIGINS / SMTP / R2 /
-      # DEEPGRAM_*) 由启动校验清单逐项点名，缺一不启动——docs/deployment.md。
+      # 开发环境必填项
+      MODEL_RUNTIME_MODE: ${MODEL_RUNTIME_MODE:-mock}
+      VISION_PRIMARY_PROVIDER: ${VISION_PRIMARY_PROVIDER:-mock}
+      TEXT_PRIMARY_PROVIDER: ${TEXT_PRIMARY_PROVIDER:-mock}
+      # Deepgram 语音配置
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      DEEPGRAM_AGENT_BASE_URL: ${DEEPGRAM_AGENT_BASE_URL:-}
+      DEEPGRAM_AGENT_THINK_MODEL: ${DEEPGRAM_AGENT_THINK_MODEL:-}
+      DEEPGRAM_AGENT_THINK_UPSTREAM_BASE_URL: ${DEEPGRAM_AGENT_THINK_UPSTREAM_BASE_URL:-}
+      DEEPGRAM_AGENT_THINK_UPSTREAM_API_KEY: ${DEEPGRAM_AGENT_THINK_UPSTREAM_API_KEY:-}
+      # 生产其余必填项（AUTH_COOKIE_SECURE / ALLOWED_ORIGINS / SMTP / R2）
+      # 由启动校验清单逐项点名，缺一不启动——docs/deployment.md。
     ports:
       - "8000:8000"
     depends_on:
@@ -46,13 +56,13 @@ services:
 
   worker:
     build:
-      context: ..
+      context: ../..
       dockerfile: infra/docker/Dockerfile
     # RQ worker 消费 auth-mail 与 scene-analysis 队列；
     # SCENE_ANALYSIS_ASYNC_ENABLED=true 开启前必须确认本服务在跑（docs/deployment.md）。
     command: python -m api.tasks.worker
     environment:
-      APP_ENV: production
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/echowhale
       REDIS_URL: redis://redis:6379/0
       AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?}
