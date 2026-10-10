@@ -1,0 +1,65 @@
+/*
+ * Document-level foundations for the ported design language.
+ *
+ * Loaded LAST in the transitional import order so its body/font rules win over the
+ * legacy `base.css` background and font stack while old pages are still running.
+ */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-paper);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: #131311;
+  color: #d8f34e;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #d6d3cb;
+  border-radius: 8px;
+  border: 2px solid #f4f3ef;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b9b5aa;
+}
+
+input[type="range"] {
+  accent-color: #131311;
+}
+
+:focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/*
+ * The prototype ships no reduced-motion fallback, but the legacy `components.css`
+ * did. Accessibility regressions are not an acceptable side effect of a restyle.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-slow,
+  .animate-marquee,
+  .wave-bar,
+  .shimmer,
+  .animate-blink,
+  .stagger > * {
+    animation: none !important;
+  }
+}
