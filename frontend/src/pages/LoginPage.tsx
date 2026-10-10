@@ -2,7 +2,12 @@ import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
-import { BrandHeader } from "../components/BrandHeader";
+import { AuthAlert } from "../components/AuthAlert";
+import { AuthBrandPanel } from "../components/AuthBrandPanel";
+import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthLayout } from "../components/AuthLayout";
+import { AuthSubmitButton } from "../components/AuthSubmitButton";
+import { AuthTextField } from "../components/AuthTextField";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -18,8 +23,9 @@ export function LoginPage() {
 
   if (auth.status === "refreshing") {
     return (
-      <main className="empty-stage">
-        <h1>正在恢复登录状态…</h1>
+      <main className="auth-loading-stage">
+        <div className="auth-loading-spinner" />
+        <p className="auth-loading-text">正在恢复登录状态…</p>
       </main>
     );
   }
@@ -35,12 +41,12 @@ export function LoginPage() {
     const normalizedPassword = password.trim();
 
     if (!normalizedEmail) {
-      setError("邮箱不能为空");
+      setError("请输入邮箱地址");
       return;
     }
 
     if (!normalizedPassword) {
-      setError("密码不能为空");
+      setError("请输入密码");
       return;
     }
 
@@ -51,77 +57,105 @@ export function LoginPage() {
       setLoginSucceeded(true);
     } catch (reason) {
       const typed = reason as { message?: string };
-      setError(typed.message ?? "登录失败，请稍后重试。");
+      setError(typed.message ?? "登录失败，请稍后重试");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="page-shell page-shell--auth">
-      <div className="page-frame">
-        <BrandHeader />
-
-        <main className="auth-layout">
-          <section className="panel-card auth-aside">
-            <p className="eyebrow eyebrow--brand">EchoWhale</p>
-            <h2>回到你的安静开口通道</h2>
-            <p className="muted-text">
-              轻量登录后，继续以场景为起点的口语练习；每轮结束后，只保留一份简短回响。
-            </p>
-            <div className="pill-row">
-              <span className="info-pill">场景上传</span>
-              <span className="info-pill">语音优先</span>
+    <AuthLayout
+      brand={
+        <AuthBrandPanel
+          title={
+            <>
+              欢迎回到你的
+              <br />
+              口语练习通道
+            </>
+          }
+          description="场景化英语口语陪练系统，基于真实场景开口练习，每轮结束获得简洁反馈与个人学习档案。"
+        >
+          <div className="auth-feature-list">
+            <div className="auth-feature-item">
+              <div className="auth-feature-item__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <span className="auth-feature-item__text">上传场景图片</span>
             </div>
-          </section>
-
-          <section className="panel-card auth-panel">
-            <div className="section-header section-header--stack">
-              <p className="eyebrow">Welcome Back</p>
-              <h1>欢迎回来</h1>
-              <p className="muted-text">轻量登录后，继续你刚才停下来的那一轮场景口语练习。</p>
+            <div className="auth-feature-item">
+              <div className="auth-feature-item__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              </div>
+              <span className="auth-feature-item__text">实时语音对话</span>
             </div>
-
-            <form className="auth-form" onSubmit={onSubmit}>
-              <label className="field-label" htmlFor="login-email">
-                邮箱
-              </label>
-              <input
-                id="login-email"
-                className="input-field"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              <label className="field-label" htmlFor="login-password">
-                密码
-              </label>
-              <input
-                id="login-password"
-                className="input-field"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {error ? <p className="form-error">{error}</p> : null}
-              <button className="primary-button" type="submit" disabled={submitting}>
-                {submitting ? "登录中…" : "继续进入练习"}
-              </button>
-            </form>
-
+            <div className="auth-feature-item">
+              <div className="auth-feature-item__icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <polyline points="10 9 9 9 8 9" />
+                </svg>
+              </div>
+              <span className="auth-feature-item__text">练习回顾与复盘</span>
+            </div>
+          </div>
+        </AuthBrandPanel>
+      }
+    >
+      <AuthFormCard title="登录账号" subtitle="继续你的英语口语练习">
+        <form className="auth-form-modern" onSubmit={onSubmit}>
+          <AuthTextField
+            id="login-email"
+            label="邮箱地址"
+            type="email"
+            placeholder="your@email.com"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+          />
+          <AuthTextField
+            id="login-password"
+            label="密码"
+            placeholder="••••••••"
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            showPasswordToggle
+          />
+          {error ? <AuthAlert message={error} /> : null}
+          <AuthSubmitButton submitting={submitting} submittingText="登录中…">
+            登录
+          </AuthSubmitButton>
+          <div className="auth-form-footer">
             <button
-              className="link-button"
               type="button"
+              className="auth-form-link"
               onClick={() => navigate("/forgot-password", { state: { prefillEmail: email } })}
             >
               忘记密码？
             </button>
-            <p className="muted-text">第一次来到这里？一步创建账号，把每次练习的回响都保存下来。</p>
-            <button className="link-button" type="button" onClick={() => navigate("/register")}>
-              去注册
-            </button>
-          </section>
-        </main>
-      </div>
-    </div>
+          </div>
+        </form>
+
+        <div className="auth-form-divider">
+          <span className="auth-form-divider__text">还没有账号？</span>
+        </div>
+        <button type="button" className="auth-form-secondary" onClick={() => navigate("/register")}>
+          创建新账号
+        </button>
+      </AuthFormCard>
+    </AuthLayout>
   );
 }

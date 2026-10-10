@@ -491,7 +491,7 @@ describe("App", () => {
 
     await renderApp(["/history"]);
 
-    expect(await screen.findByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录账号" })).toBeInTheDocument();
     expect(historyListSpy).not.toHaveBeenCalled();
   });
 
@@ -557,7 +557,7 @@ describe("App", () => {
 
     await renderApp(["/progress"]);
 
-    expect(await screen.findByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录账号" })).toBeInTheDocument();
     expect(profileSpy).not.toHaveBeenCalled();
   });
 
@@ -573,13 +573,13 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "secret123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
     expect(await screen.findByRole("status")).toHaveTextContent(/登录成功/i);
@@ -598,19 +598,19 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "wrong-pass" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByText("邮箱/密码错误")).toBeInTheDocument();
     expect(screen.queryByText("Invalid email or password")).not.toBeInTheDocument();
   });
 
-  it("shows a localized login validation error for invalid email format", async () => {
+  it("shows a localized login validation error when the api rejects the email address", async () => {
     vi.spyOn(authApi, "login").mockRejectedValue({
       code: "AUTH_API_FAILED",
       message: "邮箱格式错误",
@@ -618,17 +618,34 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
-      target: { value: "not-an-email" },
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "secret123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByText("邮箱格式错误")).toBeInTheDocument();
     expect(screen.queryByText("Invalid email format")).not.toBeInTheDocument();
     expect(screen.queryByText("Validation error")).not.toBeInTheDocument();
+  });
+
+  it("skips login when the email address is malformed", async () => {
+    const loginSpy = vi.spyOn(authApi, "login");
+
+    await renderApp(["/login"]);
+
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "not-an-email" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+
+    expect(loginSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("请输入邮箱地址")).not.toBeInTheDocument();
   });
 
   it("shows a localized login validation error for password rules", async () => {
@@ -639,13 +656,13 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "password" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByText("密码至少 8 位且需包含字母和数字")).toBeInTheDocument();
     expect(screen.queryByText("Password must include letters and numbers")).not.toBeInTheDocument();
@@ -660,13 +677,13 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "secret123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
     expect(await screen.findByText("请先完成邮箱验证后再登录")).toBeInTheDocument();
     expect(screen.queryByText("Please verify your email before logging in")).not.toBeInTheDocument();
@@ -677,15 +694,15 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "   " },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "secret123" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByText("邮箱不能为空")).toBeInTheDocument();
+    expect(await screen.findByText("请输入邮箱地址")).toBeInTheDocument();
     expect(loginSpy).not.toHaveBeenCalled();
   });
 
@@ -694,15 +711,15 @@ describe("App", () => {
 
     await renderApp(["/login"]);
 
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "   " },
     });
-    fireEvent.click(screen.getByRole("button", { name: /继续进入练习/i }));
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
 
-    expect(await screen.findByText("密码不能为空")).toBeInTheDocument();
+    expect(await screen.findByText("请输入密码")).toBeInTheDocument();
     expect(loginSpy).not.toHaveBeenCalled();
   });
 
@@ -711,23 +728,27 @@ describe("App", () => {
 
     await renderApp(["/register?next=%2Fhistory"]);
 
-    expect(screen.getByLabelText(/昵称/i)).toHaveValue("");
-    expect(screen.getByLabelText(/邮箱/i)).toHaveValue("");
-    expect(screen.getByLabelText(/密码/i)).toHaveValue("");
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    expect(screen.getByLabelText("昵称")).toHaveValue("");
+    expect(screen.getByLabelText("邮箱地址")).toHaveValue("");
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByLabelText("确认密码")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
     expect(await screen.findByRole("heading", { name: /查收你的验证码/i })).toBeInTheDocument();
     expect(screen.getByText(/learner@example.com/i)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /创建你的开口通道/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "创建账号" })).not.toBeInTheDocument();
   });
 
   it("shows a localized registration error when the email already exists", async () => {
@@ -738,13 +759,16 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
@@ -753,7 +777,7 @@ describe("App", () => {
     expect(screen.queryByText("Email already registered")).not.toBeInTheDocument();
   });
 
-  it("shows a localized registration validation error for invalid email format", async () => {
+  it("shows a localized registration validation error when the api rejects the email address", async () => {
     vi.spyOn(authApi, "register").mockRejectedValue({
       code: "AUTH_API_FAILED",
       message: "邮箱格式错误",
@@ -761,13 +785,16 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
-      target: { value: "not-an-email" },
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
@@ -775,6 +802,29 @@ describe("App", () => {
     expect(await screen.findByText("邮箱格式错误")).toBeInTheDocument();
     expect(screen.queryByText("Invalid email format")).not.toBeInTheDocument();
     expect(screen.queryByText("Validation error")).not.toBeInTheDocument();
+  });
+
+  it("skips registration when the email address is malformed", async () => {
+    const registerSpy = vi.spyOn(authApi, "register");
+
+    await renderApp(["/register"]);
+
+    fireEvent.change(screen.getByLabelText("昵称"), {
+      target: { value: "Echo Learner" },
+    });
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "not-an-email" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
+
+    expect(registerSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("请输入邮箱地址")).not.toBeInTheDocument();
   });
 
   it("shows a localized registration validation error for password rules", async () => {
@@ -785,13 +835,16 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "password" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "password" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
@@ -806,18 +859,21 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "   " },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
-    expect(await screen.findByText("昵称不能为空")).toBeInTheDocument();
+    expect(await screen.findByText("请输入昵称")).toBeInTheDocument();
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
@@ -826,18 +882,21 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "   " },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
       target: { value: "secret123" },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
-    expect(await screen.findByText("邮箱不能为空")).toBeInTheDocument();
+    expect(await screen.findByText("请输入邮箱地址")).toBeInTheDocument();
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
@@ -846,18 +905,64 @@ describe("App", () => {
 
     await renderApp(["/register"]);
 
-    fireEvent.change(screen.getByLabelText(/昵称/i), {
+    fireEvent.change(screen.getByLabelText("昵称"), {
       target: { value: "Echo Learner" },
     });
-    fireEvent.change(screen.getByLabelText(/邮箱/i), {
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
       target: { value: "learner@example.com" },
     });
-    fireEvent.change(screen.getByLabelText(/密码/i), {
+    fireEvent.change(screen.getByLabelText("密码"), {
       target: { value: "   " },
     });
     fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
 
-    expect(await screen.findByText("密码不能为空")).toBeInTheDocument();
+    expect(await screen.findByText("请输入密码")).toBeInTheDocument();
+    expect(registerSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows a localized error and skips registration when the password is too short", async () => {
+    const registerSpy = vi.spyOn(authApi, "register");
+
+    await renderApp(["/register"]);
+
+    fireEvent.change(screen.getByLabelText("昵称"), {
+      target: { value: "Echo Learner" },
+    });
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "learner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "abc12" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
+      target: { value: "abc12" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
+
+    expect(await screen.findByText("密码长度至少为 6 个字符")).toBeInTheDocument();
+    expect(registerSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows a localized error and skips registration when the password confirmation differs", async () => {
+    const registerSpy = vi.spyOn(authApi, "register");
+
+    await renderApp(["/register"]);
+
+    fireEvent.change(screen.getByLabelText("昵称"), {
+      target: { value: "Echo Learner" },
+    });
+    fireEvent.change(screen.getByLabelText("邮箱地址"), {
+      target: { value: "learner@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("密码"), {
+      target: { value: "secret123" },
+    });
+    fireEvent.change(screen.getByLabelText("确认密码"), {
+      target: { value: "secret456" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /创建账号/i }));
+
+    expect(await screen.findByText("两次输入的密码不一致")).toBeInTheDocument();
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
@@ -934,13 +1039,13 @@ describe("App", () => {
   it("navigates between login and register routes", async () => {
     await renderApp(["/login"]);
 
-    expect(screen.getByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录账号" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /忘记密码/i }));
-    expect(screen.getByRole("heading", { name: /找回密码/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "忘记密码" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /返回登录/i }));
-    expect(await screen.findByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /去注册/i }));
-    expect(screen.getByRole("heading", { name: /创建你的开口通道/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "登录账号" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /创建新账号/i }));
+    expect(screen.getByRole("heading", { name: "创建账号" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /创建账号/i })).toBeInTheDocument();
   });
 
@@ -1000,7 +1105,7 @@ describe("App", () => {
       await Promise.resolve();
     });
     vi.useRealTimers();
-    expect(screen.getByRole("heading", { name: /欢迎回来/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "登录账号" })).toBeInTheDocument();
   });
 
   it("waits out async scene analysis and enters the session when the retry succeeds", async () => {
