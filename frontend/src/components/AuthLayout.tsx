@@ -7,14 +7,12 @@ type AuthLayoutProps = {
   children: ReactNode;
 };
 
-/** 登录/注册/找回密码共用的整页外壳：渐变底 + 左右两栏居中布局。 */
+/** 登录/注册/找回密码共用的整页外壳：编辑感双栏，窄屏收成单列。 */
 export function AuthLayout({ brand, children }: AuthLayoutProps) {
   return (
-    <div className="auth-page">
-      <div className="auth-page__container">
-        {brand}
-        {children}
-      </div>
+    <div className="mx-auto grid min-h-[86vh] max-w-6xl items-stretch gap-5 px-4 py-8 sm:px-6 lg:grid-cols-[1.05fr_1fr]">
+      {brand}
+      {children}
     </div>
   );
 }

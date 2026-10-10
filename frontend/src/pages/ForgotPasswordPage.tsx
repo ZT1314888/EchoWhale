@@ -1,10 +1,13 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Clock3, MailCheck, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "../auth/AuthProvider";
 import { AuthAlert } from "../components/AuthAlert";
 import { AuthBrandPanel } from "../components/AuthBrandPanel";
+import { AuthFeatureList } from "../components/AuthFeatureList";
 import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthFormDivider, AuthLoadingStage, AuthSecondaryButton } from "../components/AuthControls";
 import { AuthLayout } from "../components/AuthLayout";
 import { AuthSubmitButton } from "../components/AuthSubmitButton";
 import { AuthTextField } from "../components/AuthTextField";
@@ -21,12 +24,7 @@ export function ForgotPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (auth.status === "refreshing") {
-    return (
-      <main className="auth-loading-stage">
-        <div className="auth-loading-spinner" />
-        <p className="auth-loading-text">正在恢复登录状态…</p>
-      </main>
-    );
+    return <AuthLoadingStage>正在恢复登录状态…</AuthLoadingStage>;
   }
 
   if (auth.status === "authenticated") {
@@ -68,41 +66,20 @@ export function ForgotPasswordPage() {
               登录入口
             </>
           }
-          description="输入注册邮箱，我们会发送密码重置链接。无论邮箱是否注册，页面都会给出相同的提示，以避免泄露账号是否存在。"
+          description="输入注册邮箱，我们会发送密码重置链接。无论邮箱是否注册，页面都给出相同提示，以免泄露账号是否存在。"
         >
-          <div className="auth-feature-list">
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">重置链接有效期有限，请尽快使用</span>
-            </div>
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">重置成功后旧登录会话将被撤销</span>
-            </div>
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">没收到邮件？请检查垃圾邮件文件夹</span>
-            </div>
-          </div>
+          <AuthFeatureList
+            items={[
+              { icon: Clock3, text: "重置链接有效期有限，请尽快使用" },
+              { icon: ShieldCheck, text: "重置成功后旧登录会话会被撤销" },
+              { icon: MailCheck, text: "没收到邮件？请检查垃圾邮件文件夹" },
+            ]}
+          />
         </AuthBrandPanel>
       }
     >
       <AuthFormCard title="忘记密码" subtitle="输入注册邮箱，接收密码重置链接">
-        <form className="auth-form-modern" onSubmit={onSubmit}>
+        <form className="space-y-4" onSubmit={onSubmit}>
           <AuthTextField
             id="forgot-password-email"
             label="邮箱地址"
@@ -121,16 +98,10 @@ export function ForgotPasswordPage() {
           </AuthSubmitButton>
         </form>
 
-        <div className="auth-form-divider">
-          <span className="auth-form-divider__text">想起密码了？</span>
-        </div>
-        <button
-          type="button"
-          className="auth-form-secondary"
-          onClick={() => navigate("/login", { state: { prefillEmail: email } })}
-        >
+        <AuthFormDivider label="想起密码了？" />
+        <AuthSecondaryButton onClick={() => navigate("/login", { state: { prefillEmail: email } })}>
           返回登录
-        </button>
+        </AuthSecondaryButton>
       </AuthFormCard>
     </AuthLayout>
   );

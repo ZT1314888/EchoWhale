@@ -3,7 +3,5 @@
 @import "./styles/tokens.css";       /* legacy palette, removed in C7 */
 @import "./styles/base.css";         /* legacy base, removed in C7 */
 @import "./styles/components.css";   /* legacy components, removed in C7 */
-@import "./styles/auth-modern.css";  /* legacy auth, removed in C5 */
-@import "./styles/flash-toast.css";  /* legacy toast, removed in C5 */
 @import "./styles/foundations.css";  /* new, last so body/font rules win */
 @import "./styles/utilities.css";    /* new plain-CSS utilities */
