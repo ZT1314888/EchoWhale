@@ -25,4 +25,7 @@
   --animate-float: float 7s ease-in-out infinite;
   --animate-float-slow: float 10s ease-in-out infinite;
   --animate-marquee: marquee 28s linear infinite;
+  /* `pulseRing` 的 keyframes 定义在 utilities.css —— Tailwind v4 的 --animate-* 只
+     负责拼出 animation 简写，keyframes 仍需同页存在，两者必须同批增删。 */
+  --animate-pulse-ring: pulseRing 2.4s ease-out infinite;
 }

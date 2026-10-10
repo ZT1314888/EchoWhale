@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { Logo } from "./Logo";
 
 type AnalysisStage = "scene" | "role" | "ready";
 
@@ -8,77 +8,43 @@ type StartupAnalysisOrbProps = {
   className?: string;
 };
 
-export function StartupAnalysisOrb({
-  stage,
-  isComplete,
-  className = "",
-}: StartupAnalysisOrbProps) {
-  const gradientSeed = useId().replace(/:/g, "");
-  const whaleBodyId = `startup-whale-body-${gradientSeed}`;
-  const echoWaveId = `startup-echo-wave-${gradientSeed}`;
+const RING_WIDTHS = ["w-[48%]", "w-[66%]", "w-[84%]"];
+const RING_DELAYS = [0, 1.1, 2.2];
 
+/**
+ * 分析等待页的中心视觉：三圈 iris 脉冲 + 白底鲸鱼标。
+ *
+ * 配色从旧的蓝色系换到新设计语言的 iris（#4f46e5）/ lime（#d8f34e），
+ * 但仍是纯装饰，整块 aria-hidden —— 真实进度由旁边的阶段卡片与百分比承担。
+ */
+export function StartupAnalysisOrb({ stage, isComplete, className = "" }: StartupAnalysisOrbProps) {
   return (
     <div
-      className={`startup-analysis-orb ${className}`.trim()}
+      className={`relative grid aspect-square w-[min(100%,360px)] place-items-center ${className}`.trim()}
       data-stage={stage}
       data-complete={isComplete}
       aria-hidden="true"
     >
-      <span className="startup-analysis-ring startup-analysis-ring--pulse-1" />
-      <span className="startup-analysis-ring startup-analysis-ring--pulse-2" />
-      <span className="startup-analysis-ring startup-analysis-ring--pulse-3" />
-      <span className="startup-analysis-core" />
+      {RING_WIDTHS.map((width, index) => (
+        <span
+          key={width}
+          className={`absolute ${width} aspect-square rounded-full border border-[#4f46e5]/30 animate-pulse-ring`}
+          style={{ animationDelay: `${RING_DELAYS[index]}s` }}
+        />
+      ))}
 
-      <svg
-        viewBox="0 0 200 200"
-        xmlns="http://www.w3.org/2000/svg"
-        className="startup-analysis-logo"
-        role="presentation"
-      >
-        <defs>
-          <linearGradient id={whaleBodyId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#32ADE6" />
-            <stop offset="100%" stopColor="#0A84FF" />
-          </linearGradient>
-          <linearGradient id={echoWaveId} x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#0A84FF" />
-            <stop offset="100%" stopColor="#30D158" />
-          </linearGradient>
-        </defs>
+      <span className="relative grid aspect-square w-[34%] place-items-center rounded-full bg-[#131311] shadow-[0_24px_54px_-12px_rgba(79,70,229,0.45)]">
+        <span className="absolute inset-0 rounded-full bg-gradient-to-br from-[#4f46e5]/40 to-[#d8f34e]/25 blur-md" />
+        <Logo className="relative h-1/2 w-1/2" title="" />
+      </span>
 
-        <path
-          className="startup-analysis-echo startup-analysis-echo--short"
-          d="M 88 58 Q 100 48 112 58"
-          pathLength="100"
-          fill="none"
-          stroke={`url(#${echoWaveId})`}
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        <path
-          className="startup-analysis-echo startup-analysis-echo--mid"
-          d="M 76 44 Q 100 28 124 44"
-          pathLength="100"
-          fill="none"
-          stroke={`url(#${echoWaveId})`}
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        <path
-          className="startup-analysis-echo startup-analysis-echo--long"
-          d="M 64 30 Q 100 6 136 30"
-          pathLength="100"
-          fill="none"
-          stroke={`url(#${echoWaveId})`}
-          strokeWidth="8"
-          strokeLinecap="round"
-        />
-        <path
-          d="M 40 110 C 40 70, 80 70, 100 70 C 130 70, 150 90, 150 110 Q 165 105, 175 100 Q 170 120, 150 125 C 100 140, 50 130, 40 110 Z"
-          fill={`url(#${whaleBodyId})`}
-        />
-        <circle cx="65" cy="95" r="5" fill="#FFFFFF" />
-      </svg>
+      {/* 完成时收束成实心 lime 圈，与进行中的扩散脉冲形成对比。 */}
+      {isComplete ? (
+        <span className="absolute inset-0 grid place-items-center">
+          <span className="h-[34%] w-[34%] rounded-full ring-2 ring-[#d8f34e]/70" />
+        </span>
+      ) : null}
+
     </div>
   );
 }
