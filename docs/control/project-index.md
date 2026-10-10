@@ -115,11 +115,13 @@
 
 ## 分支约定
 
-- feature 分支：`feature/<module-name>/<feature-name>`
-- bugfix 分支：`bugfix/<module-name>/<bug-name>`
+- feature 分支：`feature/<feature-name>`
+- bugfix 分支：`bugfix/<bug-name>`
 - module 分支：`module/<module-name>`
 - 集成分支：`integration/system`
 - 主线分支：`main`
+
+分支名只带类型和 slug，不带模块段；模块归属写在 feature/bug 文档的 `module` 字段里，不在分支名中重复编码。
 
 ## 操作入口
 

@@ -143,8 +143,8 @@ def bootstrap_document(
         "<module_name>": slug,
         "<version_name>": slug,
         "<major.minor.patch>": slug,
-        # 分支行的连字符形态占位符：feature/bug 模板的分支名以 slug 收尾，
-        # module 段与 <primary_module_name> 同默认（--module 或 platform_foundation）。
+        # 分支行的连字符形态占位符：feature/bug 模板的分支名只以 slug 收尾，
+        # 不带模块段（模块归属由 --module 写入文档的 module / merge_target 字段）。
         "<feature-name>": slug,
         "<bug-name>": slug,
         "<module-name>": module or "platform_foundation",

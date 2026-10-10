@@ -128,11 +128,11 @@ def test_bootstrap_four_subcommands_render_without_residual_placeholders(
     assert slug in content
 
     if artifact_type == "feature":
-        assert "- `branch`: `feature/platform_foundation/resilience-closing-batch`" in content
+        assert "- `branch`: `feature/resilience-closing-batch`" in content
         assert "- `merge_target`: `module/platform_foundation`" in content
         assert "- `module`: `platform_foundation`" in content
     elif artifact_type == "bug":
-        assert "- `branch`: `bugfix/platform_foundation/bootstrap-placeholder-gap`" in content
+        assert "- `branch`: `bugfix/bootstrap-placeholder-gap`" in content
         assert "- `merge_target`: `module/platform_foundation`" in content
         assert "- `affected_area`: `bootstrap-placeholder-gap`" in content
     elif artifact_type == "module":
@@ -214,7 +214,7 @@ def _create_minimal_workspace(workspace: Path) -> Path:
         workspace / "docs" / "features" / "_template" / "feature.md",
         "# Feature: `<feature_name>`\n"
         "- `feature`: `<feature_name>`\n"
-        "- `branch`: `feature/<module-name>/<feature-name>`\n"
+        "- `branch`: `feature/<feature-name>`\n"
         "- `module`: `<primary_module_name>`\n"
         "- `owner`: `<owner>`\n"
         "- `updated_at`: `<YYYY-MM-DD>`\n"
@@ -224,7 +224,7 @@ def _create_minimal_workspace(workspace: Path) -> Path:
         workspace / "docs" / "bugs" / "_template" / "bug.md",
         "# Bug: `<bug_title>`\n"
         "- `bug`: `<bug_title>`\n"
-        "- `branch`: `bugfix/<module-name>/<bug-name>`\n"
+        "- `branch`: `bugfix/<bug-name>`\n"
         "- `owner`: `<owner>`\n"
         "- `reported_at`: `<YYYY-MM-DD>`\n"
         "- `affected_area`: `<module or feature>`\n"

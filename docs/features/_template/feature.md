@@ -4,7 +4,7 @@
 
 - `feature`: `<feature_name>`
 - `status`: `planned` | `in_progress` | `feature_test_passed` | `merged_to_module` | `closed`
-- `branch`: `feature/<module-name>/<feature-name>`
+- `branch`: `feature/<feature-name>`
 - `module`: `<primary_module_name>`
 - `cross_module`: `yes` | `no`
 - `owner`: `<owner>`
