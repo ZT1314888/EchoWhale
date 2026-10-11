@@ -1,7 +1,4 @@
 @import "tailwindcss";
-@import "./styles/theme.css";        /* new design tokens (prototype) */
-@import "./styles/tokens.css";       /* legacy palette, removed in C7 */
-@import "./styles/base.css";         /* legacy base, removed in C7 */
-@import "./styles/components.css";   /* legacy components, removed in C7 */
-@import "./styles/foundations.css";  /* new, last so body/font rules win */
-@import "./styles/utilities.css";    /* new plain-CSS utilities */
+@import "./styles/theme.css";
+@import "./styles/foundations.css";
+@import "./styles/utilities.css";

@@ -1,11 +1,10 @@
 /*
  * Tailwind v4 design tokens ported from the english-oral-practice-app prototype.
  *
- * IMPORTANT: this block is a REPLACEMENT for the legacy `tokens.css` palette, not a
- * merge with it. The two token sets are deliberately non-overlapping
- * (paper/cream/ink/iris/lime here vs primary/foam/mist/line there), so both can be
- * loaded side by side during the migration window. Once `tokens.css` is deleted the
- * temptation to merge them disappears with it.
+ * This block REPLACED the legacy `tokens.css` palette rather than merging with it.
+ * The two token sets were deliberately non-overlapping (paper/cream/ink/iris/lime
+ * here vs primary/foam/mist/line there) so they could coexist during the migration
+ * window; `tokens.css` is gone now, so do not reintroduce a second `--color-*` set.
  *
  * Unused prototype entries were dropped: --color-peach, --color-mint,
  * --color-ink-soft, --color-iris-deep, --animate-spin-slow, --animate-gradient,

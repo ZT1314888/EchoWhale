@@ -1,8 +1,8 @@
 /*
  * Document-level foundations for the ported design language.
  *
- * Loaded LAST in the transitional import order so its body/font rules win over the
- * legacy `base.css` background and font stack while old pages are still running.
+ * Loaded after `theme.css` so `var(--font-sans)` / `var(--color-*)` resolve, and
+ * after Tailwind's own imports so the body font/background win over preflight.
  */
 
 html {
@@ -43,13 +43,25 @@ input[type="range"] {
   accent-color: #131311;
 }
 
+/*
+ * Tailwind v4's preflight deliberately leaves buttons at the browser default
+ * `cursor: auto` (the arrow), where the legacy `base.css` used to set `pointer`.
+ * Keeping the affordance is a one-line preservation, not a design change — and
+ * `:not(:disabled)` leaves `disabled:cursor-not-allowed` working, which a bare
+ * `button { cursor: pointer }` would silently defeat (unlayered rules win over
+ * Tailwind's `@layer utilities`).
+ */
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 :focus-visible {
   outline: 2px solid #4f46e5;
   outline-offset: 2px;
 }
 
 /*
- * The prototype ships no reduced-motion fallback, but the legacy `components.css`
+ * The prototype ships no reduced-motion fallback; the legacy stylesheets it replaced
  * did. Accessibility regressions are not an acceptable side effect of a restyle.
  */
 @media (prefers-reduced-motion: reduce) {
