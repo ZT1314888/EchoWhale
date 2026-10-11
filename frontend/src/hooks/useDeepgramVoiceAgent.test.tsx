@@ -9,6 +9,7 @@ const session = {
   title: "咖啡店柜台点单",
   roleLabel: "角色 · barista",
   openingPrompt: "开场提示：Hi there, what can I get started for you today?",
+  status: "active",
   tags: ["coffee", "menu"],
   voiceTitle: "点一下，用声音回答",
   voiceBody: "页面只保留语音入口。",

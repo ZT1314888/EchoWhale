@@ -2,10 +2,11 @@
 
 > **设计真源已变更（2026-10-11）**：本表在本批 UI 迁移中重建。当前真源是
 > `C:\Users\lucky\Downloads\english-oral-practice-app`（作者本机下载的 Next.js 原型，
-> 未纳入本仓库版本控制）；`designs/echowhale-mvp.pen` 是本批之前的历史真源，本批
-> 未回写、也不再作为实现依据。批次说明见
+> 未纳入本仓库版本控制）。**Pencil 时代已于 2026-10-11 整体退役**：`designs/` 目录
+> （含 `echowhale-mvp.pen`）与 `docs/control/pencil-workflow.md` 已从仓库删除，
+> Pencil 不再作为现行或候选工作流。下表中标注 `historical` 的条目保留原样，
+> 用于回溯迁移前的映射关系。批次说明见
 > [`docs/features/frontend_design_port/feature.md`](../../features/frontend_design_port/feature.md)。
-> 下表中标注 `historical` 的条目保留原样，用于回溯迁移前的映射关系。
 
 ## 目标
 
@@ -17,8 +18,7 @@
   - 令牌与 plain-CSS 工具类：`src/app/globals.css`（200 行）
   - 共享原语：`src/components/ui.tsx`
   - 页面：`src/app/{page,login,register,verify-email,forgot-password,reset-password,analyzing,practice,review,history,progress}/`
-- 工作流规范：本批**跳过** Pencil-first，见 `docs/control/pencil-workflow.md`（superseded）
-- 历史真源：`designs/echowhale-mvp.pen`（批次前，本批未回写）
+- 历史真源：`designs/echowhale-mvp.pen`（已于 2026-10-11 删除；如需考古走 git 历史）
 
 ## Token Mapping
 
@@ -72,10 +72,10 @@ keyframe）。
 
 ## 回写规则
 
-- 本批**跳过** Pencil-first 流程，因此不对 `designs/echowhale-mvp.pen` 执行任何回写。
-- 若需恢复 Pencil 工作流，先决定 `.pen` 与原型两套设计源的关系并更新本文件顶部说明，
-  再按 `docs/control/pencil-workflow.md` 的规则执行。
-- 当前端只发生小样式调整时，可以直接改代码，无需同步 `.pen`。
+- Pencil 工作流已退役（2026-10-11），`designs/` 与 `docs/control/pencil-workflow.md`
+  均已删除；不存在 `.pen` 回写环节。历史映射条目仅作考古参考。
+- 当前端只发生小样式调整时，直接改代码即可；设计语义的变更以原型
+  （仓库外）为对照，在本文件同步更新映射行。
 
 ## 当前实现说明
 

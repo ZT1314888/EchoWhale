@@ -33,6 +33,7 @@ const session = {
   title: "咖啡店柜台点单",
   roleLabel: "角色 · barista",
   openingPrompt: "开场提示：Hi there, what can I get started for you today?",
+  status: "active",
   tags: ["coffee", "menu"],
   voiceTitle: "点一下，用声音回答",
   voiceBody: "页面只保留语音入口。",
@@ -387,6 +388,16 @@ describe("PracticeSessionPage", () => {
     expect(screen.getByLabelText(/用文字继续练习/i)).toHaveValue("Could I get an iced latte, please?");
     expect(screen.getByRole("button", { name: /发送/i })).toBeEnabled();
     expect(screen.queryByText(/发送失败/)).not.toBeInTheDocument();
+  });
+
+  it("redirects a completed session to its review page", async () => {
+    vi.mocked(getPracticeSession).mockResolvedValue({ ...session, status: "completed" });
+    vi.mocked(useDeepgramVoiceAgent).mockReturnValue(baseVoiceState());
+
+    renderSessionPage();
+
+    expect(await screen.findByText("Review Page")).toBeInTheDocument();
+    expect(screen.queryByText(/咖啡店柜台点单/i)).not.toBeInTheDocument();
   });
 
 });

@@ -73,6 +73,8 @@ export type SessionSummary = {
   title: string;
   roleLabel: string;
   openingPrompt: string;
+  // 后端 SessionStatus（draft | active | completed）；completed 的会话不允许再进练习页。
+  status: string;
   tags: string[];
   voiceTitle: string;
   voiceBody: string;

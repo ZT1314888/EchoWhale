@@ -21,7 +21,8 @@
   全局 navbar/footer 由 `AppShell` 承载。真源是作者本机下载的 Next.js 原型
   `C:\Users\lucky\Downloads\english-oral-practice-app`（**仓库外，未纳入版本控制**）；
   批次说明见 [`docs/features/frontend_design_port/feature.md`](../../features/frontend_design_port/feature.md)。
-  本批**跳过 Pencil-first 流程**，`designs/echowhale-mvp.pen` 停留在批次前状态。
+  本批**跳过 Pencil-first 流程**；Pencil 时代已于 2026-10-11 整体退役（见下文收口条目，
+  `designs/` 与 `docs/control/pencil-workflow.md` 已删除）。
 - **样式层收敛**：样式结构从 `tokens / base / components` 三层收敛为
   `theme.css`（`@theme` 令牌）+ `foundations.css`（文档级基础）+ `utilities.css`
   （原型 plain-CSS 工具类）三份，`src/styles.css` 只剩 4 行 import；旧三份共 1,799 行
@@ -45,8 +46,8 @@
 - 已完成边界：前端已从浏览器 `Web Speech API` 切到 Deepgram Voice Agent bootstrap + WebSocket 实时语音链路，练习页会实时显示 `ConversationText`，并在结束会话时调用后端 `voice/complete` 写回 transcript 与 review
 - 仍然缺失：更完整的系统联调细节，以及真实私有 R2 可访问性确认
 - 当前策略补充：前端展示层已整体切到原型设计语言，设计真源见
-  `docs/features/frontend_design_port/feature.md`；`designs/echowhale-mvp.pen` 与
-  `docs/control/pencil-workflow.md` 均标记为 superseded（保留但不作为实现依据）
+  `docs/features/frontend_design_port/feature.md`；Pencil 已整体退役，不再存在
+  第二设计源。
 
 ## 输入输出契约
 
@@ -140,6 +141,7 @@
 - `2026-04-09`：移除 `practiceApi` 与 `PostPracticeReview` 中基于 `sessionId` 前缀的 runtime mock 分流，前端练习/反馈主路径统一收口到真实后端 API
 - `2026-10-11`：整套 UI 迁移到 `english-oral-practice-app` 原型设计语言（C1–C8 十个 commit，分支 `feature/ui-system-migration`）。新增 `Navbar` / `Footer` / `AppShell` / `ui.tsx`，重写 11 个页面与全部共享组件，新增 `HomeComposer` / `ImageDropzone` / `QuickReplyChips` / `PhraseBank` / `SessionMeter` / `SpeakButton` / `MedalGrid` / `useSpeechSynthesis` / `historyStats` / `progressStats`
 - `2026-10-11`：样式层收敛 —— 删 `components.css`(1,739) / `auth-modern.css`(544) / `flash-toast.css`(52) / `base.css`(41) / `tokens.css`(19)，`styles.css` 收为 4 行 import；重建 `design_mapping.md`，新增 `frontend_design_port` feature 并将 `pencil-workflow.md` 标记 superseded
+- `2026-10-11`：设计端口收口 —— R9 落地（`/session/:id` 对 completed 会话重定向复盘页，`SessionSummary` 补 `status` 映射，测试 188→189）；R8 与「11 路由 × 错误/空态」人工走查通过（双滚动条风险排除，记录见任务 `10-11-ui-migration-closeout`）；Pencil 整体退役 —— 删 `designs/`（`echowhale-mvp.pen`、logo SVG、assets、README）、`docs/control/pencil-workflow.md`、`docs/features/pencil_first_frontend_workflow/` 与两份 pencil 版本记录，README 移除 logo 引用，`design_mapping.md` 改写为「Pencil 已退役」
 
 
 

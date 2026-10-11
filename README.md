@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="designs/echowhale-logo.svg" alt="EchoWhale" width="120" />
-
 # EchoWhale v0.1.0
 
 **图片驱动的英语情景对话陪练**
@@ -115,7 +113,6 @@ EchoWhale/
 ├── tests/                # 后端回归测试
 ├── docs/                 # 产品文档与治理
 ├── infra/                # Docker, Cloudflare, Terraform
-├── designs/              # UI 设计资产（Pencil）
 ├── tools/                # 仓库治理工具
 └── .env.example          # 环境变量模板
 ```

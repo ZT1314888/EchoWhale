@@ -29,9 +29,10 @@ Next.js 原型，**未纳入本仓库版本控制**）。仓库内没有该原�
 在作者本机按此路径查看；对照物是原型的 `src/app/globals.css`（200 行设计令牌 +
 plain-CSS 工具类）与 `src/components/ui.tsx`。
 
-**本批明确跳过 Pencil-first 流程**（用户决定），因此本文档取代
-`pencil_first_frontend_workflow` 作为本轮前端设计的真源说明。Pencil 工作流本身没有
-被废除，只是本轮不适用，详见 `docs/control/pencil-workflow.md` 的 superseded 说明。
+**本批明确跳过 Pencil-first 流程**（用户决定），本文档取代
+`pencil_first_frontend_workflow` 作为本轮前端设计的真源说明。收口批次（2026-10-11）
+中用户进一步决定 Pencil 整体退役，`designs/`、`docs/control/pencil-workflow.md` 与
+`pencil_first_frontend_workflow/` 均已删除——Pencil 工作流不再是候选流程。
 
 ## 用户故事
 
@@ -77,7 +78,7 @@ plain-CSS 工具类）与 `src/components/ui.tsx`。
   内部逻辑（仅按需新增类型）。
 - `/session/:sessionId` 对已完成会话的重定向（见「已知缺口」R9）。
 - 后端 API 与契约的任何改动：本批 9 个 commit 对 `api/` 零 diff。
-- Pencil 设计资产的回写（本轮跳过 Pencil-first，见「已知缺口」）。
+- Pencil 设计资产的回写（后续收口批次改为整体删除，见「已知缺口」）。
 
 ## 设计要点
 
@@ -141,15 +142,17 @@ plain-CSS 工具类）与 `src/components/ui.tsx`。
   `Navbar.test.tsx` 等；`HistoryPage.test.tsx`(2→5)、
   `PostPracticeReviewPage.test.tsx`(3→6)、`ProgressPage.test.tsx`(3→5)、
   `TextComposer.test.tsx`(4→6，组件达 100%)。
-- 已知缺口：
-  - **R9：`/session/:sessionId` 对已完成会话仍可直接进入**。原型会重定向到复盘页，
-    EchoWhale 不会；加重定向会破坏现有练习页测试，本批**未加**，记为后续项。
-  - **R8：练习页布局需人工冒烟**。68px sticky navbar 叠加原全高舞台，`min-height` /
-    `overflow` 的双滚动条风险不在 5 条练习测试的覆盖范围内；`AppShell` 已在
-    session 路由抑制 Footer，但实际观感需人工走查。
-  - **11 条路由 × 3 个错误/空态的人工走查**（计划里的端到端清单）尚未执行，需后端在
-    `VITE_API_PROXY_TARGET` 跑着时进行。
-  - Pencil 设计资产未回写，`designs/echowhale-mvp.pen` 停留在本批之前的状态。
+- 已知缺口（2026-10-11 收口批次后全部关闭，处置记录见任务
+  `.trellis/tasks/10-11-ui-migration-closeout/`）：
+  - **R9 已落地**：`/session/:sessionId` 对 `completed` 会话渲染 `<Navigate>` 重定向
+    到复盘页；`SessionSummary` 补 `status` 字段（后端契约本就有），测试 188→189。
+  - **R8 已冒烟通过**：1440×900 页面级零溢出、无双滚动条；375×812 汉堡 + 单列、
+    零横向溢出。
+  - **「11 条路由 × 错误/空态」人工走查已执行**：全部通过，证据截图与量化指标见
+    任务目录 `walkthrough-report.md` 与 `evidence/`。
+  - **Pencil 设计资产不再回写，而是整体退役**：用户决定 Pencil 不再需要，
+    `designs/`、`docs/control/pencil-workflow.md`、
+    `docs/features/pencil_first_frontend_workflow/` 与两份 pencil 版本记录已删除。
 
 ## 控制面同步
 
@@ -161,11 +164,12 @@ plain-CSS 工具类）与 `src/components/ui.tsx`。
 
 ## 合并与关闭
 
-- 何时可以写成 `merged_to_module`：本分支合入 `integration/system` 之后。
-- 何时可以写成 `closed`：上述人工走查清单执行完、R9 与 Pencil 回写各自处置完之后。
+- 收口批次（2026-10-11）后，`closed` 的三个前置条件均已满足：人工走查清单执行完、
+  R9 落地、Pencil 以「整体删除」方式处置完毕。本 feature 仅剩
+  「分支合入 `integration/system`」一步：合入后状态可写 `merged_to_module`，随后 `closed`。
 - 相关文档链接：
-  - `docs/modules/frontend_app/design_mapping.md`（本批重建的设计映射表）
-  - `docs/control/pencil-workflow.md`（superseded 说明）
-  - `docs/modules/frontend_app/status.md`
+  - `docs/modules/frontend_app/design_mapping.md`（设计映射表；Pencil 条目已改写为退役说明）
+  - `docs/modules/frontend_app/status.md`（changelog 收口条目）
   - 提交范围：`feature/ui-system-migration` 上 C1–C8 共 10 个 commit
-    （`957a93c` 起；代码部分 C1–C7 为 73 文件、+4,950 / −3,835 行，C8 只改文档）
+    （`957a93c` 起；代码部分 C1–C7 为 73 文件、+4,950 / −3,835 行，C8 只改文档），
+    加收口批次（R9 前端 diff 9 文件 +25/−1，Pencil 资产删除与文档收口）。

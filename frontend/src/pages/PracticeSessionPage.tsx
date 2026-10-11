@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Bot, Flag, Hash, Mic, Send, Square } from "lucide-react";
 
 import { Logo } from "../components/Logo";
@@ -207,6 +207,11 @@ export function PracticeSessionPage() {
         </div>
       </main>
     );
+  }
+
+  // 已完成的会话不再可练习，直接落到复盘页（replace 保证后退不回到练习页）。
+  if (session.status === "completed") {
+    return <Navigate to={`/session/${sessionId}/review`} replace />;
   }
 
   const isLive =
