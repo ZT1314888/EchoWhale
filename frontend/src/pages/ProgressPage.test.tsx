@@ -101,4 +101,42 @@ describe("ProgressPage", () => {
     expect(profileSpy).not.toHaveBeenCalled();
   });
 
+  it("keeps the level segments dark and the score placeholders empty when the backend has no estimate", async () => {
+    vi.spyOn(authApi, "refresh").mockResolvedValue({
+      accessToken: "access-token-1",
+      user: { userId: "user_123", email: "learner@example.com", nickname: "Echo Learner" },
+    });
+    vi.spyOn(learnerApi, "getLearnerProfile").mockResolvedValue({
+      cefrEstimate: null,
+      errorTypes: [],
+      scenes: [],
+      practicedTurnCount: 4,
+      updatedAt: null,
+    });
+
+    await renderApp(["/progress"]);
+
+    expect(await screen.findByText("暂无水平估计，继续练习后会自动生成")).toBeInTheDocument();
+    expect(screen.getByText("0 / 6")).toBeInTheDocument();
+    expect(screen.getByText("4 轮")).toBeInTheDocument();
+    // 无估计时不点亮任何一段，且没有「最近更新」这类空字段。
+    expect(screen.queryByText(/最近更新/)).not.toBeInTheDocument();
+    expect(screen.queryByText("0 / 6 已解锁")).not.toBeInTheDocument();
+    expect(screen.getByText("1 / 6 已解锁")).toBeInTheDocument();
+  });
+
+  it("surfaces a load failure instead of an empty state", async () => {
+    vi.spyOn(authApi, "refresh").mockResolvedValue({
+      accessToken: "access-token-1",
+      user: { userId: "user_123", email: "learner@example.com", nickname: "Echo Learner" },
+    });
+    vi.spyOn(learnerApi, "getLearnerProfile").mockRejectedValue({ message: "学习进度加载失败。" });
+
+    await renderApp(["/progress"]);
+
+    expect(await screen.findByText("学习进度加载失败。")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: /还没有练习数据/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2, name: /成就/i })).not.toBeInTheDocument();
+  });
+
 });
