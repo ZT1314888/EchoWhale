@@ -1,5 +1,11 @@
 # Feature: `pencil_first_frontend_workflow`
 
+> **后续状态（2026-10-11）**：本 feature 描述的 Pencil-first 流程在前端 UI 整套迁移
+> （`frontend_design_port`）中**被跳过**，`designs/echowhale-mvp.pen` 不再是当前设计
+> 真源。本文档保留当时的状态词与记录，不再作为当前实现依据。当前真源与映射见
+> [`docs/features/frontend_design_port/feature.md`](../frontend_design_port/feature.md)
+> 与 `docs/modules/frontend_app/design_mapping.md`。
+
 ## 基本信息
 
 - `feature`: `pencil_first_frontend_workflow`

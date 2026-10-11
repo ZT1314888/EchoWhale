@@ -1,5 +1,16 @@
 # EchoWhale Pencil Workflow
 
+> **状态：superseded（2026-10-11）**
+>
+> 前端 UI 已整套迁移到 `english-oral-practice-app` 原型设计语言，
+> `designs/echowhale-mvp.pen` 不再是当前设计真源，本文档描述的 Pencil-first 流程
+> **本轮不再适用**（用户明确决定跳过）。本文档保留原样以保存历史，不删除。
+>
+> - 当前批次说明：`docs/features/frontend_design_port/feature.md`
+> - 当前设计映射：`docs/modules/frontend_app/design_mapping.md`
+> - 若要恢复 Pencil 工作流，先决定 `.pen` 与原型两套设计源的关系，再更新本文档
+>   顶部说明，然后按下面的规则执行。
+
 ## 目标
 
 为 EchoWhale 建立一套 `Pencil -> React + Tailwind -> Pencil 回写` 的半双向工作流。

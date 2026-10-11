@@ -1,14 +1,14 @@
 {
   "system": {
     "status": "integrating",
-    "repo_summary": "`api/` 后端与 backend-heavy 测试已成型，`frontend/` 持续补齐，`infra/` 仍以预留结构为主。",
+    "repo_summary": "`api/` 后端与 backend-heavy 测试已成型，`frontend/` 已整套切到原型设计语言并补齐进度页，`infra/` 仍以预留结构为主。",
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/pg_downgrade_repo_dialect_parity/feature.md",
-    "summary": "PG 补强批次收口（上批 CI PG 平价明确推迟的两件事）。R1：新增 tools/pg_migration_roundtrip.py 六步往返脚本（重置 schema → upgrade head → 单事务 FK-safe 灌 13 表种子 → downgrade base → upgrade head → 断言回 head），CI backend-postgres job 在 pytest 之后执行（从有数据的 schema 往下砍），15 个迁移 down() 在真实 PG 上首次全量验证且零修改；本地 scratch 库 echowhale_ci 等价验证通过后已 DROP。R2：11 个测试文件的硬编码 SQLite 引擎全量参数化——新增 tests/support/engine.py 作为方言分支唯一归属地（PG 共享库按用例 drop 全部 metadata 表，固定主键/邮箱天然隔离；SQLite tmp 文件库行为与基线逐字节一致），conftest 提供 dialect_engine / dialect_async_engine fixture 并统一 anyio_backend 的 PG Selector loop 前置；新增 tests/test_dialect_hygiene.py 防再犯守卫（禁止 tests/ 下 sqlite:// 字面量，允许清单逐项写理由）；5 个迁移链用例维持 sqlite_only 并更新理由为往返脚本覆盖。生产代码（api/、frontend/）零 diff。",
-    "blockers": "无新增阻塞。遗留：registry 推送流水线（等用户定 registry 目标与凭证）、think 一次性票据方案 B（独立立项）、judge 主观分歧留观察、CI 首跑实测（push 后用户侧确认）、守卫为轻量静态扫描（pysqlite 裸驱动名等边界见 feature.md 已知缺口）。",
-    "extra_progress": "前后对比：SQLite 口径 647→649 passed / 9 skipped（+2 新用例：守卫与往返单测），覆盖率 89.65%→90.47%（门禁 87）；PG 口径 642→644 passed / 14 skipped、覆盖率 90.41%；PG job 内真实在 PG 上执行的用例 0→47（session 13、写路径 4、learner 3、scene 4、media 1、llm_usage 7、auth service 14、mock 冒烟 1），仓储六域在 PG 上被直接覆盖。方言差异修复（修测试不放宽生产语义）：scene store 三用例补 media 父行（FK 在 PG 真实强制）、时间戳断言显式方言分支、冒烟 _prepare 补 engine.dispose()（psycopg 连接绑定创建它的 loop）；往返脚本种子改逐条 add+flush（UOW 无 relationship 不保证 FK-safe 排序，SQLite FK 默认关曾掩盖，PG 暴露），与仓储层 parent-first flush 纪律同源。前端零改动回归全绿：lint 零输出、typecheck 绿、vitest 115 passed、coverage 86.35/77.84/84.1/86.35 全过阈值（76/74/78/76）；ruff / black 全绿。文档同步：docs/features/pg_downgrade_repo_dialect_parity/feature.md、docs/deployment.md §3、.trellis/spec/backend/{database-guidelines,quality-guidelines}.md。"
+    "latest_record": "docs/features/frontend_design_port/feature.md",
+    "summary": "前端 UI 整套迁移至 english-oral-practice-app 原型设计语言（C1–C8 十个 commit，分支 feature/ui-system-migration）。C1：装 lucide-react、换 Inter/Space Grotesk/Fraunces 字体、新增 theme.css(@theme 令牌)/foundations.css/utilities.css 三份新样式。C2：新增 Navbar/Footer/AppShell/ui.tsx，App.tsx 加 pathless layout route 包住全部 11 条路由，删 BrandHeader，并把 1,250 行 App.test.tsx 按页拆成三份。C3–C6c：在保留 Deepgram 实时语音的前提下逐页重写首页(二合一创作器)/分析等待页/5 个认证页/练习页(叠加 TTS 跟读、快捷回复、金句锦囊、计时器)/复盘页(新增逐字稿 tab + 游标分页)/历史页(搜索筛选排序)/进度页(CEFR journey + 成就墙)，新增 HomeComposer/ImageDropzone/QuickReplyChips/PhraseBank/SessionMeter/SpeakButton/MedalGrid/useSpeechSynthesis/historyStats/progressStats。C7：删 tokens.css/base.css/components.css 及 C5 已删的 auth-modern.css/flash-toast.css 共 2,395 行，styles.css 收敛为 4 行 import。C8：本文档与 5 份治理文档收口。api/ 与前端契约（SessionResponse/SessionReviewResponse/LearnerProfileResponse）零 diff。",
+    "blockers": "无新增阻塞。遗留（见 frontend_design_port/feature.md 已知缺口）：R9 /session/:sessionId 对已完成会话仍可直接进入（原型会重定向到复盘页，本批未加，加重定向会破坏现有练习页测试）；R8 练习页 sticky navbar 叠加全高舞台的双滚动条风险需人工冒烟；「11 条路由 × 3 个错误/空态」人工走查清单尚未执行（需后端在 VITE_API_PROXY_TARGET 跑着时进行）；Pencil 设计资产未回写，designs/echowhale-mvp.pen 停留在本批之前的状态。",
+    "extra_progress": "两套设计源并存风险已收口：design_mapping.md 顶部加指向说明并重建全表（历史条目标 historical）、control/pencil-workflow.md 与 pencil_first_frontend_workflow/feature.md 标记 superseded（保留不删）、frontend_production_shell/feature.md 加后续状态说明。前端门禁：lint 零输出、typecheck 绿、vitest 188 passed / 31 files（迁移前 119）、coverage 90.00/82.92/85.27/90.00 全过阈值 76/74/78/76、build 产物 CSS 从 83.2 kB 降到 58.7 kB；仓库级 ruff / black / agent_ops check 全绿；api/ 零 diff。迁移的承重约束是「只坏 5 个测试而不是 55 个」：测试由 role + accessible name 驱动，本次是纯视觉变更，约 113 条测试靠逐字保留可访问名原样通过——次要语言文本一律置于 aria-hidden 的 span（否则 Log in · 登录 会把可访问名污染成 Log in 登录，全部精确匹配断言失效），页面标题用 sr-only(精确中文)+aria-hidden(可见英文行)配对。删除门禁：对 components.css 的 171 个顶层类名逐个 grep src/**/*.{tsx,ts,jsx}，164 个零引用为真孤儿，7 个命中里 6 个是 data-testid 值或注释里的巧合同形词，唯一真实消费者是 auth/RequireAuth.tsx 的 .empty-stage（已就地改为等价 Tailwind）。另补回 base.css 提供的 button:not(:disabled){cursor:pointer}——Tailwind v4 preflight 不含此条，删库会静默丢掉指针形态，而 :not(:disabled) 保住 disabled:cursor-not-allowed 不被无 layer 规则盖过。数据诚实：原型 hero 的 4.9 ★ / 12,400+ learners / 38% / 6 min 直接删除而非显示占位；无后端数据源的区块显示 0 / — / 空态并注明原因（如「后端不提供维度评分，这一格保持空态」）；MedalGrid 六枚成就里只有首次开口与十轮练习由 practicedTurnCount 真实支撑，其余四枚永久锁定并写出缺失字段名。层叠契约：utilities.css 的 plain-CSS 类故意不带 @layer 以胜过 Tailwind 同名工具类，.font-display 的 letter-spacing:-0.03em 依赖这一点，挪进 @layer components 会静默丢字距且无测试会失败。"
   },
   "modules": [
     {
@@ -132,7 +132,7 @@
       "status": "building",
       "exit_gate": "module_test_passed",
       "merge_target": "integration/system",
-      "notes": "七页路由壳层和真 upload/session/review/history 路径已落地。",
+      "notes": "整套 UI 已迁到原型设计语言（Navbar/Footer/AppShell + theme/foundations/utilities 三份样式），七页路由壳层和真 upload/session/review/history 路径已落地。",
       "owner_files": [
         "frontend/"
       ],
@@ -405,6 +405,13 @@
       "status": "feature_test_passed",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "前端UI整套迁移至原型设计语言",
+      "scope": "frontend_design_port",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
     }
   ],
   "test_layers": [

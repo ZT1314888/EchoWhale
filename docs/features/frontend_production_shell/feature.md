@@ -1,5 +1,11 @@
 # Feature: `frontend_production_shell`
 
+> **后续状态（2026-10-11）**：本 feature 建立的页面路由与壳层结构仍然成立，但其
+> 「继续以 `.pen` 为视觉真源」的约定已被前端 UI 整套迁移
+> （[`frontend_design_port`](../frontend_design_port/feature.md)）取代：当前视觉真源是
+> `english-oral-practice-app` 原型，`designs/echowhale-mvp.pen` 不再作为实现依据。
+> 壳层本身也从共享应用导航改为 `AppShell`（navbar/footer）承载全部 11 条路由。
+
 ## 基本信息
 
 - `feature`: `frontend_production_shell`
