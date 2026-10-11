@@ -686,10 +686,12 @@ async def reset_session_store() -> None:
     await SqlAlchemySessionRepository().reset()
 
 
-def build_session_repository(
-    session_factory: AsyncSessionFactory | None = None,
-) -> SessionRepository:
-    return SqlAlchemySessionRepository(session_factory)
+# 零参数签名是规范既定形态（.trellis/spec/backend/database-guidelines.md）：函数会被
+# 直接传给 Depends()，任何带默认值的请求可见参数（如 session_factory: Callable）
+# 都会被 FastAPI 收录为查询参数，Callable 无法生成 JSON schema，令 /openapi.json 全局 500。
+# 需要定制会话工厂时，直接构造 SqlAlchemySessionRepository(session_factory)。
+def build_session_repository() -> SessionRepository:
+    return SqlAlchemySessionRepository()
 
 
 def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Session:
