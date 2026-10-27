@@ -224,6 +224,8 @@ docs/*
 !docs/versions/
 !docs/bugs/
 !docs/modules/
+# proposals：多 Agent 升级等立项前规划文档的常驻区（对齐 features/versions 的放行模式）。
+!docs/proposals/
 !docs/deployment.md
 !docs/api.md
 !docs/interview/
