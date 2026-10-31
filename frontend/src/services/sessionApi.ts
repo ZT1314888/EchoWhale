@@ -121,6 +121,7 @@ function toSessionSummary(session: BackendSession): SessionSummary {
     title: session.scene_title ?? `${humanizeIdentifier(session.scene)} 情景对话`,
     roleLabel: session.role_label ?? `角色 · ${humanizeIdentifier(session.role)}`,
     openingPrompt: `开场提示：${session.opener}`,
+    status: session.status,
     tags: session.vocab_candidates ?? session.labels ?? [],
     voiceTitle: "点一下，用声音回答",
     voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",

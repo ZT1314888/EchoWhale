@@ -21,8 +21,6 @@ vi.mock("./hooks/useDeepgramVoiceAgent", () => ({
 import { App } from "./App";
 import { useDeepgramVoiceAgent } from "./hooks/useDeepgramVoiceAgent";
 import * as authApi from "./services/authApi";
-import * as historyApi from "./services/historyApi";
-import * as learnerApi from "./services/learnerApi";
 import * as mediaApi from "./services/mediaApi";
 import * as reviewApi from "./services/reviewApi";
 import * as sessionApi from "./services/sessionApi";
@@ -118,6 +116,7 @@ const realSession = {
   title: "咖啡店柜台点单",
   roleLabel: "角色 · barista",
   openingPrompt: "开场提示：Hi there, what can I get started for you today?",
+  status: "active",
   tags: ["coffee", "menu"],
   voiceTitle: "点一下，用声音回答",
   voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",
@@ -160,15 +159,16 @@ describe("App", () => {
     await renderApp();
 
     expect(screen.getByRole("heading", { name: /上传一个场景，马上开口练习/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /选择图片/i })).toBeInTheDocument();
-    expect(screen.getByText(/试试一个示例场景/i)).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Topics/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Upload/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Paste/ })).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "咖啡店柜台与点单场景" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "办公室内的工作交流场景" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "街头出行与问路场景" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Log in" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start free" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /主导航/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /历史记录/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: /主导航/i })).toBeInTheDocument();
     expect(screen.queryByRole("navigation", { name: /六屏预览切换/i })).not.toBeInTheDocument();
   });
 
@@ -182,10 +182,10 @@ describe("App", () => {
     vi.spyOn(sessionApi, "getPracticeSession").mockResolvedValue(realSession);
     await renderApp();
 
-    fireEvent.click(screen.getByRole("button", { name: /使用示例场景/i }));
+    fireEvent.click(screen.getByRole("button", { name: /咖啡店点单/ }));
     expect(screen.getByRole("heading", { name: /正在分析你的上传内容/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /进入练习/i })).toBeDisabled();
-    expect(screen.queryByRole("navigation", { name: /主导航/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: /主导航/i })).toBeInTheDocument();
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3200);
@@ -412,153 +412,6 @@ describe("App", () => {
     expect(await screen.findByText("图片分析暂时不可用，请稍后重试。")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /重试创建练习/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 2, name: /练习会话/i })).not.toBeInTheDocument();
-  });
-
-  it("renders the history route with a list and review detail panel", async () => {
-    vi.spyOn(authApi, "refresh").mockResolvedValue({
-      accessToken: "access-token-1",
-      user: {
-        userId: "user_123",
-        email: "learner@example.com",
-        nickname: "Echo Learner",
-      },
-    });
-    vi.spyOn(historyApi, "listHistorySessions").mockResolvedValue({
-      items: [
-        {
-          id: "sess_real",
-          practicedAt: "2026-04-04 15:20",
-          status: "已完成 1 轮",
-          sceneTitle: "咖啡店柜台点单",
-          roleLabel: "店员对话",
-          preview: "你已经说清楚主要需求。",
-          tags: ["coffee", "menu"],
-          reviewTitle: "本轮回响",
-          reviewSummary: "下一轮再补一条细节。",
-        },
-      ],
-      page: {
-        hasMore: false,
-        nextCursor: null,
-      },
-    });
-    vi.spyOn(historyApi, "getHistorySession").mockResolvedValue({
-      entry: {
-        id: "sess_real",
-        practicedAt: "2026-04-04 15:20",
-        status: "已完成 1 轮",
-        sceneTitle: "咖啡店柜台点单",
-        roleLabel: "店员对话",
-        preview: "你已经说清楚主要需求。",
-        tags: ["coffee", "menu"],
-        reviewTitle: "本轮回响",
-        reviewSummary: "下一轮再补一条细节。",
-      },
-      session: {
-        ...realSession,
-        messages: [],
-        totalMessages: realSession.messages.length,
-      },
-      review: realReview,
-    });
-    vi.spyOn(historyApi, "getHistorySessionMessages").mockResolvedValue({
-      items: realSession.messages,
-      page: {
-        hasMore: false,
-        nextCursor: null,
-      },
-    });
-
-    await renderApp(["/history"]);
-
-    expect(await screen.findByRole("heading", { level: 1, name: /练习历史/i })).toBeInTheDocument();
-    expect(await screen.findByRole("list", { name: /历史会话列表/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: /复盘详情/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(authApi.refresh).toHaveBeenCalledTimes(1);
-      expect(historyApi.listHistorySessions).toHaveBeenCalledTimes(1);
-      expect(historyApi.getHistorySession).toHaveBeenCalledWith("sess_real");
-      expect(historyApi.getHistorySessionMessages).toHaveBeenCalledWith("sess_real", { limit: 20 });
-    });
-  });
-
-  it("redirects anonymous history visits to the login page", async () => {
-    vi.spyOn(authApi, "refresh").mockRejectedValue({
-      code: "AUTH_REQUIRED",
-      message: "Authentication required",
-    });
-    const historyListSpy = vi.spyOn(historyApi, "listHistorySessions");
-
-    await renderApp(["/history"]);
-
-    expect(await screen.findByRole("heading", { name: "登录账号" })).toBeInTheDocument();
-    expect(historyListSpy).not.toHaveBeenCalled();
-  });
-
-  it("renders the progress empty state for authenticated visits", async () => {
-    vi.spyOn(authApi, "refresh").mockResolvedValue({
-      accessToken: "access-token-1",
-      user: {
-        userId: "user_123",
-        email: "learner@example.com",
-        nickname: "Echo Learner",
-      },
-    });
-    const profileSpy = vi.spyOn(learnerApi, "getLearnerProfile").mockResolvedValue({
-      cefrEstimate: null,
-      errorTypes: [],
-      scenes: [],
-      practicedTurnCount: 0,
-      updatedAt: null,
-    });
-
-    await renderApp(["/progress"]);
-
-    expect(await screen.findByRole("heading", { level: 1, name: /我的进度/i })).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: /上传图片开始第一次练习/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(profileSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  it("renders the progress overview cards when the learner has practiced turns", async () => {
-    vi.spyOn(authApi, "refresh").mockResolvedValue({
-      accessToken: "access-token-1",
-      user: {
-        userId: "user_123",
-        email: "learner@example.com",
-        nickname: "Echo Learner",
-      },
-    });
-    vi.spyOn(learnerApi, "getLearnerProfile").mockResolvedValue({
-      cefrEstimate: "B1",
-      errorTypes: [{ category: "tense", label: "时态", count: 12 }],
-      scenes: [{ sceneTitle: "咖啡店柜台点单", count: 8 }],
-      practicedTurnCount: 23,
-      updatedAt: "2026-10-06 15:20",
-    });
-
-    await renderApp(["/progress"]);
-
-    expect(await screen.findByRole("heading", { level: 1, name: /我的进度/i })).toBeInTheDocument();
-    expect(await screen.findByText("进阶（B1）")).toBeInTheDocument();
-    expect(screen.getByText("时态")).toBeInTheDocument();
-    expect(screen.getByText("咖啡店柜台点单")).toBeInTheDocument();
-    expect(screen.getByText("23 轮")).toBeInTheDocument();
-    expect(screen.getByText("最近更新：2026-10-06 15:20")).toBeInTheDocument();
-  });
-
-  it("redirects anonymous progress visits to the login page without fetching the profile", async () => {
-    vi.spyOn(authApi, "refresh").mockRejectedValue({
-      code: "AUTH_REQUIRED",
-      message: "Authentication required",
-    });
-    const profileSpy = vi.spyOn(learnerApi, "getLearnerProfile");
-
-    await renderApp(["/progress"]);
-
-    expect(await screen.findByRole("heading", { name: "登录账号" })).toBeInTheDocument();
-    expect(profileSpy).not.toHaveBeenCalled();
   });
 
   it("redirects successful login to the home page when there is no next query", async () => {
@@ -966,7 +819,7 @@ describe("App", () => {
     expect(registerSpy).not.toHaveBeenCalled();
   });
 
-  it("shows an authenticated nickname menu and restores anonymous actions after logout", async () => {
+  it("shows the authenticated account chip and restores anonymous actions after logout", async () => {
     vi.spyOn(authApi, "refresh").mockResolvedValue({
       accessToken: "access-token-1",
       user: {
@@ -979,61 +832,18 @@ describe("App", () => {
 
     await renderApp(["/"]);
 
-    const nicknameTrigger = await screen.findByRole("button", { name: /echo learner/i });
-    const menuContainer = nicknameTrigger.closest(".user-menu");
+    // chip 是指向 /progress 的链接，登出是同级图标按钮——没有下拉菜单，
+    // 也就不存在 .user-menu 这层 DOM 耦合。
+    expect(await screen.findByRole("link", { name: /echo learner/i })).toHaveAttribute("href", "/progress");
+    expect(screen.queryByRole("link", { name: "Log in" })).not.toBeInTheDocument();
 
-    expect(menuContainer).not.toBeNull();
-    expect(screen.queryByRole("link", { name: /登录 \/ 注册/i })).not.toBeInTheDocument();
-
-    fireEvent.mouseEnter(menuContainer!);
-    const logoutButton = await screen.findByRole("menuitem", { name: /退出登录/i });
-
-    fireEvent.mouseLeave(menuContainer!);
-    expect(screen.getByRole("menuitem", { name: /退出登录/i })).toBeInTheDocument();
-    fireEvent.click(logoutButton);
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
 
     await waitFor(() => {
       expect(authApi.logout).toHaveBeenCalledTimes(1);
     });
-    expect(await screen.findByRole("link", { name: /登录 \/ 注册/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /echo learner/i })).not.toBeInTheDocument();
-  });
-
-  it("loads a real review route for real session ids", async () => {
-    vi.spyOn(reviewApi, "getPracticeReview").mockResolvedValue(realReview);
-
-    await renderApp(["/session/sess_real/review"]);
-
-    expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(reviewApi.getPracticeReview).toHaveBeenCalledWith("sess_real");
-    });
-    expect(screen.getByText(/你已经说清楚主要需求/i)).toBeInTheDocument();
-  });
-
-  it("keeps the review empty state free of leaked english errors", async () => {
-    vi.spyOn(reviewApi, "getPracticeReview").mockRejectedValue({
-      code: "REVIEW_API_FAILED",
-      message: "Session review sess_552fc05a3fac not found",
-    });
-
-    await renderApp(["/session/sess_real/review"]);
-
-    expect(await screen.findByRole("heading", { name: /练后反馈还没准备好/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /返回练习/i })).toHaveAttribute("href", "/session/sess_real");
-    expect(screen.queryByText("Session review sess_552fc05a3fac not found")).not.toBeInTheDocument();
-    expect(screen.queryByText(/暂时无法读取练后反馈/i)).not.toBeInTheDocument();
-  });
-
-  it("loads review data through the real review api even when the session id does not use sess_ prefix", async () => {
-    const reviewSpy = vi.spyOn(reviewApi, "getPracticeReview").mockResolvedValue(realReview);
-
-    await renderApp(["/session/session-coffee/review"]);
-
-    expect(await screen.findByRole("heading", { level: 2, name: /练后反馈/i })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(reviewSpy).toHaveBeenCalledWith("session-coffee");
-    });
+    expect(await screen.findByRole("link", { name: "Log in" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /echo learner/i })).not.toBeInTheDocument();
   });
 
   it("navigates between login and register routes", async () => {

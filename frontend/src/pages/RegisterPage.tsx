@@ -3,11 +3,19 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
 import { AuthAlert } from "../components/AuthAlert";
+import { AuthBenefitList } from "../components/AuthFeatureList";
 import { AuthBrandPanel } from "../components/AuthBrandPanel";
 import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthFormDivider, AuthLoadingStage, AuthSecondaryButton } from "../components/AuthControls";
 import { AuthLayout } from "../components/AuthLayout";
 import { AuthSubmitButton } from "../components/AuthSubmitButton";
 import { AuthTextField } from "../components/AuthTextField";
+
+const BENEFITS = [
+  { title: "场景化练习", desc: "上传场景图片，系统识别场景并生成可直接开口的角色对话" },
+  { title: "实时反馈", desc: "每轮对话结束后得到简洁、可操作的学习建议" },
+  { title: "学习档案", desc: "练习记录自动沉淀，在练习历史与进度页随时回看" },
+];
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -22,12 +30,7 @@ export function RegisterPage() {
   const nextPath = new URLSearchParams(location.search).get("next") || "/history";
 
   if (auth.status === "refreshing") {
-    return (
-      <main className="auth-loading-stage">
-        <div className="auth-loading-spinner" />
-        <p className="auth-loading-text">正在恢复登录状态…</p>
-      </main>
-    );
+    return <AuthLoadingStage>正在恢复登录状态…</AuthLoadingStage>;
   }
 
   if (auth.status === "authenticated") {
@@ -102,36 +105,14 @@ export function RegisterPage() {
               口语练习之旅
             </>
           }
-          description="创建账号，保存每一轮练习回响。从场景图片开始，通过实时语音对话提升英语口语能力。"
+          description="创建账号，保存每一轮练习回响。从一张场景图片开始，用实时语音对话把口语练起来。"
         >
-          <div className="auth-benefit-list">
-            <div className="auth-benefit-item">
-              <div className="auth-benefit-item__number">01</div>
-              <div className="auth-benefit-item__content">
-                <h3 className="auth-benefit-item__title">场景化练习</h3>
-                <p className="auth-benefit-item__desc">上传场景图片，系统自动识别并生成角色对话</p>
-              </div>
-            </div>
-            <div className="auth-benefit-item">
-              <div className="auth-benefit-item__number">02</div>
-              <div className="auth-benefit-item__content">
-                <h3 className="auth-benefit-item__title">实时反馈</h3>
-                <p className="auth-benefit-item__desc">每轮对话后获得简洁可操作的学习建议</p>
-              </div>
-            </div>
-            <div className="auth-benefit-item">
-              <div className="auth-benefit-item__number">03</div>
-              <div className="auth-benefit-item__content">
-                <h3 className="auth-benefit-item__title">学习档案</h3>
-                <p className="auth-benefit-item__desc">练习数据自动沉淀，追踪学习进度</p>
-              </div>
-            </div>
-          </div>
+          <AuthBenefitList items={BENEFITS} />
         </AuthBrandPanel>
       }
     >
       <AuthFormCard title="创建账号" subtitle="注册后即可保存练习记录">
-        <form className="auth-form-modern" onSubmit={onSubmit}>
+        <form className="space-y-4" onSubmit={onSubmit}>
           <AuthTextField
             id="register-nickname"
             label="昵称"
@@ -173,12 +154,8 @@ export function RegisterPage() {
           </AuthSubmitButton>
         </form>
 
-        <div className="auth-form-divider">
-          <span className="auth-form-divider__text">已有账号？</span>
-        </div>
-        <button type="button" className="auth-form-secondary" onClick={() => navigate("/login")}>
-          立即登录
-        </button>
+        <AuthFormDivider label="已有账号？" />
+        <AuthSecondaryButton onClick={() => navigate("/login")}>立即登录</AuthSecondaryButton>
       </AuthFormCard>
     </AuthLayout>
   );

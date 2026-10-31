@@ -6,7 +6,7 @@
 - `status`: `building`
 - `branch`: `module/frontend_app`
 - `owner`: `codex`
-- `updated_at`: `2026-04-09`
+- `updated_at`: `2026-10-11`
 
 ## 模块目标
 
@@ -14,8 +14,21 @@
 
 ## 当前真相
 
-- 现有实现：`frontend/` 已从六屏预览壳层重构为真实路由应用，包含首页上传、启动加载、会话、练后反馈、历史、登录、注册七个页面入口
-- 已完成边界：设计工作流文档、Pencil 设计源、设计映射文档、mock service 契约、路由级页面结构、基础上传/表单/消息交互、历史复盘侧板
+- **设计语言：整套迁移到 `english-oral-practice-app` 原型（2026-10-11 收口）**。此前
+  前端是三套视觉并存（`components.css` 旧壳层 / `auth-modern.css` / 三页完全定制），
+  现已统一为原型的设计语言：cream paper `#f4f3ef` + ink `#131311` + iris `#4f46e5` +
+  lime `#d8f34e`、`rounded-[28px]` 卡片、Space Grotesk 标题 + Fraunces 斜体点缀，
+  全局 navbar/footer 由 `AppShell` 承载。真源是作者本机下载的 Next.js 原型
+  `C:\Users\lucky\Downloads\english-oral-practice-app`（**仓库外，未纳入版本控制**）；
+  批次说明见 [`docs/features/frontend_design_port/feature.md`](../../features/frontend_design_port/feature.md)。
+  本批**跳过 Pencil-first 流程**；Pencil 时代已于 2026-10-11 整体退役（见下文收口条目，
+  `designs/` 与 `docs/control/pencil-workflow.md` 已删除）。
+- **样式层收敛**：样式结构从 `tokens / base / components` 三层收敛为
+  `theme.css`（`@theme` 令牌）+ `foundations.css`（文档级基础）+ `utilities.css`
+  （原型 plain-CSS 工具类）三份，`src/styles.css` 只剩 4 行 import；旧三份共 1,799 行
+  已删除。构建产物 CSS 从 83.2 kB 降到 58.7 kB。
+- 现有实现：`frontend/` 已从六屏预览壳层重构为真实路由应用，包含首页上传、启动加载、会话、练后反馈、历史、进度、登录、注册等 11 个页面入口
+- 已完成边界：设计工作流文档、设计映射文档、mock service 契约、路由级页面结构、基础上传/表单/消息交互、历史复盘侧板
 - 已完成边界：首页 `index` 已改为独立品牌顶栏 + 上传主卡 + 三列示例场景区，并回到与 `.pen` 设计稿一致的轻量首屏结构
 - 已完成边界：`StartupLoading` 已升级为独立动态分析页，包含中心品牌 logo、扩散圆环、阶段型进度 pill 和完成后才激活的练习入口
 - 已完成边界：首页本地图片选择后，会在 `StartupLoading` 页发起真实 `POST /api/v1/media/upload`，上传成功后再调用真实 `POST /api/v1/sessions` 进入练习页
@@ -32,7 +45,9 @@
 - 已完成边界：`PracticeSession` 对话流会在新消息到来时自动定位到最新消息位置，并隐藏显眼滚动条视觉，避免出现右侧拖拽条观感
 - 已完成边界：前端已从浏览器 `Web Speech API` 切到 Deepgram Voice Agent bootstrap + WebSocket 实时语音链路，练习页会实时显示 `ConversationText`，并在结束会话时调用后端 `voice/complete` 写回 transcript 与 review
 - 仍然缺失：更完整的系统联调细节，以及真实私有 R2 可访问性确认
-- 当前策略补充：前端展示层继续以中文 `.pen` 为唯一真源，但代码入口已不再保留 demo 切屏器，而是面向生产应用骨架
+- 当前策略补充：前端展示层已整体切到原型设计语言，设计真源见
+  `docs/features/frontend_design_port/feature.md`；Pencil 已整体退役，不再存在
+  第二设计源。
 
 ## 输入输出契约
 
@@ -69,12 +84,21 @@
 - `[x]` 将练习页从本地浏览器语音识别切到 Deepgram Voice Agent bootstrap / complete API
 - `[x]` 将语音练习页重构为左侧 logo 主舞台 + 右侧实时对话双栏布局，并补自动滚动到最新消息
 - `[x]` 新增 `useDeepgramVoiceAgent` hook，接入 WebSocket、PCM 采集、音频播放与 transcript 状态管理
+- `[x]` 将前端整套 UI 迁到 `english-oral-practice-app` 原型设计语言，新增 `Navbar` / `Footer` / `AppShell` / `ui.tsx` 并重写 11 个页面与全部共享组件
+- `[x]` 收敛样式层：删 `tokens.css` / `base.css` / `components.css`（1,799 行）与 `auth-modern.css` / `flash-toast.css`，`styles.css` 收为 4 行 import
+- `[x]` 移植 TTS 跟读 / 快捷回复 / 金句锦囊 / 计时器，练习页叠加在保留的 Deepgram 实时语音之上
+- `[x]` 新增进度页真实数据能力（`progressStats` / `MedalGrid`），后端无数据源的区块改为空态并注明缺失
+- `[x]` 补 `historyStats` 与复盘页逐字稿 tab（游标「加载更早消息」）
 
 ## 测试门
 
 - `module_test_passed` 的标准：至少有最小可运行前端壳层并能对齐后端契约，关键上传主路径可调用真实接口，且前端构建与测试有明确通过证据
 - 最少要覆盖的用例：上传入口、会话展示、历史入口
-- 还没覆盖的风险：真实 R2 外链可访问性尚未完成联调；匿名 visitor 与登录用户的端到端系统联调还需补一次；真实浏览器麦克风权限、Deepgram token 与生产网络环境仍需补 smoke
+- 本轮 UI 迁移证据：`npm run lint` / `typecheck` 全绿、`npm test` 188 passed / 31 files
+  （迁移前 119）、
+  `npm run coverage` 90.00 / 82.92 / 85.27 / 90.00（阈值 76/74/78/76）、
+  `npm run build` 产物 CSS 58.7 kB；仓库级 `ruff` / `black` / `agent_ops check` 全绿
+- 还没覆盖的风险：真实 R2 外链可访问性尚未完成联调；匿名 visitor 与登录用户的端到端系统联调还需补一次；真实浏览器麦克风权限、Deepgram token 与生产网络环境仍需补 smoke；UI 迁移的「11 条路由 × 3 个错误/空态」人工走查清单尚未执行
 
 ## 阻塞项
 
@@ -115,6 +139,9 @@
 - `2026-04-07`：新增 `createSamplePracticeSession`，并将首页示例场景从 mock `session-*` 切到真实 `sess_*` 会话创建；sample 练习页现在可继续走真实 voice/review/history
 - `2026-04-07`：将 `PracticeSession` 从沉浸式单栏语音页调整为桌面端双栏布局，左侧收口为单一鲸鱼 logo 按钮与 wifi 动效主舞台，右侧独立实时对话，并在新消息到来时自动滚动到最新位置
 - `2026-04-09`：移除 `practiceApi` 与 `PostPracticeReview` 中基于 `sessionId` 前缀的 runtime mock 分流，前端练习/反馈主路径统一收口到真实后端 API
+- `2026-10-11`：整套 UI 迁移到 `english-oral-practice-app` 原型设计语言（C1–C8 十个 commit，分支 `feature/ui-system-migration`）。新增 `Navbar` / `Footer` / `AppShell` / `ui.tsx`，重写 11 个页面与全部共享组件，新增 `HomeComposer` / `ImageDropzone` / `QuickReplyChips` / `PhraseBank` / `SessionMeter` / `SpeakButton` / `MedalGrid` / `useSpeechSynthesis` / `historyStats` / `progressStats`
+- `2026-10-11`：样式层收敛 —— 删 `components.css`(1,739) / `auth-modern.css`(544) / `flash-toast.css`(52) / `base.css`(41) / `tokens.css`(19)，`styles.css` 收为 4 行 import；重建 `design_mapping.md`，新增 `frontend_design_port` feature 并将 `pencil-workflow.md` 标记 superseded
+- `2026-10-11`：设计端口收口 —— R9 落地（`/session/:id` 对 completed 会话重定向复盘页，`SessionSummary` 补 `status` 映射，测试 188→189）；R8 与「11 路由 × 错误/空态」人工走查通过（双滚动条风险排除，记录见任务 `10-11-ui-migration-closeout`）；Pencil 整体退役 —— 删 `designs/`（`echowhale-mvp.pen`、logo SVG、assets、README）、`docs/control/pencil-workflow.md`、`docs/features/pencil_first_frontend_workflow/` 与两份 pencil 版本记录，README 移除 logo 引用，`design_mapping.md` 改写为「Pencil 已退役」
 
 
 

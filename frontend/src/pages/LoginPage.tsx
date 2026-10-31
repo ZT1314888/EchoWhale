@@ -1,10 +1,13 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { FileUp, MessagesSquare, Sparkles } from "lucide-react";
 
 import { useAuth } from "../auth/AuthProvider";
 import { AuthAlert } from "../components/AuthAlert";
 import { AuthBrandPanel } from "../components/AuthBrandPanel";
+import { AuthFeatureList } from "../components/AuthFeatureList";
 import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthFormDivider, AuthLoadingStage, AuthSecondaryButton, AuthTextButton } from "../components/AuthControls";
 import { AuthLayout } from "../components/AuthLayout";
 import { AuthSubmitButton } from "../components/AuthSubmitButton";
 import { AuthTextField } from "../components/AuthTextField";
@@ -22,12 +25,7 @@ export function LoginPage() {
   const nextPath = new URLSearchParams(location.search).get("next") || "/";
 
   if (auth.status === "refreshing") {
-    return (
-      <main className="auth-loading-stage">
-        <div className="auth-loading-spinner" />
-        <p className="auth-loading-text">正在恢复登录状态…</p>
-      </main>
-    );
+    return <AuthLoadingStage>正在恢复登录状态…</AuthLoadingStage>;
   }
 
   if (auth.status === "authenticated") {
@@ -74,48 +72,20 @@ export function LoginPage() {
               口语练习通道
             </>
           }
-          description="场景化英语口语陪练系统，基于真实场景开口练习，每轮结束获得简洁反馈与个人学习档案。"
+          description="场景化英语口语陪练系统。上传一张日常照片，EchoWhale 把它变成可以直接开口的角色对话，每轮结束都有复盘存档。"
         >
-          <div className="auth-feature-list">
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">上传场景图片</span>
-            </div>
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                  <line x1="12" y1="19" x2="12" y2="23" />
-                  <line x1="8" y1="23" x2="16" y2="23" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">实时语音对话</span>
-            </div>
-            <div className="auth-feature-item">
-              <div className="auth-feature-item__icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                  <polyline points="10 9 9 9 8 9" />
-                </svg>
-              </div>
-              <span className="auth-feature-item__text">练习回顾与复盘</span>
-            </div>
-          </div>
+          <AuthFeatureList
+            items={[
+              { icon: FileUp, text: "上传场景图片，自动生成角色对话" },
+              { icon: MessagesSquare, text: "实时语音与文字双通道练习" },
+              { icon: Sparkles, text: "每轮结束获得可操作的复盘反馈" },
+            ]}
+          />
         </AuthBrandPanel>
       }
     >
       <AuthFormCard title="登录账号" subtitle="继续你的英语口语练习">
-        <form className="auth-form-modern" onSubmit={onSubmit}>
+        <form className="space-y-4" onSubmit={onSubmit}>
           <AuthTextField
             id="login-email"
             label="邮箱地址"
@@ -134,27 +104,19 @@ export function LoginPage() {
             autoComplete="current-password"
             showPasswordToggle
           />
+          <div className="flex justify-end">
+            <AuthTextButton onClick={() => navigate("/forgot-password", { state: { prefillEmail: email } })}>
+              忘记密码？
+            </AuthTextButton>
+          </div>
           {error ? <AuthAlert message={error} /> : null}
           <AuthSubmitButton submitting={submitting} submittingText="登录中…">
             登录
           </AuthSubmitButton>
-          <div className="auth-form-footer">
-            <button
-              type="button"
-              className="auth-form-link"
-              onClick={() => navigate("/forgot-password", { state: { prefillEmail: email } })}
-            >
-              忘记密码？
-            </button>
-          </div>
         </form>
 
-        <div className="auth-form-divider">
-          <span className="auth-form-divider__text">还没有账号？</span>
-        </div>
-        <button type="button" className="auth-form-secondary" onClick={() => navigate("/register")}>
-          创建新账号
-        </button>
+        <AuthFormDivider label="还没有账号？" />
+        <AuthSecondaryButton onClick={() => navigate("/register")}>创建新账号</AuthSecondaryButton>
       </AuthFormCard>
     </AuthLayout>
   );
