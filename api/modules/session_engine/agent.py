@@ -1,5 +1,14 @@
+"""会话编排门面（多 Agent 升级 P0 · 拆分后形态）。
+
+P0 起，`SessionEngineAgent` 是**门面**：对外契约（构造参数、公开方法签名、
+返回/异常语义、OTel span 树）与拆分前逐字节一致；reply / 流式 / 语音收口的
+编排水务迁入 `api/modules/orchestration/`（协议 + 注册表 + 失败策略 + 流程
+模块），编排器按角色协议传参、门面在调用时解析引擎（晚绑定，测试可在构造后
+替换引擎）。场景启动、语音 bootstrap 与历史游标属领域水务，留在本模块。
+拆分映射见 docs/proposals/multi_agent_upgrade/02_target_architecture.md §3.3。
+"""
+
 import asyncio
-import contextlib
 import hashlib
 import hmac
 import logging
@@ -11,13 +20,12 @@ from api.common.enums import MediaUploadStatus
 from api.common.exceptions import (
     EchoWhaleError,
     InvalidStateError,
-    ModelProviderError,
     NotFoundError,
     SceneAnalysisUnavailableError,
     UnsupportedSceneImageError,
 )
 from api.common.exceptions import ValidationError as AppValidationError
-from api.common.telemetry import TERMINAL_DEGRADED, traced_engine
+from api.common.telemetry import traced_engine
 from api.core.config import settings
 from api.db.learner_profile_db import (
     LearnerProfileRepository,
@@ -38,21 +46,22 @@ from api.integrations.deepgram import (
     build_deepgram_think_proxy_url,
 )
 from api.integrations.storage.r2 import R2StorageService
-from api.models.learner_profile_model import LearnerProfile
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
 from api.modules.coach_engine.service import CoachEngineService
-from api.modules.feedback_engine.schema import FeedbackResult
 from api.modules.feedback_engine.service import FeedbackEngineService
+from api.modules.orchestration import (
+    AgentDescriptor,
+    AgentRegistry,
+    LearnerProfileBranch,
+    run_reply_turn,
+    run_voice_closeout,
+    stream_reply_turn,
+)
 from api.modules.scene_engine.schema import SceneAnalysisResult, scene_result_from_snapshot
 from api.modules.scene_engine.service import SceneEngineService
-from api.modules.session_engine.learner_profile import (
-    apply_turn_to_profile,
-    build_learner_context_lines,
-)
-from api.modules.session_engine.review_builder import ReviewCopy, build_session_review
 from api.modules.session_engine.review_summarizer import ReviewSummarizerAgent
 from api.modules.session_engine.sample_presets import get_sample_session_preset
 from api.modules.session_engine.schema import (
@@ -94,8 +103,43 @@ class SessionEngineAgent:
         self.coach_engine = CoachEngineService()
         self.feedback_engine = FeedbackEngineService()
         # LLM 复盘是增强分支（审计 Finding 20）：mock 模式下编排层短路、
-        # 永不发起调用；live 失败/超时由 _review_copy_for_turn 统一降级模板复盘。
+        # 永不发起调用；live 失败/超时由 review_branch 统一降级模板复盘。
         self.review_summarizer = ReviewSummarizerAgent()
+        # 学员档案增强分支（Memory Manager 的 P0 形态）：读=注入块渲染，
+        # 写=单轮滚动累计；仓储经构造注入，读写失败独立降级。
+        self.profile_branch = LearnerProfileBranch(self.learner_profile_repository)
+        # Agent 协作层（P0）：主链路依赖在调用时解析（晚绑定，引擎可被测试
+        # 替换）；注册表登记三个角色的描述符，P1/P2 新增 agent 实现
+        # EnhancementAgent 后在此登记，新增全程不改编排器主干
+        # （02_target_architecture.md §3.4 P0 用户故事）。
+        self.agent_registry = AgentRegistry()
+        self.agent_registry.register(
+            AgentDescriptor(
+                name="conversation_coach",
+                role="角色化英文回复，i+1 难度，流式",
+                failure_policy="整轮失败不落库，用户看到错误卡片重试",
+                model_tier="大模型精算（TEXT_PRIMARY 流式，300 token 预算）",
+            ),
+            self.coach_engine,
+        )
+        self.agent_registry.register(
+            AgentDescriptor(
+                name="feedback_coach",
+                role="Grammar / More Natural / Useful Words + 9 类错误归类 + CEFR 观测",
+                failure_policy="降级占位反馈，本轮照常返回落库",
+                model_tier="中档模型高频（JSON mode，400 token 预算）",
+            ),
+            self.feedback_engine,
+        )
+        self.agent_registry.register(
+            AgentDescriptor(
+                name="review_summarizer",
+                role="单轮中文复盘文案",
+                failure_policy="mock 短路 / 超时降级模板复盘",
+                model_tier="小模型高频（300 token 预算，5s 有界）",
+            ),
+            self.review_summarizer,
+        )
         self.voice_token_issuer = DeepgramTokenIssuer()
         # think 代理令牌签发器（审计 F12 Better fix）：bootstrap 时按会话代数
         # 签发并内嵌进 agent_settings.think.endpoint，代理侧校验代数一致性。
@@ -229,365 +273,35 @@ class SessionEngineAgent:
         """只读取会话头部信息，避免历史消息分页场景过载。"""
         return await self.session_repository.get_session_head(session_id)
 
-    async def _load_learner_profile(self, user_id: str) -> LearnerProfile | None:
-        """PK 点查学员档案；任何失败都降级为静态注入，绝不拖垮回复轮。
-
-        点查是主键单行读（低成本）；失败只记 degraded warning 并返回 None，
-        调用方回退 COACH_LEARNER_LEVEL 静态注入与空注入块。
-        """
-        try:
-            return await self.learner_profile_repository.get(user_id)
-        except Exception as exc:  # noqa: BLE001 - 档案读失败需降级续轮而非上抛
-            logger.warning(
-                "learner_profile_load_failed degraded=true user_id=%s error=%s: %s",
-                user_id,
-                type(exc).__name__,
-                exc,
-            )
-            return None
-
-    async def _learner_context_for_turn(
-        self, session_head: Session
-    ) -> tuple[str | None, str | None]:
-        """渲染本轮的学员注入块与 CEFR 估计；visitor / 无档案 / 读失败回退 (None, None)。
-
-        visitor 会话零查询直接回退：访客身份可轮换、键无界且无清理语义，
-        不建档也不读档，避免无意义的点查。
-        """
-        if not session_head.user_id.startswith("user:"):
-            return (None, None)
-        profile = await self._load_learner_profile(session_head.user_id)
-        if profile is None:
-            return (None, None)
-        return (build_learner_context_lines(profile), profile.cefr_estimate)
-
-    async def _update_learner_profile_for_turn(
-        self,
-        session_head: Session,
-        feedback: FeedbackResult,
-    ) -> None:
-        """把单轮反馈信号滚动累计进学员档案（增强分支，独立于消息落库事务）。
-
-        门控：user_id 不以 user: 开头（visitor）直接返回，零日志噪音。
-        与 save_reply_turn / finalize_voice_session 是不同连接不同事务：
-        档案写失败可独立回滚，消息已提交不受影响（Orchestration failure
-        policy——主价值是回复轮，档案只是估算用途的增强状态）。
-        只捕获 Exception：CancelledError 等 BaseException 不吞，取消语义保持。
-        并发取舍（已知并接受）：同用户并发轮的 read-modify-write 非原子，
-        最坏丢一次计数（last-write-wins）；单用户并发轮罕见，不值得为此上
-        SELECT FOR UPDATE（还会拖 SQLite 测试兼容）。
-        """
-        user_id = session_head.user_id
-        if not user_id.startswith("user:"):
-            return
-        try:
-            profile = await self.learner_profile_repository.get(user_id)
-            profile = apply_turn_to_profile(
-                profile,
-                user_id=user_id,
-                scene=session_head.scene,
-                feedback=feedback,
-                scene_cap=settings.learner_profile_scene_cap,
-                cefr_window=settings.learner_profile_cefr_window,
-            )
-            await self.learner_profile_repository.upsert(profile)
-        except Exception as exc:  # noqa: BLE001 - 档案写失败需降级续轮而非上抛
-            logger.warning(
-                "learner_profile_update_failed degraded=true user_id=%s error=%s: %s",
-                user_id,
-                type(exc).__name__,
-                exc,
-            )
-
     async def reply(self, payload: ReplyInput) -> Session:
-        """并发生成反馈与教练回复，再把这一轮消息原子化落库。
+        """并发生成反馈与教练回复并原子落库；编排水务见 orchestration.reply_flow。
 
-        失败语义分主次：反馈是增值能力，失败时降级为占位反馈，本轮照常返回与落库；
-        教练回复是主价值，失败时整轮上抛、不落任何消息。
-        读路径只取会话头 + 最近窗口消息，避免每轮全量拉取整个消息历史；
-        写后的全量重读保留，作为响应契约的一部分。
-        学员档案在会话头后点查一次（低成本 PK 读），注入块同时喂给反馈与
-        教练分支；档案更新在消息落库成功之后独立执行（增强分支，可降级）。
+        失败语义（由协作层承载，签名/异常与拆分前一致）：反馈失败降级占位，
+        本轮照常返回与落库；教练失败整轮上抛、不落任何消息。
         """
-        session_head = await self.session_repository.get_session_head(payload.session_id)
-        recent_messages = await self.session_repository.list_recent_messages(
-            payload.session_id,
-            limit=settings.llm_coach_window_size,
+        return await run_reply_turn(
+            session_repository=self.session_repository,
+            feedback_agent=self.feedback_engine,
+            coach_agent=self.coach_engine,
+            review_agent=self.review_summarizer,
+            profile_branch=self.profile_branch,
+            payload=payload,
         )
-        learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
-        # 两个分支各自打 engine span（design 2.3 终态映射）：feedback 异常按
-        # degraded 记账（降级转换仍由下方 _resolve_feedback 完成），coach 异常按
-        # failed 记账（主价值失败整轮上抛）。span 只记账，不改任何返回/异常语义。
-        feedback_result, coach_result = await asyncio.gather(
-            traced_engine(
-                "feedback",
-                self.feedback_engine.review(
-                    payload.learner_message,
-                    session_head.scene,
-                    session_head.vocab_candidates,
-                    learner_context=learner_context,
-                ),
-                session_id=session_head.id,
-                on_exception=TERMINAL_DEGRADED,
-            ),
-            traced_engine(
-                "coach",
-                self.coach_engine.respond(
-                    scene=session_head.scene,
-                    role=session_head.role,
-                    learner_message=payload.learner_message,
-                    visual_anchors=session_head.visual_anchors,
-                    vocab_candidates=session_head.vocab_candidates,
-                    recent_messages=recent_messages,
-                    learner_context=learner_context,
-                    learner_cefr=learner_cefr,
-                ),
-                session_id=session_head.id,
-            ),
-            return_exceptions=True,
-        )
-        # 反馈和回复互不依赖，并发执行可以显著缩短单轮等待时间；
-        # return_exceptions 确保一侧失败时不再取消另一侧已在计费的调用。
-        # 先收敛反馈（失败即降级并留 degraded 日志），再检查教练分支：
-        # 两侧同时失败时，教练异常原样上抛交全局处理器，反馈失败也已留在日志里。
-        feedback_degraded = isinstance(feedback_result, Exception)
-        feedback = _resolve_feedback(feedback_result)
-        if isinstance(coach_result, BaseException):
-            raise coach_result
-
-        # 复盘 LLM 汇总（增强分支）：在教练分支确认成功之后有界等待，
-        # 任何失败都降级为 None（模板复盘），不拖垮本轮。
-        review_copy = await self._review_copy_for_turn(
-            session_head,
-            payload.learner_message,
-            feedback,
-            feedback_degraded=feedback_degraded,
-        )
-        learner_message, assistant_message, review = _build_reply_turn(
-            session_head,
-            recent_messages,
-            learner_text=payload.learner_message,
-            coach_text=coach_result.text,
-            feedback=feedback,
-            review_copy=review_copy,
-        )
-        stored_session = await self.session_repository.save_reply_turn(
-            session_head.id,
-            learner_message,
-            assistant_message,
-            review,
-            review_copy=review_copy,
-        )
-        # 档案更新在消息落库成功之后（独立事务）：写失败只降级不影响已提交的回复轮。
-        await self._update_learner_profile_for_turn(session_head, feedback)
-        return stored_session
 
     async def stream_reply(self, payload: ReplyInput) -> AsyncIterator[tuple[str, object]]:
-        """流式 reply：先回执 feedback，再逐 token 下发教练回复，成功后原子落库。
+        """流式 reply（SSE：feedback → delta* → session）；编排见 orchestration.reply_flow。
 
-        反馈分支失败时降级为占位反馈继续：事件序 feedback → delta* → session 不变，
-        本轮照常落库；教练分支失败（打不开流、中途断流、空输出）仍整轮失败、不落任何消息。
+        反馈失败降级占位继续（事件序不变、照常落库）；教练失败整轮失败不落库。
         """
-        session_head = await self.session_repository.get_session_head(payload.session_id)
-        recent_messages = await self.session_repository.list_recent_messages(
-            payload.session_id,
-            limit=settings.llm_coach_window_size,
-        )
-        learner_context, learner_cefr = await self._learner_context_for_turn(session_head)
-        # 流式路径同样按 design 2.3 打 engine span；feedback 异常按 degraded 记账
-        # （降级转换仍在 try/except 内完成），教练 span 只覆盖"开流"阶段——
-        # span 若跨 async generator 的 yield 会把中间态泄漏进消费者上下文，
-        # 明确不做，消费耗时由 server span 承载（observability.md 注明）。
-        feedback_task = asyncio.create_task(
-            traced_engine(
-                "feedback",
-                self.feedback_engine.review(
-                    payload.learner_message,
-                    session_head.scene,
-                    session_head.vocab_candidates,
-                    learner_context=learner_context,
-                ),
-                session_id=session_head.id,
-                on_exception=TERMINAL_DEGRADED,
-            )
-        )
-        try:
-            coach_stream = await traced_engine(
-                "coach",
-                self.coach_engine.stream_respond(
-                    scene=session_head.scene,
-                    role=session_head.role,
-                    learner_message=payload.learner_message,
-                    visual_anchors=session_head.visual_anchors,
-                    vocab_candidates=session_head.vocab_candidates,
-                    recent_messages=recent_messages,
-                    learner_context=learner_context,
-                    learner_cefr=learner_cefr,
-                ),
-                session_id=session_head.id,
-            )
-        except BaseException:
-            # 回复流打不开，这一轮已注定失败；不再等待另一侧已计费的反馈调用。
-            feedback_task.cancel()
-            with contextlib.suppress(BaseException):
-                await feedback_task
-            raise
-
-        review_task: asyncio.Task[ReviewCopy | None] | None = None
-        try:
-            # 反馈是增值能力：失败时降级为占位反馈，事件序与落库照常。
-            # 只捕获 Exception；CancelledError 等 BaseException 不吞，取消语义保持。
-            feedback_degraded = False
-            try:
-                feedback = await feedback_task
-            except Exception as exc:  # noqa: BLE001 - 反馈失败需降级续轮而非上抛
-                feedback = _degraded_feedback_with_log(exc)
-                feedback_degraded = True
-            yield ("feedback", feedback)
-
-            # 复盘与教练 delta 流并行生成（增强分支）：feedback 已降级时不起任务，
-            # 对占位反馈做汇总没有意义；mock 模式下任务内部短路，不发起任何调用。
-            if not feedback_degraded:
-                review_task = asyncio.create_task(
-                    self._review_copy_for_turn(
-                        session_head,
-                        payload.learner_message,
-                        feedback,
-                        feedback_degraded=False,
-                    )
-                )
-
-            coach_chunks: list[str] = []
-            async for delta in coach_stream.aiter_deltas():
-                coach_chunks.append(delta)
-                yield ("delta", delta)
-
-            # 复盘收口只有一次：先有界等待任务产出，再同时喂给复盘构建与
-            # 落库——重复 collect 会二次等待已取消的任务，CancelledError
-            # （BaseException）会绕过降级处理器直接外抛。
-            review_copy = await self._collect_review_task(
-                session_head.id,
-                review_task,
-            )
-            learner_message, assistant_message, review = _build_reply_turn(
-                session_head,
-                recent_messages,
-                learner_text=payload.learner_message,
-                coach_text="".join(coach_chunks),
-                feedback=feedback,
-                review_copy=review_copy,
-            )
-            session = await self.session_repository.save_reply_turn(
-                session_head.id,
-                learner_message,
-                assistant_message,
-                review,
-                review_copy=review_copy,
-            )
-            # 档案更新在落库成功之后、session 事件下发之前：客户端拿到
-            # session 事件时，本轮的档案累积已确定（增强分支失败只降级）。
-            await self._update_learner_profile_for_turn(session_head, feedback)
-            yield ("session", session)
-        finally:
-            with contextlib.suppress(Exception):
-                await coach_stream.aclose()
-            # 失败/提前关闭路径不留悬挂的复盘任务：教练分支中断时任务可能仍在
-            # 飞行，显式取消，避免轮次结束后继续消耗配额或发起 LLM 调用。
-            if review_task is not None and not review_task.done():
-                review_task.cancel()
-
-    async def _review_copy_for_turn(
-        self,
-        session_head: Session,
-        learner_message: str,
-        feedback: FeedbackResult,
-        *,
-        feedback_degraded: bool,
-    ) -> ReviewCopy | None:
-        """为单轮生成 LLM 复盘文案，外层统一打 engine.review span（design 2.3）。
-
-        终态映射：copy 产出=ok；copy=None（mock 短路 / feedback 已降级 / 降级
-        转换）=degraded；异常（含超时取消的 CancelledError）=degraded。span 只
-        记账，吞异常与降级转换仍由 _produce_review_copy 既有代码完成。
-        """
-        return await traced_engine(
-            "review",
-            self._produce_review_copy(
-                session_head,
-                learner_message,
-                feedback,
-                feedback_degraded=feedback_degraded,
-            ),
-            session_id=session_head.id,
-            on_exception=TERMINAL_DEGRADED,
-            degraded_result=None,
-        )
-
-    async def _produce_review_copy(
-        self,
-        session_head: Session,
-        learner_message: str,
-        feedback: FeedbackResult,
-        *,
-        feedback_degraded: bool,
-    ) -> ReviewCopy | None:
-        """复盘 LLM 汇总本体（增强分支，Orchestration failure policy）。
-
-        mock 模式短路零调用；feedback 已降级时对占位文案做汇总没有意义；
-        live 路径有界等待，超时/失败/未配 provider 一律记 degraded warning 后
-        返回 None，绝不拖垮回复轮。只捕获 Exception：CancelledError 照常传播，
-        客户端断连语义不变。
-        """
-        if settings.model_runtime_mode.lower() != "live":
-            return None
-        if feedback_degraded:
-            return None
-        try:
-            return await asyncio.wait_for(
-                self.review_summarizer.summarize(
-                    scene=session_head.scene,
-                    role=session_head.role,
-                    learner_message=learner_message,
-                    feedback=feedback,
-                ),
-                timeout=settings.llm_review_wait_seconds,
-            )
-        except Exception as exc:  # noqa: BLE001 - 复盘失败需降级续轮而非上抛
-            logger.warning(
-                "session_review_copy_failed degraded=true session_id=%s error=%s: %s",
-                session_head.id,
-                type(exc).__name__,
-                exc,
-            )
-            return None
-
-    async def _collect_review_task(
-        self,
-        session_id: str,
-        review_task: asyncio.Task[ReviewCopy | None] | None,
-    ) -> ReviewCopy | None:
-        """有界等待流式路径的复盘任务；超时/失败取消任务并降级模板复盘。
-
-        shield 保证 wait_for 超时只取消外层等待、内层任务由这里显式取消，
-        不会出现双取消；wait_for 抛出的 TimeoutError（3.11+ 即内建
-        TimeoutError）是 Exception 子类，与任务失败一并降级。
-        """
-        if review_task is None:
-            return None
-        try:
-            return await asyncio.wait_for(
-                asyncio.shield(review_task),
-                timeout=settings.llm_review_wait_seconds,
-            )
-        except Exception as exc:  # noqa: BLE001 - 复盘失败需降级续轮而非上抛
-            review_task.cancel()
-            logger.warning(
-                "session_review_copy_failed degraded=true session_id=%s error=%s: %s",
-                session_id,
-                type(exc).__name__,
-                exc,
-            )
-            return None
+        async for event in stream_reply_turn(
+            session_repository=self.session_repository,
+            feedback_agent=self.feedback_engine,
+            coach_agent=self.coach_engine,
+            review_agent=self.review_summarizer,
+            profile_branch=self.profile_branch,
+            payload=payload,
+        ):
+            yield event
 
     async def get_review(self, session_id: str):
         """读取会话对应的复盘结果。"""
@@ -650,7 +364,7 @@ class SessionEngineAgent:
         不构建提示词，只做档案更新。
         """
         session = await self.session_repository.get_session(session_id)
-        learner_context, _learner_cefr = await self._learner_context_for_turn(session)
+        learner_context, _learner_cefr = await self.profile_branch.context_for_turn(session)
         # 代数绑定（审计 F12 Better fix）：每次 bootstrap 递增 voice_session_facts
         # 的 token_generation，think 代理令牌携带该代数——voice/complete（转
         # completed）或再次 bootstrap（代数 +1）都会令先前签发的未过期令牌
@@ -709,246 +423,18 @@ class SessionEngineAgent:
         return bootstrap
 
     async def complete_voice_session(self, payload: VoiceCompleteInput) -> VoiceCompleteResult:
-        """把语音转写收束成文本会话，并补齐反馈、review 与运行时事件。"""
-        session = await self.session_repository.get_session(payload.session_id)
-        messages = _build_voice_messages(session, payload)
-        # _build_voice_messages 已完成尾段去重：结果 = 既有消息 + 新增尾巴。
-        # 仓储只追加新增部分（append-only），既有消息行保持不动，
-        # 避免收口期间与文本轮并发时覆盖/删除对方消息（Finding 8）。
-        new_messages = messages[len(session.messages) :]
-        updated_session = session.model_copy(
-            update={
-                "messages": messages,
-            }
+        """把语音转写收束成文本会话；编排水务见 orchestration.voice_flow。
+
+        失败语义（由协作层承载，签名/异常与拆分前一致）：反馈失败降级占位、
+        复盘失败降级模板复盘，收口照常落库；尾段去重与代数不变语义不变。
+        """
+        return await run_voice_closeout(
+            session_repository=self.session_repository,
+            feedback_agent=self.feedback_engine,
+            review_agent=self.review_summarizer,
+            profile_branch=self.profile_branch,
+            payload=payload,
         )
-        last_learner_message = _find_latest_user_content(payload)
-        if last_learner_message is None:
-            raise AppValidationError("Validation error")
-        # 反馈是增值能力，与 reply/stream 同款 failure policy：失败降级占位反馈
-        # （单一转换点 _degraded_feedback_with_log），收口照常落库与返回。
-        # 只捕获 Exception：CancelledError 等取消语义不上吞。
-        feedback_degraded = False
-        try:
-            feedback = await self.feedback_engine.review(
-                last_learner_message,
-                updated_session.scene,
-                updated_session.vocab_candidates,
-            )
-        except Exception as exc:  # noqa: BLE001 - 反馈失败需降级续轮而非上抛
-            feedback = _degraded_feedback_with_log(exc)
-            feedback_degraded = True
-        # 反馈已降级时复盘直接走 None 短路（对占位文案做汇总没有意义）；
-        # 正常反馈路径失败/超时降级模板复盘（copy=None）。
-        review_copy = await self._review_copy_for_turn(
-            updated_session,
-            last_learner_message,
-            feedback,
-            feedback_degraded=feedback_degraded,
-        )
-        # LLM 展示名在复盘产出后并入收口快照（design 2.2）：review_copy=None
-        # （mock/复盘降级）时沿用 get_session 读出的既有列值，不回闪。
-        if review_copy is not None:
-            updated_session = updated_session.model_copy(
-                update={
-                    "llm_scene_title": review_copy.scene_title,
-                    "llm_role_label": review_copy.role_label,
-                }
-            )
-        review = build_session_review(updated_session, feedback, copy=review_copy)
-        existing_voice_fact = await self.session_repository.get_latest_voice_session_fact(
-            payload.session_id
-        )
-        voice_fact = VoiceSessionFact(
-            session_id=payload.session_id,
-            status="completed",
-            termination_reason=payload.termination_reason,
-            transcript_turn_count=len(payload.conversation),
-            # 收口只置状态不改代数：token_generation 必须回带既有值，否则
-            # upsert 清零会让 re-bootstrap 的代数从 1 重来、旧令牌重新"复活"
-            # （审计 F12 的生命周期绑定语义）。
-            token_generation=(
-                existing_voice_fact.token_generation if existing_voice_fact is not None else 0
-            ),
-            client_diagnostics=dict(payload.client_diagnostics),
-            started_at=(
-                existing_voice_fact.started_at
-                if existing_voice_fact is not None
-                else updated_session.created_at
-            ),
-            completed_at=review.updated_at,
-            updated_at=review.updated_at,
-        )
-        events = [
-            SessionEvent(
-                session_id=payload.session_id,
-                event_type="voice_finalized",
-                stage="review_ready",
-                payload={
-                    "termination_reason": payload.termination_reason,
-                    "conversation_turn_count": len(payload.conversation),
-                    "client_diagnostics": dict(payload.client_diagnostics),
-                },
-                created_at=review.updated_at,
-            ),
-            SessionEvent(
-                session_id=payload.session_id,
-                event_type="review_built",
-                stage="review_ready",
-                payload={"review_title": review.title},
-                created_at=review.updated_at,
-            ),
-        ]
-        stored_session, stored_review = await self.session_repository.finalize_voice_session(
-            session=updated_session,
-            new_messages=new_messages,
-            review=review,
-            voice_fact=voice_fact,
-            events=events,
-        )
-        # 档案更新在语音收口成功之后（独立事务）：写失败只降级，不影响已提交的会话。
-        await self._update_learner_profile_for_turn(updated_session, feedback)
-        return VoiceCompleteResult(session=stored_session, review=stored_review)
-
-
-def _build_reply_turn(
-    session_head: Session,
-    recent_messages: list[Message],
-    *,
-    learner_text: str,
-    coach_text: str,
-    feedback: FeedbackResult,
-    review_copy: ReviewCopy | None = None,
-) -> tuple[Message, Message, SessionReview]:
-    """组装一轮对话的两条消息与复盘；coach 文本为空按模型失败处理。
-
-    输出硬顶（Finding 11）：超长模型输出在 strip 与空判定之后截断，
-    防止失控输出无限撑大 Text 列与响应体；截断是防滥用硬顶而非优雅降级，
-    留 coach_reply_truncated warning 供观测。整包与流式路径共用本函数。
-    """
-    coach_text = coach_text.strip()
-    if not coach_text:
-        raise ModelProviderError("Coach reply was empty")
-
-    max_chars = settings.llm_coach_output_max_chars
-    if len(coach_text) > max_chars:
-        logger.warning(
-            "coach_reply_truncated session_id=%s length=%s max_chars=%s",
-            session_head.id,
-            len(coach_text),
-            max_chars,
-        )
-        coach_text = coach_text[:max_chars]
-
-    learner_message = Message(role="user", text=learner_text)
-    assistant_message = Message(
-        role="assistant",
-        text=coach_text,
-        feedback=feedback.model_dump(),
-    )
-    reviewed_session = session_head.model_copy(
-        update={"messages": [*recent_messages, learner_message, assistant_message]}
-    )
-    review = build_session_review(reviewed_session, feedback, copy=review_copy)
-    return (learner_message, assistant_message, review)
-
-
-def _degraded_feedback() -> FeedbackResult:
-    """构造反馈降级占位结果。
-
-    每次新建实例而非共享单例，避免调用方意外改动可变字段互相影响；
-    文案诚实标注本轮失败并预告下一轮恢复，前端按普通反馈卡片渲染即可。
-    """
-    return FeedbackResult(
-        grammar="本轮反馈生成失败，请继续对话；下一轮反馈会照常返回。",
-        more_natural="（本轮没有更自然表达建议）",
-        useful_words=[],
-    )
-
-
-def _degraded_feedback_with_log(exc: Exception) -> FeedbackResult:
-    """反馈分支失败的单一降级转换点：记 degraded warning 后返回占位反馈。
-
-    沿用 session_reply_branch_failed 事件名并补充 degraded=true，
-    运维可凭该标记区分"降级成功"与"正常生成"。
-    """
-    logger.warning(
-        "session_reply_branch_failed branch=feedback degraded=true error=%s: %s",
-        type(exc).__name__,
-        exc,
-    )
-    return _degraded_feedback()
-
-
-def _resolve_feedback(result: object) -> FeedbackResult:
-    """把 gather 的 return_exceptions 结果收敛成 FeedbackResult。
-
-    成功原样返回；Exception 降级为占位反馈让本轮继续；
-    CancelledError 等 BaseException 原样上抛，不吞取消语义。
-    """
-    if isinstance(result, Exception):
-        return _degraded_feedback_with_log(result)
-    if isinstance(result, BaseException):
-        raise result
-    return result
-
-
-def _build_voice_messages(session: Session, payload: VoiceCompleteInput) -> list[Message]:
-    """把语音转写拼回会话消息流，并去掉与已有消息重复的尾段。"""
-    transcript: list[Message] = []
-    for index, turn in enumerate(payload.conversation):
-        if (
-            index == 0
-            and turn.role == "assistant"
-            and session.messages
-            and session.messages[0].role == "assistant"
-            and turn.content == session.messages[0].text
-        ):
-            transcript.append(session.messages[0])
-            continue
-        transcript.append(
-            Message(
-                role=turn.role,
-                text=turn.content,
-            )
-        )
-
-    if not session.messages:
-        return transcript
-
-    remainder = list(transcript)
-    if remainder and _message_signature(remainder[0]) == _message_signature(session.messages[0]):
-        remainder = remainder[1:]
-
-    # 语音链路会回传整段 transcript，这里按尾部重叠去重，避免重复入库。
-    overlap = _find_tail_overlap(existing=session.messages, incoming=remainder)
-    return [*session.messages, *remainder[overlap:]]
-
-
-def _find_latest_user_content(payload: VoiceCompleteInput) -> str | None:
-    """提取最后一条学习者发言，供反馈引擎生成最终复盘。"""
-    for turn in reversed(payload.conversation):
-        if turn.role == "user":
-            return turn.content
-    return None
-
-
-def _find_tail_overlap(*, existing: list[Message], incoming: list[Message]) -> int:
-    """寻找旧消息尾部与新 transcript 头部的最大重叠长度。"""
-    max_overlap = min(len(existing), len(incoming))
-    for size in range(max_overlap, 0, -1):
-        existing_tail = existing[-size:]
-        incoming_head = incoming[:size]
-        if all(
-            _message_signature(left) == _message_signature(right)
-            for left, right in zip(existing_tail, incoming_head, strict=False)
-        ):
-            return size
-    return 0
-
-
-def _message_signature(message: Message) -> tuple[str, str]:
-    """提取消息去重时使用的稳定签名。"""
-    return (message.role, message.text)
 
 
 def _encode_history_cursor(value: tuple[datetime, str]) -> str:
