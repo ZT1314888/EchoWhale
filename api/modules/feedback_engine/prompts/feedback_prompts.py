@@ -13,3 +13,29 @@ Field contract:
 - useful_words: 2 to 4 scene-related short English words or phrases.
 - cefr_level: your CEFR estimate of this learner message, one of A1, A2, B1, B2, C1, C2.
 """.strip()
+
+
+from api.modules.feedback_engine.schema import FeedbackInput
+
+
+def build_feedback_user_prompt(payload: FeedbackInput) -> str:
+    """组装反馈引擎的 user prompt（live 链路与评测台共用的单一装配点）。
+
+    学员档案注入块在 scene 块之后追加（与教练 user prompt 同位约定）：
+    有则加、无则省，保证无档案时提示词与历史形态逐字节一致。
+    从 FeedbackEngineAgent._run_live 内联装配原样提取（P0/G8），
+    评测台经本函数复用同一装配路径，消除两处契约漂移。
+    """
+    user_prompt_lines = [f"Scene: {payload.scene}"]
+    if payload.learner_context:
+        user_prompt_lines.append(payload.learner_context)
+    user_prompt_lines.extend(
+        [
+            f"Vocab candidates: {', '.join(payload.vocab_candidates) or 'none'}",
+            f"Learner message: {payload.learner_message}",
+            # 输出契约（含 errors/cefr_level 新键）以系统提示词为准，
+            # 这里不再重复键清单，避免两处契约漂移。
+            "Return strict JSON following the output contract in the system prompt.",
+        ]
+    )
+    return "\n".join(user_prompt_lines)

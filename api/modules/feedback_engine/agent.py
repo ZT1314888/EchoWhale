@@ -9,7 +9,10 @@ from api.integrations.llm.runtime import (
     resolve_engine_providers,
 )
 from api.modules.coach_engine.providers.chat_provider import MockChatProvider
-from api.modules.feedback_engine.prompts.feedback_prompts import FEEDBACK_PROMPT
+from api.modules.feedback_engine.prompts.feedback_prompts import (
+    FEEDBACK_PROMPT,
+    build_feedback_user_prompt,
+)
 from api.modules.feedback_engine.schema import FeedbackInput, FeedbackResult
 from api.modules.feedback_engine.tools.correction_tools import normalize_sentence
 
@@ -39,21 +42,9 @@ class FeedbackEngineAgent:
         payload: FeedbackInput,
     ) -> FeedbackResult:
         """按主备顺序轮询文本模型，直到成功产出结构化反馈。"""
-        # 学员档案注入块在 scene 块之后追加（与教练 user prompt 同位约定）：
-        # 有则加、无则省，保证无档案时提示词与历史形态逐字节一致。
-        user_prompt_lines = [f"Scene: {payload.scene}"]
-        if payload.learner_context:
-            user_prompt_lines.append(payload.learner_context)
-        user_prompt_lines.extend(
-            [
-                f"Vocab candidates: {', '.join(payload.vocab_candidates) or 'none'}",
-                f"Learner message: {payload.learner_message}",
-                # 输出契约（含 errors/cefr_level 新键）以系统提示词为准，
-                # 这里不再重复键清单，避免两处契约漂移。
-                "Return strict JSON following the output contract in the system prompt.",
-            ]
-        )
-        user_prompt = "\n".join(user_prompt_lines)
+        # user prompt 装配收敛到 prompts.build_feedback_user_prompt 单一装配点
+        # （P0/G8）：live 链路与评测台共用，消除两处契约漂移。
+        user_prompt = build_feedback_user_prompt(payload)
 
         primary, fallback = resolve_engine_providers(
             kind="text",
