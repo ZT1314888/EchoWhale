@@ -1274,12 +1274,31 @@ def test_reply_mock_mode_builds_template_review_without_llm_review_call(
     assert review.feedback.next_step.body == "下一轮试着在一句主回应后再补一句细节。"
 
 
+def _pin_live_fake_provider_slots(monkeypatch) -> None:
+    """密闭性：live 构造要求至少一个“真实”槽位，但不依赖本机 .env 的真实密钥。
+
+    与 test_scene_cache 的既有惯例一致：构造期 SceneEngine/CoachEngine 会急切
+    解析 vision/text 槽位（CI 无密钥即抛 ConfigurationError）；本组用例随后都
+    会把 LLM 引擎换成 fake，真实客户端不会被调用。P1 若给 SessionEngineAgent
+    构造新增急切解析的引擎，同样在此补槽位即可。
+    """
+    monkeypatch.setattr(settings, "vision_primary_provider", "ci-fake")
+    monkeypatch.setattr(settings, "vision_primary_base_url", "https://vision.invalid/v1")
+    monkeypatch.setattr(settings, "vision_primary_api_key", "ci-fake-key")
+    monkeypatch.setattr(settings, "vision_primary_model", "ci-fake-model")
+    monkeypatch.setattr(settings, "text_primary_provider", "ci-fake")
+    monkeypatch.setattr(settings, "text_primary_base_url", "https://text.invalid/v1")
+    monkeypatch.setattr(settings, "text_primary_api_key", "ci-fake-key")
+    monkeypatch.setattr(settings, "text_primary_model", "ci-fake-model")
+
+
 def test_reply_live_mode_consumes_llm_review_copy(
     fake_session_repository: FakeSessionRepository,
     monkeypatch,
 ) -> None:
     """live 模式复盘由 summarizer 文案替换模板字段，且消费侧对超长文案截断硬顶。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     _save_reply_fixture_session(fake_session_repository, "sess_live_review")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
@@ -1322,6 +1341,7 @@ def test_reply_live_mode_degrades_to_template_review_when_summarizer_fails(
 ) -> None:
     """复盘是增强分支：summarizer 失败只降级模板复盘，本轮照常成功落库。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     _save_reply_fixture_session(fake_session_repository, "sess_review_fail")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
@@ -1350,6 +1370,7 @@ def test_reply_live_mode_skips_review_summarizer_when_feedback_degraded(
 ) -> None:
     """feedback 已降级时对占位文案做汇总没有意义：summarizer 不得被调用。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     _save_reply_fixture_session(fake_session_repository, "sess_review_skip")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FailingFeedbackEngine()
@@ -1382,6 +1403,7 @@ def test_complete_voice_session_live_mode_consumes_llm_review_copy(
 ) -> None:
     """语音收口同样消费 LLM 复盘文案（feedback 总是成功产出，degraded=False）。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     session = Session(
         id="sess_voice_live_review",
         user_id="demo-user",
@@ -1462,6 +1484,7 @@ def test_reply_passes_review_copy_to_repository(
 ) -> None:
     """live 模式 reply 把 LLM 复盘文案原样透传仓储（展示名落库的前提）。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     _save_reply_fixture_session(fake_session_repository, "sess_copy_passthrough")
     agent = SessionEngineAgent(session_repository=fake_session_repository)
     agent.feedback_engine = FakeFeedbackEngine()
@@ -1490,6 +1513,7 @@ def test_complete_voice_session_persists_llm_display_names(
 ) -> None:
     """语音收口把 LLM 展示名并入收口快照：响应与落库快照都带两字段。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     session = Session(
         id="sess_voice_llm_names",
         user_id="demo-user",
