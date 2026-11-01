@@ -291,10 +291,29 @@ class SlowReviewSummarizer:
         )
 
 
+def _pin_live_fake_provider_slots(monkeypatch) -> None:
+    """密闭性：live 构造要求至少一个“真实”槽位，但不依赖本机 .env 的真实密钥。
+
+    与 test_scene_cache 的既有惯例一致：构造期 SceneEngine/CoachEngine 会急切
+    解析 vision/text 槽位（CI 无密钥即抛 ConfigurationError）；本组用例随后都
+    会把 LLM 引擎换成 fake，真实客户端不会被调用。P1 若给 SessionEngineAgent
+    构造新增急切解析的引擎，同样在此补槽位即可。
+    """
+    monkeypatch.setattr(settings, "vision_primary_provider", "ci-fake")
+    monkeypatch.setattr(settings, "vision_primary_base_url", "https://vision.invalid/v1")
+    monkeypatch.setattr(settings, "vision_primary_api_key", "ci-fake-key")
+    monkeypatch.setattr(settings, "vision_primary_model", "ci-fake-model")
+    monkeypatch.setattr(settings, "text_primary_provider", "ci-fake")
+    monkeypatch.setattr(settings, "text_primary_base_url", "https://text.invalid/v1")
+    monkeypatch.setattr(settings, "text_primary_api_key", "ci-fake-key")
+    monkeypatch.setattr(settings, "text_primary_model", "ci-fake-model")
+
+
 @pytest.mark.anyio
 async def test_stream_reply_builds_review_from_llm_copy(monkeypatch) -> None:
     """流式路径复盘与 delta 并行：session 事件与落库 review 消费 LLM 文案。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
@@ -328,6 +347,7 @@ async def test_stream_reply_builds_review_from_llm_copy(monkeypatch) -> None:
 async def test_stream_reply_degrades_review_when_summarizer_fails(monkeypatch, caplog) -> None:
     """复盘 LLM 失败只降级模板复盘：事件序完整、本轮照常落库并留 degraded 日志。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(repository, StubFeedbackEngine(_feedback()), StubCoachEngine(stream))
@@ -354,6 +374,7 @@ async def test_stream_reply_degrades_review_when_summarizer_fails(monkeypatch, c
 async def test_stream_reply_cancels_slow_review_task_and_degrades(monkeypatch, caplog) -> None:
     """复盘超过 llm_review_wait_seconds 未返回：取消任务并降级模板复盘。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     monkeypatch.setattr(settings, "llm_review_wait_seconds", 0.05)
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
@@ -385,6 +406,7 @@ async def test_stream_reply_cancels_slow_review_task_and_degrades(monkeypatch, c
 async def test_stream_reply_skips_review_task_when_feedback_degraded(monkeypatch) -> None:
     """feedback 已降级时不起复盘任务：summarizer 不得被调用。"""
     monkeypatch.setattr(settings, "model_runtime_mode", "live")
+    _pin_live_fake_provider_slots(monkeypatch)
     repository = RecordingSessionRepository(_session())
     stream = StubCoachStream(["Sure, ", "one latte."])
     agent = _agent(
