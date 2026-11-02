@@ -1,6 +1,6 @@
 # 限流体系收口（ratelimit_closing）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 5 / Finding 12 修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 5 / Finding 12 修复。
 > Trellis 任务：`.trellis/tasks/10-01-ratelimit-closing`。
 
 ## 目标

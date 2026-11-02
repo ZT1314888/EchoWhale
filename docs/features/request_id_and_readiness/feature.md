@@ -1,6 +1,6 @@
 # 请求关联 ID 与就绪探针（request_id_and_readiness）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 15 最小集修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 15 最小集修复。
 > Trellis 任务：`.trellis/tasks/10-02-request-id-and-readiness`。
 
 ## 目标

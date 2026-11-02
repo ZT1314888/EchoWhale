@@ -1,6 +1,6 @@
 # LLM 成本与输入边界（llm_cost_and_input_bounds）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 10 / Finding 11 修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 10 / Finding 11 修复。
 > Trellis 任务：`.trellis/tasks/10-02-llm-cost-and-input-bounds`。
 
 ## 目标

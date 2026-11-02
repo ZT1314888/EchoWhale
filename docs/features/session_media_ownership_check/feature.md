@@ -1,6 +1,6 @@
 # 会话启动媒体归属校验（session_media_ownership_check）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 4 修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 4 修复。
 > Trellis 任务：`.trellis/tasks/10-01-session-start-media-ownership`（轻量，PRD-only）。
 
 ## 目标

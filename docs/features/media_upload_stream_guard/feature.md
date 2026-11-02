@@ -10,7 +10,7 @@
 
 ## 目标
 
-修复全量审计报告（`audit-report-EchoWhale-2026-10-01.md`）Finding 2：`POST /media/upload` 先把整个 multipart 请求体读进内存（`await file.read()`）才校验 10MB 上限，且端点无限流、匿名可用——单请求内存耗尽 DoS 与 R2 存储成本滥用双通道。本批次交付"内存有界的流式上传链路 + 全局请求体大小门 + 有配额的上传端点"。
+修复全量审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 2：`POST /media/upload` 先把整个 multipart 请求体读进内存（`await file.read()`）才校验 10MB 上限，且端点无限流、匿名可用——单请求内存耗尽 DoS 与 R2 存储成本滥用双通道。本批次交付"内存有界的流式上传链路 + 全局请求体大小门 + 有配额的上传端点"。
 
 ## 全局请求体大小门（api/common/middleware.py）
 

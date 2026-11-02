@@ -57,7 +57,7 @@ jobs:
       - name: Run backend tests
         # 覆盖率门禁阈值在 pyproject [tool.coverage.report]（当前 87）：
         # 阈值与口径集中在 pyproject，CI 与本地 `uv run pytest --cov` 同源。
-        run: uv run pytest tests --cov=api
+        run: timeout --signal=KILL 60s uv run pytest tests --cov=api
 
   backend-postgres:
     name: backend (postgres parity)
@@ -104,7 +104,7 @@ jobs:
       - name: Run backend tests
         # 覆盖率门禁同 pyproject fail_under=87；SQLite 专属用例在此 job 显式
         # skip（理由见各用例标记）。CI 无 .env，model_runtime_mode 默认 mock。
-        run: uv run pytest tests --cov=api
+        run: timeout --signal=KILL 60s uv run pytest tests --cov=api
 
       - name: Verify migration downgrade round-trip (seed data included)
         # 顺序刻意在 pytest 后：此时共享库刚被测试踩过、处于任意状态，直接
@@ -157,3 +157,6 @@ jobs:
 
       - name: Unit tests (coverage thresholds)
         run: npm run coverage
+
+      - name: Production build
+        run: npm run build

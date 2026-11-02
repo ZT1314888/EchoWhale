@@ -1,6 +1,6 @@
 # 场景文案单一事实源与死代码清理（scene_copy_single_source_cleanup）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）三项遗留清理：F17 场景文案双份漂移、
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）三项遗留清理：F17 场景文案双份漂移、
 > F19 前端 mock 时代死代码、F21 会话总结死桩；外加两个快速收益小件（index.html lang、
 > 首页拖拽承诺）。
 > Trellis 任务：`.trellis/tasks/10-03-scene-copy-single-source-cleanup`。

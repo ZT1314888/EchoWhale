@@ -1,6 +1,6 @@
 # 会话写路径完整性与追加语义（session_write_integrity）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 7 / Finding 8 修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 7 / Finding 8 修复。
 > Trellis 任务：`.trellis/tasks/10-01-session-write-integrity`。
 
 ## 目标

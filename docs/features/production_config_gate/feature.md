@@ -1,6 +1,6 @@
 # 生产配置门控反转与清单补全（production_config_gate）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 3 修复 + Finding 18 最小修复部分。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 3 修复 + Finding 18 最小修复部分。
 > Trellis 任务：`.trellis/tasks/10-01-production-config-gate`。
 
 ## 目标
