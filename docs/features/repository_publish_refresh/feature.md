@@ -1,4 +1,4 @@
-﻿# Feature: `repository_publish_refresh`
+# Feature: `repository_publish_refresh`
 
 ## 基本信息
 
@@ -44,4 +44,10 @@ CI 验证构建，尚未配置 CD；本批次不宣称真实语音与外部模�
 
 ## 发布证据
 
-GitHub About 已核对为“图片驱动的英语情景陪练，支持实时语音、即时反馈与学习复盘”。待记录整理 PR、发布 PR、合并 SHA 与 CI 链接。控制面状态先改 agent-control-plane.json，再 render/check。
+- GitHub About 已核对为“图片驱动的英语情景陪练，支持实时语音、即时反馈与学习复盘”。
+- 三组提交：5854850（配置与 CI）、444169a（审计归档）、22c5735（README、截图与治理）。
+- [整理 PR #5](https://github.com/ZT1314888/EchoWhale/pull/5)：[四项 CI 全绿](https://github.com/ZT1314888/EchoWhale/actions/runs/41448719386)，无未解决讨论，merge commit 58a5772d5ce1a692d5bad6434f3629715ff94285 合入 dev。
+- [dev → main 发布 PR #6](https://github.com/ZT1314888/EchoWhale/pull/6)：本条记录随 dev 提交进入发布 PR，最终 head 的检查、管理员合并、准确 main SHA 与合并后 CI 验收证据保存在该 PR 时间线，避免在提交中自引用未来合并 SHA。
+- main 的规则集要求一人批准，允许仓库管理员豁免；按本轮授权，仅在最终检查全绿且讨论解决后使用 --admin --merge，不关闭保护规则、不强推、不删除分支。
+- [主线 CI 记录](https://github.com/ZT1314888/EchoWhale/actions/workflows/ci.yml?query=branch%3Amain)：四个 job 验证测试、迁移与构建；尚未配置 CD。
+- 控制面先更新事实源，再 render/check；保留原 system=integrating 与其他模块状态，不将 mock 冒烟等同于完整生产联调。
