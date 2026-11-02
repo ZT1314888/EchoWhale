@@ -7,7 +7,6 @@ from pydantic import BaseModel, field_validator
 from api.models.auth_model import AuthSession
 from api.models.user_model import User
 
-
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -91,7 +90,7 @@ class AuthUserResponse(BaseModel):
     nickname: str
 
     @classmethod
-    def from_user(cls, user: User) -> "AuthUserResponse":
+    def from_user(cls, user: User) -> AuthUserResponse:
         return cls(
             user_id=user.id,
             email=user.email,
@@ -104,7 +103,7 @@ class AuthSessionResponse(BaseModel):
     user: AuthUserResponse
 
     @classmethod
-    def from_session(cls, session: AuthSession) -> "AuthSessionResponse":
+    def from_session(cls, session: AuthSession) -> AuthSessionResponse:
         return cls(
             access_token=session.access_token,
             user=AuthUserResponse.from_user(session.user),
@@ -117,7 +116,7 @@ class RegisterResponse(BaseModel):
     nickname: str
 
     @classmethod
-    def from_user(cls, user: User) -> "RegisterResponse":
+    def from_user(cls, user: User) -> RegisterResponse:
         return cls(
             user_id=user.id,
             email=user.email,

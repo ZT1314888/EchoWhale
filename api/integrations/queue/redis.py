@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from functools import lru_cache
 import sys
+from functools import lru_cache
 from typing import Any
 
-from api.common.exceptions import ConfigurationError
-from api.common.exceptions import QueuePublishError
+from api.common.exceptions import ConfigurationError, QueuePublishError
 from api.core.config import settings
 
 try:  # pragma: no cover - exercised through factory fallback
@@ -26,8 +25,7 @@ def _enable_rq_windows_import_compat() -> None:
 
 try:  # pragma: no cover - exercised through factory fallback
     _enable_rq_windows_import_compat()
-    from rq import Queue
-    from rq import Retry
+    from rq import Queue, Retry
 except ImportError:  # pragma: no cover - local dev may not have rq installed yet
     Queue = None
     Retry = None

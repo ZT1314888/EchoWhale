@@ -31,7 +31,7 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
   const request = {
     ...init,
     headers,
-    credentials: "include",
+    credentials: "include" as const,
   };
 
   const response = await fetch(input, request);

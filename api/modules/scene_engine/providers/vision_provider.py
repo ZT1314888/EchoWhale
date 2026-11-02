@@ -5,9 +5,10 @@ from typing import Protocol
 
 import httpx
 
-from api.common.exceptions import ConfigurationError
 from api.common.exceptions import ModelProviderError
 from api.core.config import settings
+from api.db.llm_usage_db import LlmUsageSink, build_llm_usage_sink
+from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient
 from api.modules.scene_engine.prompts.scene_prompts import SCENE_INFERENCE_PROMPT
 from api.modules.scene_engine.schema import SceneAnalysisInput, SceneAnalysisResult
@@ -82,20 +83,25 @@ class OpenAICompatibleVisionProvider:
         api_key: str,
         model: str,
         timeout_seconds: int,
+        usage_sink: LlmUsageSink | None = None,
     ) -> None:
-        """保存远端视觉模型调用所需的客户端配置。"""
+        """保存远端视觉模型调用所需的客户端配置。
+
+        max_tokens 与用量 sink 在构造期接入：引擎（agent）对此无感知。
+        """
         self.client = OpenAICompatibleClient(
             base_url=base_url,
             api_key=api_key,
             model=model,
             timeout_seconds=timeout_seconds,
+            max_tokens=settings.llm_scene_max_tokens,
+            usage_sink=usage_sink if usage_sink is not None else build_llm_usage_sink(),
         )
 
     async def analyze(self, payload: SceneAnalysisInput) -> SceneAnalysisResult:
         """调用兼容 OpenAI 的视觉模型，并把返回值收敛成统一 schema。"""
         user_prompt = (
-            "Return one JSON object for this image. "
-            f"Filename hint (weak): {payload.filename}"
+            "Return one JSON object for this image. " f"Filename hint (weak): {payload.filename}"
         )
         try:
             raw = await self.client.async_analyze_image(
@@ -103,7 +109,7 @@ class OpenAICompatibleVisionProvider:
                 user_prompt=user_prompt,
                 image_url=payload.media_url,
             )
-            return SceneAnalysisResult.model_validate(_load_json(raw))
+            return SceneAnalysisResult.model_validate(parse_llm_json(raw))
         except httpx.TimeoutException as exc:  # pragma: no cover - live provider path
             raise ModelProviderError("Vision provider timed out") from exc
         except httpx.HTTPStatusError as exc:  # pragma: no cover - live provider path
@@ -112,74 +118,11 @@ class OpenAICompatibleVisionProvider:
                 raise ModelProviderError(
                     f"Vision provider rejected request with status {status_code}"
                 ) from exc
-            raise ModelProviderError(
-                f"Vision provider failed with status {status_code}"
-            ) from exc
+            raise ModelProviderError(f"Vision provider failed with status {status_code}") from exc
         except (httpx.HTTPError, json.JSONDecodeError, ValueError) as exc:  # pragma: no cover
             raise ModelProviderError("Vision provider failed to analyze image") from exc
         except Exception as exc:  # pragma: no cover - live provider path
             raise ModelProviderError("Vision provider failed to analyze image") from exc
-
-
-def build_primary_vision_provider() -> VisionProvider:
-    """按主配置构造视觉 provider。"""
-    return _build_provider(
-        provider=settings.vision_primary_provider,
-        base_url=settings.vision_primary_base_url,
-        api_key=settings.vision_primary_api_key,
-        model=settings.vision_primary_model,
-        timeout_seconds=settings.vision_primary_timeout_seconds,
-    )
-
-
-def build_fallback_vision_provider() -> VisionProvider:
-    """按回退配置构造视觉 provider。"""
-    return _build_provider(
-        provider=settings.vision_fallback_provider,
-        base_url=settings.vision_fallback_base_url,
-        api_key=settings.vision_fallback_api_key,
-        model=settings.vision_fallback_model,
-        timeout_seconds=settings.vision_fallback_timeout_seconds,
-    )
-
-
-def has_real_vision_provider(provider: str) -> bool:
-    """判断当前 provider 配置是否真的会走远端模型。"""
-    return provider.strip().lower() not in {"", "mock"}
-
-
-def _build_provider(
-    *,
-    provider: str,
-    base_url: str,
-    api_key: str,
-    model: str,
-    timeout_seconds: int,
-) -> VisionProvider:
-    """根据运行模式和配置选择 mock 或真实视觉 provider。"""
-    normalized = provider.strip().lower()
-    if settings.model_runtime_mode.lower() != "live":
-        return MockVisionProvider()
-    if normalized in {"", "mock"}:
-        raise ConfigurationError("Live runtime requires at least one real vision provider")
-    if normalized == "openai_compatible":
-        return OpenAICompatibleVisionProvider(
-            base_url=base_url,
-            api_key=api_key,
-            model=model,
-            timeout_seconds=timeout_seconds,
-        )
-    raise ConfigurationError(f"Unsupported vision provider: {provider}")
-
-
-def _load_json(raw: str) -> dict[str, object]:
-    """兼容 Markdown 代码块包裹的 JSON 输出。"""
-    normalized = raw.strip()
-    if normalized.startswith("```"):
-        normalized = normalized.strip("`")
-        if normalized.lower().startswith("json"):
-            normalized = normalized[4:].strip()
-    return json.loads(normalized)
 
 
 def _merge_vocab_candidates(filename_tags: list[str], defaults: list[str]) -> list[str]:

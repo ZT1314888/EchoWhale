@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { uploadMedia } from "./mediaApi";
+import {
+  SCENE_ANALYSIS_POLL_INTERVAL_MS,
+  SCENE_ANALYSIS_POLL_TIMEOUT_MS,
+  getSceneAnalysisStatus,
+  uploadMedia,
+  waitForSceneAnalysis,
+} from "./mediaApi";
 
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 describe("mediaApi", () => {
@@ -62,4 +69,139 @@ describe("mediaApi", () => {
       message: "Unsupported media type: text/plain",
     });
   });
+
+  it("maps the scene-analysis status payload into the frontend contract", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        message: "Success",
+        data: {
+          media_id: "med_1",
+          status: "ready",
+          prompt_version: "v1",
+          scene: "coffee_shop",
+          role: "barista",
+          confidence: 0.92,
+        },
+      }),
+    }) as typeof fetch;
+
+    await expect(getSceneAnalysisStatus("med_1")).resolves.toEqual({
+      mediaId: "med_1",
+      status: "ready",
+      promptVersion: "v1",
+      scene: "coffee_shop",
+      role: "barista",
+      confidence: 0.92,
+      errorCode: undefined,
+    });
+  });
+
+  it("polls scene analysis on an interval until it reports ready", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          message: "Success",
+          data: { media_id: "med_1", status: "pending" },
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          code: 200,
+          message: "Success",
+          data: { media_id: "med_1", status: "ready" },
+        }),
+      });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const pending = waitForSceneAnalysis("med_1");
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS * 2);
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps a failed analysis with the unsupported-image code to the localized error", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        message: "Success",
+        data: { media_id: "med_bad", status: "failed", error_code: 1007 },
+      }),
+    }) as typeof fetch;
+
+    const pending = waitForSceneAnalysis("med_bad");
+    const expectation = expect(pending).rejects.toMatchObject({
+      code: "UNSUPPORTED_SCENE_IMAGE",
+    });
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS * 2);
+    await expectation;
+  });
+
+  it("times out when scene analysis never becomes ready", async () => {
+    vi.useFakeTimers();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        code: 200,
+        message: "Success",
+        data: { media_id: "med_slow", status: "pending" },
+      }),
+    }) as typeof fetch;
+
+    const pending = waitForSceneAnalysis("med_slow");
+    const expectation = expect(pending).rejects.toMatchObject({
+      code: "SCENE_ANALYSIS_TIMEOUT",
+    });
+    await vi.advanceTimersByTimeAsync(
+      SCENE_ANALYSIS_POLL_TIMEOUT_MS + SCENE_ANALYSIS_POLL_INTERVAL_MS,
+    );
+    await expectation;
+  });
+
+  it("aborts the wait before the next poll when the signal fires", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const controller = new AbortController();
+
+    const pending = waitForSceneAnalysis("med_cancel", { signal: controller.signal });
+    const expectation = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS);
+    await expectation;
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("propagates abort when an in-flight status request is cancelled", async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    globalThis.fetch = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            const abortError = new Error("aborted");
+            abortError.name = "AbortError";
+            reject(abortError);
+          });
+        }),
+    ) as typeof fetch;
+
+    const pending = waitForSceneAnalysis("med_cancel", { signal: controller.signal });
+    const expectation = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+
+    await vi.advanceTimersByTimeAsync(SCENE_ANALYSIS_POLL_INTERVAL_MS);
+    controller.abort();
+    await expectation;
+  });
+
 });

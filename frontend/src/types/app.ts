@@ -9,7 +9,6 @@ export type SampleScene = {
   roleLabel: string;
   openingPrompt: string;
   tags: string[];
-  liveHint: string;
 };
 
 export type UploadDraft = {
@@ -31,11 +30,24 @@ export type UploadedMedia = {
   uploadStatus: string;
 };
 
+export type SceneAnalysisStatusValue = "unknown" | "pending" | "ready" | "failed";
+
+export type SceneAnalysisStatus = {
+  mediaId: string;
+  status: SceneAnalysisStatusValue;
+  promptVersion?: string;
+  scene?: string;
+  role?: string;
+  confidence?: number;
+  errorCode?: number;
+};
+
 export type PracticeMessage = {
   id: string;
   role: MessageRole;
   label: string;
   content: string;
+  feedback?: PracticeFeedback;
 };
 
 export type FeedbackMetric = {
@@ -61,8 +73,9 @@ export type SessionSummary = {
   title: string;
   roleLabel: string;
   openingPrompt: string;
+  // 后端 SessionStatus（draft | active | completed）；completed 的会话不允许再进练习页。
+  status: string;
   tags: string[];
-  liveHint: string;
   voiceTitle: string;
   voiceBody: string;
   messages: PracticeMessage[];
@@ -190,4 +203,23 @@ export type AppError = {
   code: string;
   message: string;
   reason?: string;
+};
+
+export type ProfileErrorType = {
+  category: string;
+  label: string;
+  count: number;
+};
+
+export type ProfileSceneCount = {
+  sceneTitle: string;
+  count: number;
+};
+
+export type LearnerProfileOverview = {
+  cefrEstimate: string | null;
+  errorTypes: ProfileErrorType[];
+  scenes: ProfileSceneCount[];
+  practicedTurnCount: number;
+  updatedAt: string | null;
 };

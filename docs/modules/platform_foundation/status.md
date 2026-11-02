@@ -57,3 +57,4 @@
 - `2026-03-30`：初始化模块状态文档
 - `2026-04-02`：对齐 `Fastapi-template` 响应体规范，补齐 EchoWhale 统一响应模型、全局异常处理和 `/health` 例外约定
 - `2026-04-10`：新增 agent 控制面事实源、生成视图与 repo-local 治理命令入口
+- `2026-11-02`：整理仓库发布门禁：前端 CI 增加生产构建，后端两个 job 设置 60 秒硬超时；审计归档与 GitHub 主线发布记录见[发布记录](../../features/repository_publish_refresh/feature.md)。

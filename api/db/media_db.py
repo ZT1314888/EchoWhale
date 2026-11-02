@@ -8,7 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import MediaUploadStatus
 from api.common.exceptions import NotFoundError
-from api.db.database import Base, AsyncSessionFactory, get_async_session_factory
+from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
 from api.models.media_model import Media
 
 
@@ -51,7 +51,7 @@ class SqlAlchemyMediaRepository:
                 created_at=media.created_at,
                 tags=list(media.tags),
             )
-            session.add(record)
+            # merge 按主键 upsert，重复保存同一 media 时幂等。
             await session.merge(record)
             await session.commit()
         return media

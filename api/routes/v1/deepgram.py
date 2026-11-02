@@ -1,27 +1,37 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from functools import lru_cache
-import logging
 from json import JSONDecodeError
 from typing import Any
 
-from fastapi import APIRouter, Header, Request
-from fastapi.responses import JSONResponse
-from fastapi.responses import Response
-from fastapi.responses import StreamingResponse
 import httpx
-from pydantic import BaseModel
-from pydantic import ValidationError
-from pydantic import field_validator
+from fastapi import APIRouter, Depends, Header, Request
+from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import BaseModel, ValidationError, field_validator
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import ConfigurationError
+from api.common.exceptions import (
+    AuthenticationError,
+    ConfigurationError,
+    NotFoundError,
+    TooManyRequestsError,
+)
+from api.common.request_context import (
+    reset_request_owner,
+    reset_request_session,
+    set_request_owner,
+    set_request_session,
+)
 from api.core.config import settings
-from api.integrations.deepgram import build_deepgram_think_upstream_url
-from api.integrations.deepgram import DeepgramThinkProxyTokenCodec
-from api.integrations.deepgram import validate_deepgram_think_upstream_settings
-
+from api.db.session_db import SessionRepository, build_session_repository
+from api.integrations.deepgram import (
+    DEEPGRAM_THINK_PROXY_GENERATION_CLAIM,
+    DeepgramThinkProxyTokenCodec,
+    build_deepgram_think_upstream_url,
+    validate_deepgram_think_upstream_settings,
+)
+from api.services.llm_rate_limit import LLMRateLimiter, get_llm_rate_limiter
 
 router = APIRouter(prefix="/deepgram", tags=["deepgram"])
 logger = logging.getLogger(__name__)
@@ -50,6 +60,8 @@ class ProxyChatCompletionRequest(BaseModel):
 async def proxy_deepgram_think_chat_completions(
     request: Request,
     authorization: str | None = Header(default=None),
+    session_repository: SessionRepository = Depends(build_session_repository),
+    rate_limiter: LLMRateLimiter = Depends(get_llm_rate_limiter),
 ) -> Response:
     token = _extract_bearer_token(authorization)
     if token is None:
@@ -68,6 +80,7 @@ async def proxy_deepgram_think_chat_completions(
             error_type="authentication_error",
         )
     session_id = _extract_session_id(claims)
+    generation = _extract_generation(claims)
 
     try:
         validate_deepgram_think_upstream_settings()
@@ -82,7 +95,9 @@ async def proxy_deepgram_think_chat_completions(
     try:
         payload = await request.json()
     except JSONDecodeError:
-        logger.warning("Deepgram think proxy received invalid JSON payload for session=%s", session_id)
+        logger.warning(
+            "Deepgram think proxy received invalid JSON payload for session=%s", session_id
+        )
         return _error_response(
             status_code=400,
             message="Invalid proxy request payload",
@@ -102,46 +117,116 @@ async def proxy_deepgram_think_chat_completions(
             error_type="invalid_request_error",
         )
 
-    if _requests_streaming(payload):
-        return await _stream_think_response(payload=payload, session_id=session_id)
-
+    # 顺序理由（审计 Finding 12b）：per-sid 限流先于存在性校验——同 sid 洪泛
+    # 在配额打满后即被挡，不再打 DB；伪造令牌则进不到 sid 提取。令牌 TTL 内
+    # 可复用，per-sid 配额是这种可复用性的主要约束。
     try:
-        response = await _get_deepgram_async_client().post(
-            build_deepgram_think_upstream_url(),
-            headers=_build_upstream_headers(),
-            json=payload,
-        )
-    except httpx.HTTPError:
+        rate_limiter.consume(action="think_proxy", key=session_id)
+    except TooManyRequestsError:
+        logger.warning("Deepgram think proxy rate limited for session=%s", session_id)
         return _error_response(
-            status_code=502,
-            message="Deepgram think upstream request failed",
-            error_type="upstream_error",
+            status_code=429,
+            message="Too many requests for this session",
+            error_type="rate_limit_error",
         )
 
+    # sid 存在性校验：令牌是 TTL 内可复用的 bearer 能力，签发后不再与应用状态
+    # 绑定，这里用仓储 PK 查询把"令牌有效"收紧到"会话仍存在"。不存在（含
+    # sid="unknown"）统一 401 authentication_error，不泄露会话存在性。
     try:
-        content = response.json()
-    except ValueError:
-        logger.error(
-            "Deepgram think upstream returned non-JSON response for session=%s status=%s body_bytes=%s",
-            session_id,
-            response.status_code,
-            len(response.content),
-        )
+        session_head = await session_repository.get_session_head(session_id)
+    except NotFoundError:
+        logger.warning("Deepgram think proxy rejected unknown session id")
         return _error_response(
-            status_code=502,
-            message="Deepgram think upstream returned a non-JSON response",
-            error_type="upstream_invalid_response",
+            status_code=401,
+            message="Proxy authorization required",
+            error_type="authentication_error",
         )
 
-    if response.status_code >= 400:
+    # 生命周期绑定（审计 F12 Better fix）：令牌必须命中当前活跃的语音会话
+    # 代数——fact 不存在（从未 bootstrap）、已收口（voice/complete）、代数落后
+    # （re-bootstrap 过）或令牌缺 gen claim（部署前签发的旧令牌）一律 401。
+    # 拒绝原因只进服务端日志，响应与既有 401 同形，防枚举。fact 是 PK 点查，
+    # 与上一条 sid 存在性同级别；不合并 JOIN——head 承担归属接缝，fact 承担
+    # 生命周期，各自复用既有仓储方法。
+    voice_fact = await session_repository.get_latest_voice_session_fact(session_id)
+    if (
+        generation is None
+        or voice_fact is None
+        or voice_fact.status != "active"
+        or voice_fact.token_generation != generation
+    ):
+        reason = (
+            "missing_generation_claim"
+            if generation is None
+            else (
+                "missing_fact"
+                if voice_fact is None
+                else "inactive_fact" if voice_fact.status != "active" else "generation_mismatch"
+            )
+        )
         logger.warning(
-            "Deepgram think upstream error for session=%s status=%s error_type=%s",
+            "Deepgram think proxy rejected stale token for session=%s reason=%s",
             session_id,
-            response.status_code,
-            _extract_error_type(content),
+            reason,
+        )
+        return _error_response(
+            status_code=401,
+            message="Proxy authorization required",
+            error_type="authentication_error",
         )
 
-    return JSONResponse(content=content, status_code=response.status_code)
+    # think 代理的归因接缝：请求身份是 service token（typ=deepgram-think-proxy），
+    # 过不了 get_resource_owner 依赖链的 access-token 校验——owner 走依赖形态会
+    # 把 Deepgram 回源请求整体 401。会话存在性确认后从会话头取归属：user_id 即
+    # owner_id 形态（user:/visitor:），与 get_attribution_owner 产物同构；
+    # session 归因同样在此建立。upstream 调用结束后 finally 复位。
+    owner_token = set_request_owner(session_head.user_id)
+    session_token = set_request_session(session_id)
+    try:
+        if _requests_streaming(payload):
+            return await _stream_think_response(payload=payload, session_id=session_id)
+
+        try:
+            response = await _get_deepgram_async_client().post(
+                build_deepgram_think_upstream_url(),
+                headers=_build_upstream_headers(),
+                json=payload,
+            )
+        except httpx.HTTPError:
+            return _error_response(
+                status_code=502,
+                message="Deepgram think upstream request failed",
+                error_type="upstream_error",
+            )
+
+        try:
+            content = response.json()
+        except ValueError:
+            logger.exception(
+                "Deepgram think upstream returned non-JSON response for session=%s status=%s body_bytes=%s",
+                session_id,
+                response.status_code,
+                len(response.content),
+            )
+            return _error_response(
+                status_code=502,
+                message="Deepgram think upstream returned a non-JSON response",
+                error_type="upstream_invalid_response",
+            )
+
+        if response.status_code >= 400:
+            logger.warning(
+                "Deepgram think upstream error for session=%s status=%s error_type=%s",
+                session_id,
+                response.status_code,
+                _extract_error_type(content),
+            )
+
+        return JSONResponse(content=content, status_code=response.status_code)
+    finally:
+        reset_request_session(session_token)
+        reset_request_owner(owner_token)
 
 
 async def _stream_think_response(
@@ -231,6 +316,17 @@ def _error_response(*, status_code: int, message: str, error_type: str) -> JSONR
 def _extract_session_id(claims: dict[str, Any]) -> str:
     session_id = claims.get("sid")
     return session_id if isinstance(session_id, str) and session_id else "unknown"
+
+
+def _extract_generation(claims: dict[str, Any]) -> int | None:
+    """读取令牌里的代数 claim；缺失或类型不对返回 None（校验链按不匹配拒绝）。
+
+    bool 是 int 的子类，必须显式排除，否则 True 会顶替代数 1 通过校验。
+    """
+    value = claims.get(DEEPGRAM_THINK_PROXY_GENERATION_CLAIM)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
 
 
 def _extract_error_type(payload: Any) -> str:

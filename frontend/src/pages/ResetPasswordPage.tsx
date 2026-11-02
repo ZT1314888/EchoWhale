@@ -2,7 +2,13 @@ import { FormEvent, useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../auth/AuthProvider";
-import { BrandHeader } from "../components/BrandHeader";
+import { AuthAlert } from "../components/AuthAlert";
+import { AuthBrandPanel } from "../components/AuthBrandPanel";
+import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthLayout } from "../components/AuthLayout";
+import { AuthLoadingStage, AuthTextButton } from "../components/AuthControls";
+import { AuthSubmitButton } from "../components/AuthSubmitButton";
+import { AuthTextField } from "../components/AuthTextField";
 import { resetPassword } from "../services/authApi";
 
 export function ResetPasswordPage() {
@@ -32,11 +38,7 @@ export function ResetPasswordPage() {
   }, [navigate, success]);
 
   if (auth.status === "refreshing") {
-    return (
-      <main className="empty-stage">
-        <h1>正在恢复登录状态…</h1>
-      </main>
-    );
+    return <AuthLoadingStage>正在恢复登录状态…</AuthLoadingStage>;
   }
 
   if (auth.status === "authenticated") {
@@ -66,53 +68,45 @@ export function ResetPasswordPage() {
   const showRetryAction = !token || error === invalidLinkMessage;
 
   return (
-    <div className="page-shell page-shell--auth">
-      <div className="page-frame">
-        <BrandHeader />
+    <AuthLayout
+      brand={
+        <AuthBrandPanel
+          title={
+            <>
+              设置一个新的
+              <br />
+              登录密码
+            </>
+          }
+          description="重置密码后，旧的 refresh 会话会被撤销。这样做的目的，是避免旧设备继续保留可用登录态。"
+        />
+      }
+    >
+      <AuthFormCard title="重置密码" subtitle="请输入一个包含字母和数字的新密码。">
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <AuthTextField
+            id="reset-password"
+            label="新密码"
+            placeholder="至少 6 个字符"
+            value={password}
+            onChange={setPassword}
+            autoComplete="new-password"
+            showPasswordToggle
+          />
+          {error ? <AuthAlert message={error} /> : null}
+          {success ? <AuthAlert variant="info" message="密码已更新，即将返回登录页。" /> : null}
+          <AuthSubmitButton submitting={submitting} submittingText="提交中…">
+            确认重置密码
+          </AuthSubmitButton>
+        </form>
 
-        <main className="auth-layout">
-          <section className="panel-card auth-aside">
-            <p className="eyebrow eyebrow--brand">EchoWhale</p>
-            <h2>设置一个新的登录密码</h2>
-            <p className="muted-text">重置密码后，旧 refresh 会话会被撤销。这样做的目的，是避免旧设备继续保留可用登录态。</p>
-          </section>
-
-          <section className="panel-card auth-panel auth-panel--rounded">
-            <div className="section-header section-header--stack">
-              <p className="eyebrow">Reset Password</p>
-              <h1>重置密码</h1>
-              <p className="muted-text">请输入一个包含字母和数字的新密码。</p>
-            </div>
-
-            <form className="auth-form" onSubmit={onSubmit}>
-              <label className="field-label" htmlFor="reset-password">
-                新密码
-              </label>
-              <input
-                id="reset-password"
-                className="input-field"
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {error ? <p className="form-error">{error}</p> : null}
-              {success ? <p className="muted-text">密码已更新，即将返回登录页。</p> : null}
-              <button className="primary-button" type="submit" disabled={submitting}>
-                {submitting ? "提交中…" : "确认重置密码"}
-              </button>
-            </form>
-
-            {showRetryAction ? (
-              <button className="link-button" type="button" onClick={() => navigate("/forgot-password")}>
-                重新申请重置邮件
-              </button>
-            ) : null}
-            <button className="link-button" type="button" onClick={() => navigate("/login")}>
-              返回登录
-            </button>
-          </section>
-        </main>
-      </div>
-    </div>
+        <div className="mt-5 flex flex-col items-center gap-3">
+          {showRetryAction ? (
+            <AuthTextButton onClick={() => navigate("/forgot-password")}>重新申请重置邮件</AuthTextButton>
+          ) : null}
+          <AuthTextButton onClick={() => navigate("/login")}>返回登录</AuthTextButton>
+        </div>
+      </AuthFormCard>
+    </AuthLayout>
   );
 }

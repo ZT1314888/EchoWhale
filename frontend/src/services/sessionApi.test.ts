@@ -6,7 +6,7 @@ import {
   createPracticeSession,
   createSamplePracticeSession,
   getPracticeSession,
-  submitPracticeTurn,
+  submitPracticeTurnStream,
 } from "./sessionApi";
 
 const originalFetch = globalThis.fetch;
@@ -38,7 +38,7 @@ describe("sessionApi", () => {
 
     const result = await createPracticeSession("med_123");
 
-    expect(result).toEqual({ sessionId: "sess_123" });
+    expect(result).toEqual({ kind: "created", sessionId: "sess_123" });
   });
 
   it("starts a sample practice session from a sample scene id", async () => {
@@ -64,7 +64,7 @@ describe("sessionApi", () => {
 
     const result = await createSamplePracticeSession("coffee");
 
-    expect(result).toEqual({ sessionId: "sess_sample" });
+    expect(result).toEqual({ kind: "created", sessionId: "sess_sample" });
     expect(fetchMock).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -72,6 +72,23 @@ describe("sessionApi", () => {
         body: JSON.stringify({ sample_scene_id: "coffee" }),
       }),
     );
+  });
+
+  it("surfaces a 202 analyzing outcome with the pending media id", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        code: 202,
+        message: "Scene analysis queued",
+        data: { status: "analyzing", media_id: "med_pending" },
+      }),
+    }) as typeof fetch;
+
+    await expect(createPracticeSession("med_pending")).resolves.toEqual({
+      kind: "analyzing",
+      mediaId: "med_pending",
+    });
   });
 
   it("maps unsupported scene images to a localized frontend error", async () => {
@@ -122,6 +139,8 @@ describe("sessionApi", () => {
           media_id: "med_123",
           scene: "coffee_shop",
           role: "barista",
+          scene_title: "咖啡店柜台点单",
+          role_label: "店员对话",
           opener: "Hi there, what can I get started for you today?",
           status: "active",
           labels: ["coffee", "menu"],
@@ -138,8 +157,9 @@ describe("sessionApi", () => {
 
     const session = await getPracticeSession("sess_123");
 
+    // 标题断言为「后端字段流转」口径（F17）：展示文案由后端 scene_title/role_label 下发。
     expect(session.title).toBe("咖啡店柜台点单");
-    expect(session.roleLabel).toContain("barista");
+    expect(session.roleLabel).toBe("店员对话");
     expect(session.openingPrompt).toContain("Hi there");
     expect(session.messages).toEqual([
       {
@@ -151,60 +171,31 @@ describe("sessionApi", () => {
     ]);
   });
 
-  it("maps a reply response into frontend messages and feedback", async () => {
+  it("falls back to humanized copy without exposing raw ids when backend copy fields are missing", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         code: 200,
         message: "Success",
         data: {
-          session: {
-            session_id: "sess_123",
-            media_id: "med_123",
-            scene: "coffee_shop",
-            role: "barista",
-            opener: "Hi there, what can I get started for you today?",
-            status: "active",
-            labels: ["coffee", "menu"],
-            messages: [
-              {
-                message_id: "msg_1",
-                role: "assistant",
-                text: "Hi there, what can I get started for you today?",
-              },
-              {
-                message_id: "msg_2",
-                role: "user",
-                text: "Could I get an iced latte, please?",
-              },
-              {
-                message_id: "msg_3",
-                role: "assistant",
-                text: "Sure. What size would you like?",
-                feedback: {
-                  grammar: "Your meaning is clear.",
-                  more_natural: "Could I get an iced latte, please?",
-                  useful_words: ["latte", "size", "iced"],
-                },
-              },
-            ],
-          },
-          feedback: {
-            grammar: "Your meaning is clear.",
-            more_natural: "Could I get an iced latte, please?",
-            useful_words: ["latte", "size", "iced"],
-          },
+          session_id: "sess_gym",
+          media_id: "med_gym",
+          scene: "night_market",
+          role: "street_vendor",
+          opener: "What would you like to try?",
+          status: "active",
+          messages: [],
         },
       }),
     }) as typeof fetch;
 
-    const result = await submitPracticeTurn("sess_123", {
-      content: "Could I get an iced latte, please?",
-    });
+    const session = await getPracticeSession("sess_gym");
 
-    expect(result.messages).toHaveLength(3);
-    expect(result.feedback.grammar.body).toBe("Your meaning is clear.");
-    expect(result.feedback.usefulWords.words).toEqual(["latte", "size", "iced"]);
+    // 兜底路径（F17）：humanizeIdentifier 与后端同语义，不得露出原始 snake_case id。
+    expect(session.title).toBe("Night Market 情景对话");
+    expect(session.roleLabel).toBe("角色 · Street Vendor");
+    expect(session.title).not.toContain("_");
+    expect(session.roleLabel).not.toContain("_");
   });
 
   it("maps voice bootstrap into a frontend Deepgram session payload", async () => {
@@ -333,5 +324,122 @@ describe("sessionApi", () => {
         }),
       }),
     );
+  });
+});
+describe("submitPracticeTurnStream", () => {
+  const encoder = new TextEncoder();
+
+  function sseResponse(frames: string[], ok = true, status = 200) {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const frame of frames) controller.enqueue(encoder.encode(frame));
+        controller.close();
+      },
+    });
+    return { ok, status, body: stream, json: async () => ({}) } as unknown as Response;
+  }
+
+  function mockFetch(response: Response) {
+    const fetchMock = vi.fn().mockResolvedValue(response);
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+  }
+
+  const sessionFrame = [
+    "event: session",
+    `data: ${JSON.stringify({
+      session: {
+        session_id: "sess_1",
+        media_id: null,
+        scene: "coffee_shop",
+        role: "barista",
+        opener: "o",
+        status: "active",
+        messages: [
+          { message_id: "m1", role: "user", text: "hi" },
+          { message_id: "m2", role: "assistant", text: "Hello there!" },
+        ],
+      },
+      feedback: { grammar: "a", more_natural: "b", useful_words: ["c"] },
+      })}`,
+    "",
+    "",
+  ].join("\n");
+
+  it("consumes feedback, deltas and the final session event", async () => {
+    mockFetch(sseResponse([
+      'event: feedback\ndata: {"grammar":"a","more_natural":"b","useful_words":["c"]}\n\n',
+      'event: delta\ndata: {"text":"Hello "}\n\n',
+      'event: delta\ndata: {"text":"there!"}\n\n',
+      sessionFrame,
+    ]));
+
+    const deltas: string[] = [];
+    let feedbackBody = "";
+    const result = await submitPracticeTurnStream("sess_1", { content: "hi" }, {
+      onDelta: (delta) => deltas.push(delta),
+      onFeedback: (feedback) => {
+        feedbackBody = feedback.grammar.body;
+      },
+    });
+
+    expect(deltas.join("")).toBe("Hello there!");
+    expect(feedbackBody).toBe("a");
+    expect(result.feedback?.grammar.body).toBe("a");
+    expect(result.messages.map((message) => message.content)).toEqual(["hi", "Hello there!"]);
+  });
+
+  it("throws a structured error when the stream carries an error event", async () => {
+    mockFetch(
+      sseResponse(['event: error\ndata: {"code":1005,"message":"Coach failed"}\n\n']),
+    );
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+      message: "Coach failed",
+    });
+  });
+
+  it("falls back to the envelope error when the endpoint rejects before streaming", async () => {
+    mockFetch({
+      ok: false,
+      status: 429,
+      json: async () => ({ code: 1006, message: "Too many requests" }),
+    } as unknown as Response);
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+      message: "Too many requests",
+    });
+  });
+
+  it("throws when the stream ends without a session event", async () => {
+    mockFetch(
+      sseResponse(['event: delta\ndata: {"text":"partial"}\n\n']),
+    );
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      code: "TURN_SUBMIT_FAILED",
+    });
+  });
+
+  it("cancels the reader when the stream fails mid-flight", async () => {
+    const cancelSpy = vi.spyOn(ReadableStreamDefaultReader.prototype, "cancel");
+    const failingStream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('event: delta\ndata: {"text":"partial"}\n\n'));
+        controller.error(new Error("stream failed"));
+      },
+    });
+    mockFetch({
+      ok: true,
+      status: 200,
+      body: failingStream,
+      json: async () => ({}),
+    } as unknown as Response);
+
+    await expect(submitPracticeTurnStream("sess_1", { content: "hi" })).rejects.toMatchObject({
+      message: "stream failed",
+    });
+    expect(cancelSpy).toHaveBeenCalled();
   });
 });

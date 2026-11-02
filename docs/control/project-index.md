@@ -8,15 +8,15 @@
 ## 当前总态
 
 - `system`: `integrating`
-- 真实仓库状态：`api/` 后端与 backend-heavy 测试已成型，`frontend/` 持续补齐，`infra/` 仍以预留结构为主。
+- 真实仓库状态：`api/` 后端与 backend-heavy 测试已成型，`frontend/` 已整套切到原型设计语言并补齐进度页，`infra/` 仍以预留结构为主。
 - 当前策略：先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/auth_email_code_verification/feature.md`
-- 本轮结论：auth 注册验证已切到 6 位邮箱验证码，Redis 验证码存储、邮箱/IP 频控和 SMTP 配置入口都已落地。
-- 当前主要阻塞：真实 Redis / 阿里云 SMTP 仍需 smoke；Deepgram token、麦克风与浏览器播放联调也仍待系统级样本验证。
-- 补充进展：`coach_engine`、`scene_engine`、`feedback_engine` 在 `MODEL_RUNTIME_MODE=live` 下都已收紧为至少存在一个真实 provider。
+- 最新归档：`docs/features/repository_publish_refresh/feature.md`
+- 本轮结论：2026-11-02：基于 origin/dev 3309043 完成配置与 CI 门禁、历史审计归档、中文 README 与三张真实演示截图更新。整理 PR #5 四项 CI 全绿，merge commit 58a5772 合入 dev；主线发布与最终 SHA/CI 验收见 PR #6 时间线。
+- 当前主要阻塞：本批次本地自动检查与整理 PR CI 均通过；主线发布证据集中在 PR #6。已知边界：首页 375px 横向溢出，文字练习无复盘入口，匿名逐字稿受认证限制；未扩展业务修复范围。
+- 补充进展：前端 189 测试通过，覆盖率 90.01%；后端 692 passed / 5 skipped，覆盖率 90.80%，60 秒硬超时内完成。ruff/black/治理检查通过；实拍三页与三轮文字冒烟完成。CI 只验证构建，尚未配置 CD。
 
 ## 模块看板
 
@@ -30,7 +30,7 @@
 | `feedback_engine` | `docs/modules/feedback_engine/status.md` | `building` | `module_test_passed` | `integration/system` | useful words 和 live client 选择逻辑已收口，仍需更多系统联调。 |
 | `session_orchestration` | `docs/modules/session_orchestration/status.md` | `building` | `module_test_passed` | `integration/system` | start/get/reply/review 与 voice bootstrap/complete 已落地，剩余完整系统级联调。 |
 | `history_review` | `docs/modules/history_review/status.md` | `building` | `module_test_passed` | `integration/system` | history 列表、详情和消息回放分页已落地，剩余筛选和 richer review 策略。 |
-| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 七页路由壳层和真 upload/session/review/history 路径已落地。 |
+| `frontend_app` | `docs/modules/frontend_app/status.md` | `building` | `module_test_passed` | `integration/system` | 整套 UI 已迁到原型设计语言（Navbar/Footer/AppShell + theme/foundations/utilities 三份样式），11 条路由全部落地并走查通过；R9 已完成会话重定向复盘页；Pencil 设计资产已整体退役并删除。 |
 | `infra_delivery` | `docs/modules/infra_delivery/status.md` | `planned` | `module_test_passed` | `integration/system` | `infra/` 仍以预留结构为主。 |
 
 ## 模块清单
@@ -58,6 +58,38 @@
 | 学习反馈 | `feedback_engine` | `in_progress` | `feature_test_passed` | `module/feedback_engine` |
 | 会话编排 | `session_orchestration` | `in_progress` | `feature_test_passed` | `module/session_orchestration` |
 | 历史查看 | `history_review` | `in_progress` | `feature_test_passed` | `module/history_review` |
+| 文字回复流式 | `text_reply_streaming` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 场景分析缓存 | `scene_analysis_caching` | `feature_test_passed` | `feature_test_passed` | `module/scene_engine` |
+| 前端流式与轮询接线 | `frontend_stream_ui_wiring` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| 前端质量门禁 | `frontend_quality_gates` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| 等待体验与反馈统一 | `frontend_wait_ux_feedback_unification` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| CI 覆盖率与 lint 门禁 | `ci_coverage_lint_gates` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| black 格式化门禁 | `black_formatting` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 访客身份与限流加固 | `visitor_ratelimit_hardening` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 上传流式校验与请求体大小门 | `media_upload_stream_guard` | `feature_test_passed` | `feature_test_passed` | `module/media_upload` |
+| 生产配置门控反转与清单补全 | `production_config_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 会话启动媒体归属校验 | `session_media_ownership_check` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 反馈失败降级不拖垮整轮对话 | `feedback_failure_degradation` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 会话写路径完整性与追加语义 | `session_write_integrity` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 限流体系收口 | `ratelimit_closing` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| LLM成本与输入边界 | `llm_cost_and_input_bounds` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 请求关联ID与就绪探针 | `request_id_and_readiness` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 交付门禁与部署收口 | `delivery_gates_and_deployment` | `feature_test_passed` | `feature_test_passed` | `module/infra_delivery` |
+| 教学内核提示词升级与LLM复盘 | `teaching_kernel_prompts` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 学员状态持久化与提示词动态注入 | `learner_profile_prompt_injection` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 教练与复盘离线评测样例集 | `coach_engine` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
+| 场景文案单一事实源与死代码清理 | `scene_copy_single_source_cleanup` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| PRD 升版 v0.5 与 API 文档 | `prd_v05_api_docs` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| OTel 可观测性三层 span | `otel_engine_spans` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 学员档案读取 API 与进度页 | `learner_profile_progress` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 评测驱动提示词修正 | `eval_prompt_fixes` | `feature_test_passed` | `feature_test_passed` | `module/coach_engine` |
+| LLM ReviewCopy 生产消费 | `review_copy_consumption` | `feature_test_passed` | `feature_test_passed` | `module/session_orchestration` |
+| 后端韧性收尾批次 | `resilience_closing_batch` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| CI PG平价验证与前端eslint门禁 | `ci_pg_parity_and_eslint_gate` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| think代理令牌生命周期绑定 | `think_token_lifecycle_binding` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| PG迁移downgrade往返验证与全仓储方言参数化 | `pg_downgrade_repo_dialect_parity` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
+| 前端UI整套迁移至原型设计语言 | `frontend_design_port` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| GitHub 主线发布与作品介绍更新 | `repository_publish_refresh` | `feature_test_passed` | `feature_test_passed` | `dev` |
 
 ## 测试门
 
@@ -85,11 +117,13 @@
 
 ## 分支约定
 
-- feature 分支：`feature/<module-name>/<feature-name>`
-- bugfix 分支：`bugfix/<module-name>/<bug-name>`
+- feature 分支：`feature/<feature-name>`
+- bugfix 分支：`bugfix/<bug-name>`
 - module 分支：`module/<module-name>`
 - 集成分支：`integration/system`
 - 主线分支：`main`
+
+分支名只带类型和 slug，不带模块段；模块归属写在 feature/bug 文档的 `module` 字段里，不在分支名中重复编码。
 
 ## 操作入口
 

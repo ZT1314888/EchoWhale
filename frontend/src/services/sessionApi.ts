@@ -11,6 +11,7 @@ import type {
   ReviewSummary,
 } from "../types/app";
 import { apiFetch } from "./apiClient";
+import { humanizeIdentifier } from "../utils/humanizeIdentifier";
 
 type ApiResponse<T> = {
   code?: number;
@@ -39,6 +40,9 @@ type BackendSession = {
   media_id: string | null;
   scene: string;
   role: string;
+  // F17：后端下发的场景展示文案；标 optional 以容忍旧后端/缓存响应，走 humanize 兜底。
+  scene_title?: string;
+  role_label?: string;
   opener: string;
   status: string;
   visual_anchors?: string[];
@@ -71,6 +75,11 @@ type BackendReview = {
   };
 };
 
+type BackendSessionStartPending = {
+  status: string;
+  media_id: string;
+};
+
 type BackendVoiceBootstrapResponse = {
   session_id: string;
   deepgram_access_token: string;
@@ -83,25 +92,6 @@ type BackendVoiceBootstrapResponse = {
 type BackendVoiceCompleteResponse = {
   session: BackendSession;
   review: BackendReview;
-};
-
-const SCENE_META: Record<string, { title: string; liveHint: string }> = {
-  coffee_shop: {
-    title: "咖啡店柜台点单",
-    liveHint: "先用一句短句回应，再补一条细节，会更稳。",
-  },
-  office: {
-    title: "办公室状态同步",
-    liveHint: "先说结果，再说原因，会更像真实办公室沟通。",
-  },
-  travel: {
-    title: "街头问路确认路线",
-    liveHint: "先说目的地，再确认转弯位置，会更清楚。",
-  },
-  restaurant: {
-    title: "餐厅点单练习",
-    liveHint: "先说主需求，再补额外偏好，会更自然。",
-  },
 };
 
 function toError(message: string, code = "SESSION_API_FAILED"): AppError {
@@ -119,22 +109,20 @@ function toPracticeMessage(message: BackendSessionMessage): PracticeMessage {
     role: isLearner ? "learner" : "coach",
     label: isLearner ? "你 · 本轮回答" : "教练 · 追问",
     content: message.text,
+    feedback: message.feedback ? toPracticeFeedback(message.feedback) : undefined,
   };
 }
 
 function toSessionSummary(session: BackendSession): SessionSummary {
-  const sceneMeta = SCENE_META[session.scene] ?? {
-    title: session.scene.replace(/_/g, " "),
-    liveHint: "先回答主需求，再补一条细节，会更稳。",
-  };
-
+  // 展示文案单一事实源（F17）：优先后端下发的 scene_title/role_label；
+  // 兜底用 humanizeIdentifier（与后端 _humanize_identifier 同语义），不露原始 snake_case id。
   return {
     id: session.session_id,
-    title: sceneMeta.title,
-    roleLabel: `角色 · ${session.role}`,
+    title: session.scene_title ?? `${humanizeIdentifier(session.scene)} 情景对话`,
+    roleLabel: session.role_label ?? `角色 · ${humanizeIdentifier(session.role)}`,
     openingPrompt: `开场提示：${session.opener}`,
+    status: session.status,
     tags: session.vocab_candidates ?? session.labels ?? [],
-    liveHint: sceneMeta.liveHint,
     voiceTitle: "点一下，用声音回答",
     voiceBody: "文本输入仍然可用，但页面主动作始终是先开口再补充。",
     messages: session.messages.map(toPracticeMessage),
@@ -191,19 +179,28 @@ function toReviewSummary(review: BackendReview): ReviewSummary {
   };
 }
 
-export async function createPracticeSession(mediaId: string): Promise<{ sessionId: string }> {
-  return createSession({ media_id: mediaId });
+export type SessionStartOutcome =
+  | { kind: "created"; sessionId: string }
+  | { kind: "analyzing"; mediaId: string };
+
+export async function createPracticeSession(
+  mediaId: string,
+  signal?: AbortSignal,
+): Promise<SessionStartOutcome> {
+  return createSession({ media_id: mediaId }, signal);
 }
 
 export async function createSamplePracticeSession(
   sampleSceneId: "coffee" | "office" | "street",
-): Promise<{ sessionId: string }> {
-  return createSession({ sample_scene_id: sampleSceneId });
+  signal?: AbortSignal,
+): Promise<SessionStartOutcome> {
+  return createSession({ sample_scene_id: sampleSceneId }, signal);
 }
 
 async function createSession(
   payloadBody: { media_id: string } | { sample_scene_id: "coffee" | "office" | "street" },
-): Promise<{ sessionId: string }> {
+  signal?: AbortSignal,
+): Promise<SessionStartOutcome> {
   let response: Response;
 
   try {
@@ -211,8 +208,12 @@ async function createSession(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payloadBody),
+      signal,
     });
-  } catch {
+  } catch (reason) {
+    if ((reason as { name?: string })?.name === "AbortError") {
+      throw reason;
+    }
     throw toError("创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
   }
 
@@ -235,7 +236,15 @@ async function createSession(
     throw toError(payload.message ?? "创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
   }
 
-  return { sessionId: (payload.data as BackendSession).session_id };
+  if (response.status === 202) {
+    const pending = payload.data as BackendSessionStartPending | undefined;
+    if (!pending || !pending.media_id) {
+      throw toError("创建练习会话失败，请稍后重试。", "SESSION_START_FAILED");
+    }
+    return { kind: "analyzing", mediaId: pending.media_id };
+  }
+
+  return { kind: "created", sessionId: (payload.data as BackendSession).session_id };
 }
 
 export async function getPracticeSession(sessionId: string): Promise<SessionSummary> {
@@ -255,31 +264,130 @@ export async function getPracticeSession(sessionId: string): Promise<SessionSumm
   return toSessionSummary(payload.data);
 }
 
-export async function submitPracticeTurn(
+export type PracticeTurnStreamHandlers = {
+  onFeedback?: (feedback: PracticeFeedback) => void;
+  onDelta?: (delta: string) => void;
+};
+
+export async function submitPracticeTurnStream(
   sessionId: string,
   input: PracticeTurnInput,
+  handlers: PracticeTurnStreamHandlers = {},
+  signal?: AbortSignal,
 ): Promise<SubmitPracticeTurnResult> {
   let response: Response;
 
   try {
-    response = await apiFetch(`/api/v1/sessions/${sessionId}/reply`, {
+    response = await apiFetch(`/api/v1/sessions/${sessionId}/reply/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify({ learner_message: input.content }),
+      signal,
     });
   } catch {
     throw toError("发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
   }
 
-  const payload = await parseResponse<BackendReplyResponse>(response);
-  if (!response.ok || !payload.data) {
+  if (!response.ok || !response.body) {
+    const payload = await parseEnvelopeQuietly(response);
     throw toError(payload.message ?? "发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
   }
 
-  return {
-    messages: payload.data.session.messages.map(toPracticeMessage),
-    feedback: toPracticeFeedback(payload.data.feedback),
+  const streamState = {
+    finalData: null as BackendReplyResponse | null,
+    streamError: null as { message?: string } | null,
   };
+
+  await consumeSseResponse(response.body, (eventName, rawData) => {
+    if (eventName === "feedback") {
+      handlers.onFeedback?.(toPracticeFeedback(rawData as BackendReplyFeedback));
+      return;
+    }
+    if (eventName === "delta") {
+      const delta = (rawData as { text?: string }).text ?? "";
+      if (delta) handlers.onDelta?.(delta);
+      return;
+    }
+    if (eventName === "session") {
+      streamState.finalData = rawData as BackendReplyResponse;
+      return;
+    }
+    if (eventName === "error") {
+      streamState.streamError = rawData as { message?: string };
+    }
+  });
+
+  if (streamState.streamError) {
+    throw toError(streamState.streamError.message ?? "发送失败，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  const finalData = streamState.finalData;
+  if (finalData === null) {
+    throw toError("回复流提前结束，请稍后再试。", "TURN_SUBMIT_FAILED");
+  }
+
+  return {
+    messages: finalData.session.messages.map(toPracticeMessage),
+    feedback: toPracticeFeedback(finalData.feedback),
+  };
+}
+
+async function parseEnvelopeQuietly(response: Response): Promise<ApiResponse<unknown>> {
+  try {
+    return (await response.json()) as ApiResponse<unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function consumeSseResponse(
+  body: ReadableStream<Uint8Array>,
+  onEvent: (eventName: string, rawData: unknown) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  const dispatchFrame = (frame: string) => {
+    let eventName = "message";
+    const dataLines: string[] = [];
+    for (const rawLine of frame.split("\n")) {
+      const line = rawLine.replace(/\r$/, "");
+      if (line.startsWith("event:")) {
+        eventName = line.slice("event:".length).trim();
+      } else if (line.startsWith("data:")) {
+        dataLines.push(line.slice("data:".length).trim());
+      }
+    }
+    if (!dataLines.length) return;
+    try {
+      onEvent(eventName, JSON.parse(dataLines.join("\n")) as unknown);
+    } catch {
+      // 与后端解析口径一致：无法解析的帧静默忽略。
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let separator = buffer.indexOf("\n\n");
+      while (separator !== -1) {
+        dispatchFrame(buffer.slice(0, separator));
+        buffer = buffer.slice(separator + 2);
+        separator = buffer.indexOf("\n\n");
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim()) dispatchFrame(buffer.trimEnd());
+  } finally {
+    // 正常结束、中途失败或 AbortSignal 触发都必须收回读取器；
+    // 流已关闭/已出错时 cancel 自身会拒绝，静默处理。
+    await reader.cancel().catch(() => {
+      // no-op
+    });
+  }
 }
 
 export async function bootstrapVoiceSession(sessionId: string): Promise<VoiceBootstrapResult> {

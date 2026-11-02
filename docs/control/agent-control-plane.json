@@ -1,14 +1,14 @@
 {
   "system": {
     "status": "integrating",
-    "repo_summary": "`api/` 后端与 backend-heavy 测试已成型，`frontend/` 持续补齐，`infra/` 仍以预留结构为主。",
+    "repo_summary": "`api/` 后端与 backend-heavy 测试已成型，`frontend/` 已整套切到原型设计语言并补齐进度页，`infra/` 仍以预留结构为主。",
     "strategy": "先稳住 agent 控制面一致性与层级验证记录，再继续推进真实联调和系统级 smoke。"
   },
   "latest_snapshot": {
-    "latest_record": "docs/features/auth_email_code_verification/feature.md",
-    "summary": "auth 注册验证已切到 6 位邮箱验证码，Redis 验证码存储、邮箱/IP 频控和 SMTP 配置入口都已落地。",
-    "blockers": "真实 Redis / 阿里云 SMTP 仍需 smoke；Deepgram token、麦克风与浏览器播放联调也仍待系统级样本验证。",
-    "extra_progress": "`coach_engine`、`scene_engine`、`feedback_engine` 在 `MODEL_RUNTIME_MODE=live` 下都已收紧为至少存在一个真实 provider。"
+    "latest_record": "docs/features/repository_publish_refresh/feature.md",
+    "summary": "2026-11-02：基于 origin/dev 3309043 完成配置与 CI 门禁、历史审计归档、中文 README 与三张真实演示截图更新。整理 PR #5 四项 CI 全绿，merge commit 58a5772 合入 dev；主线发布与最终 SHA/CI 验收见 PR #6 时间线。",
+    "blockers": "本批次本地自动检查与整理 PR CI 均通过；主线发布证据集中在 PR #6。已知边界：首页 375px 横向溢出，文字练习无复盘入口，匿名逐字稿受认证限制；未扩展业务修复范围。",
+    "extra_progress": "前端 189 测试通过，覆盖率 90.01%；后端 692 passed / 5 skipped，覆盖率 90.80%，60 秒硬超时内完成。ruff/black/治理检查通过；实拍三页与三轮文字冒烟完成。CI 只验证构建，尚未配置 CD。"
   },
   "modules": [
     {
@@ -132,7 +132,7 @@
       "status": "building",
       "exit_gate": "module_test_passed",
       "merge_target": "integration/system",
-      "notes": "七页路由壳层和真 upload/session/review/history 路径已落地。",
+      "notes": "整套 UI 已迁到原型设计语言（Navbar/Footer/AppShell + theme/foundations/utilities 三份样式），11 条路由全部落地并走查通过；R9 已完成会话重定向复盘页；Pencil 设计资产已整体退役并删除。",
       "owner_files": [
         "frontend/"
       ],
@@ -195,6 +195,230 @@
       "status": "in_progress",
       "exit_gate": "feature_test_passed",
       "merge_target": "module/history_review"
+    },
+    {
+      "name": "文字回复流式",
+      "scope": "text_reply_streaming",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "场景分析缓存",
+      "scope": "scene_analysis_caching",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/scene_engine"
+    },
+    {
+      "name": "前端流式与轮询接线",
+      "scope": "frontend_stream_ui_wiring",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "前端质量门禁",
+      "scope": "frontend_quality_gates",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "等待体验与反馈统一",
+      "scope": "frontend_wait_ux_feedback_unification",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "CI 覆盖率与 lint 门禁",
+      "scope": "ci_coverage_lint_gates",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "black 格式化门禁",
+      "scope": "black_formatting",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "访客身份与限流加固",
+      "scope": "visitor_ratelimit_hardening",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "上传流式校验与请求体大小门",
+      "scope": "media_upload_stream_guard",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/media_upload"
+    },
+    {
+      "name": "生产配置门控反转与清单补全",
+      "scope": "production_config_gate",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "会话启动媒体归属校验",
+      "scope": "session_media_ownership_check",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "反馈失败降级不拖垮整轮对话",
+      "scope": "feedback_failure_degradation",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "会话写路径完整性与追加语义",
+      "scope": "session_write_integrity",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "限流体系收口",
+      "scope": "ratelimit_closing",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "LLM成本与输入边界",
+      "scope": "llm_cost_and_input_bounds",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "请求关联ID与就绪探针",
+      "scope": "request_id_and_readiness",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "交付门禁与部署收口",
+      "scope": "delivery_gates_and_deployment",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/infra_delivery"
+    },
+    {
+      "name": "教学内核提示词升级与LLM复盘",
+      "scope": "teaching_kernel_prompts",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "学员状态持久化与提示词动态注入",
+      "scope": "learner_profile_prompt_injection",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "教练与复盘离线评测样例集",
+      "scope": "coach_engine",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/coach_engine"
+    },
+    {
+      "name": "场景文案单一事实源与死代码清理",
+      "scope": "scene_copy_single_source_cleanup",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "PRD 升版 v0.5 与 API 文档",
+      "scope": "prd_v05_api_docs",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "OTel 可观测性三层 span",
+      "scope": "otel_engine_spans",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "学员档案读取 API 与进度页",
+      "scope": "learner_profile_progress",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "评测驱动提示词修正",
+      "scope": "eval_prompt_fixes",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/coach_engine"
+    },
+    {
+      "name": "LLM ReviewCopy 生产消费",
+      "scope": "review_copy_consumption",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/session_orchestration"
+    },
+    {
+      "name": "后端韧性收尾批次",
+      "scope": "resilience_closing_batch",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "CI PG平价验证与前端eslint门禁",
+      "scope": "ci_pg_parity_and_eslint_gate",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "think代理令牌生命周期绑定",
+      "scope": "think_token_lifecycle_binding",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "PG迁移downgrade往返验证与全仓储方言参数化",
+      "scope": "pg_downgrade_repo_dialect_parity",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/platform_foundation"
+    },
+    {
+      "name": "前端UI整套迁移至原型设计语言",
+      "scope": "frontend_design_port",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "module/frontend_app"
+    },
+    {
+      "name": "GitHub 主线发布与作品介绍更新",
+      "scope": "repository_publish_refresh",
+      "status": "feature_test_passed",
+      "exit_gate": "feature_test_passed",
+      "merge_target": "dev"
     }
   ],
   "test_layers": [

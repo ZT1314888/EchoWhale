@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 from api.models.message_model import Message
 from api.models.review_model import SessionReview
 from api.models.session_model import Session
+from api.modules.session_engine.review_builder import resolve_role_label, resolve_scene_title
 from api.modules.session_engine.schema import (
     LearnerMessagePayload,
     SampleSceneId,
@@ -17,7 +20,7 @@ class StartSessionRequest(BaseModel):
     sample_scene_id: SampleSceneId | None = None
 
     @model_validator(mode="after")
-    def validate_start_source(self) -> "StartSessionRequest":
+    def validate_start_source(self) -> StartSessionRequest:
         has_media = self.media_id is not None
         has_sample = self.sample_scene_id is not None
         if has_media == has_sample:
@@ -30,12 +33,13 @@ class SessionReplyRequest(LearnerMessagePayload):
 
 
 class VoiceCompleteRequest(BaseModel):
-    conversation: list[VoiceConversationTurn]
+    # 转写条数硬顶（Finding 11）：与 engine 侧 VoiceCompleteInput.conversation 上限保持一致。
+    conversation: list[VoiceConversationTurn] = Field(max_length=200)
     termination_reason: str = "user_ended"
     client_diagnostics: dict[str, object] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_voice_conversation(self) -> "VoiceCompleteRequest":
+    def validate_voice_conversation(self) -> VoiceCompleteRequest:
         if not self.conversation:
             raise ValueError("Conversation cannot be empty")
         if not any(turn.role == "user" for turn in self.conversation):
@@ -50,7 +54,7 @@ class SessionMessageResponse(BaseModel):
     feedback: dict[str, object] | None = None
 
     @classmethod
-    def from_message(cls, message: Message) -> "SessionMessageResponse":
+    def from_message(cls, message: Message) -> SessionMessageResponse:
         return cls(
             message_id=message.id,
             role=message.role,
@@ -64,6 +68,10 @@ class SessionResponse(BaseModel):
     media_id: str | None
     scene: str
     role: str
+    # 场景展示文案单一事实源（F17）：后端下发，前端不再维护 SCENE_META 副本；
+    # 未命中预设时回退为自然语言组合，任何路径不输出原始 scene/role id。
+    scene_title: str
+    role_label: str
     opener: str
     status: str
     visual_anchors: list[str]
@@ -71,12 +79,16 @@ class SessionResponse(BaseModel):
     messages: list[SessionMessageResponse]
 
     @classmethod
-    def from_session(cls, session: Session) -> "SessionResponse":
+    def from_session(cls, session: Session) -> SessionResponse:
+        # 展示名统一走 resolver（LLM 复盘值优先，无效字段级回退确定性路径）：
+        # 全部响应消费点共用同一优先级，no-raw-id 不变量在唯一出口成立。
         return cls(
             session_id=session.id,
             media_id=session.media_id,
             scene=session.scene,
             role=session.role,
+            scene_title=resolve_scene_title(session.scene, session.role, session.llm_scene_title),
+            role_label=resolve_role_label(session.scene, session.role, session.llm_role_label),
             opener=session.opener,
             status=session.status.value,
             visual_anchors=list(session.visual_anchors),
@@ -117,7 +129,7 @@ class SessionReviewResponse(BaseModel):
     feedback: PracticeFeedbackResponse
 
     @classmethod
-    def from_review(cls, review: SessionReview) -> "SessionReviewResponse":
+    def from_review(cls, review: SessionReview) -> SessionReviewResponse:
         return cls(
             session_id=review.session_id,
             title=review.title,
@@ -150,13 +162,20 @@ class SessionReplyResponse(BaseModel):
     feedback: ReplyFeedbackResponse | None = None
 
     @classmethod
-    def from_session(cls, session: Session) -> "SessionReplyResponse":
+    def from_session(cls, session: Session) -> SessionReplyResponse:
         feedback = None
         for message in reversed(session.messages):
             if message.feedback:
                 feedback = ReplyFeedbackResponse(**message.feedback)
                 break
         return cls(session=SessionResponse.from_session(session), feedback=feedback)
+
+
+class SessionStartPendingResponse(BaseModel):
+    """start 未命中场景缓存且已转异步分析时的 202 载荷，客户端轮询场景状态端点。"""
+
+    status: Literal["analyzing"] = "analyzing"
+    media_id: str
 
 
 class VoiceBootstrapResponse(BaseModel):

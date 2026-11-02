@@ -1,35 +1,48 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 
 from sqlalchemy import (
+    JSON,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
-    JSON,
     String,
     Text,
+    UniqueConstraint,
     and_,
     delete,
     func,
     or_,
     select,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from api.common.enums import SessionStatus
-from api.common.exceptions import NotFoundError
-from api.db.database import Base, AsyncSessionFactory, get_async_session_factory
+from api.common.exceptions import InvalidStateError, NotFoundError
+from api.db.database import AsyncSessionFactory, Base, get_async_session_factory
 from api.models.message_model import Message
-from api.models.runtime_model import SessionEvent
-from api.models.runtime_model import VoiceSessionFact
 from api.models.review_model import PracticeFeedback, SessionReview
+from api.models.runtime_model import SessionEvent, VoiceSessionFact
 from api.models.session_model import Session
+from api.modules.session_engine.review_builder import ReviewCopy
+
+logger = logging.getLogger(__name__)
 
 
 class SessionRepository(Protocol):
+    async def list_recent_messages(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> list[Message]: ...
+
     async def save_session(self, session: Session) -> Session: ...
 
     async def get_session(self, session_id: str) -> Session: ...
@@ -42,12 +55,14 @@ class SessionRepository(Protocol):
         learner_message: Message,
         assistant_message: Message,
         review: SessionReview,
+        review_copy: ReviewCopy | None = None,
     ) -> Session: ...
 
     async def finalize_voice_session(
         self,
         *,
         session: Session,
+        new_messages: list[Message],
         review: SessionReview,
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
@@ -57,8 +72,6 @@ class SessionRepository(Protocol):
 
     async def get_session_review(self, session_id: str) -> SessionReview: ...
 
-    async def list_user_sessions(self, user_id: str) -> list[Session]: ...
-
     async def list_user_sessions_page(
         self,
         user_id: str,
@@ -67,7 +80,9 @@ class SessionRepository(Protocol):
         cursor: tuple[datetime, str] | None,
     ) -> tuple[list[Session], bool, tuple[datetime, str] | None]: ...
 
-    async def list_session_reviews_by_ids(self, session_ids: list[str]) -> dict[str, SessionReview]: ...
+    async def list_session_reviews_by_ids(
+        self, session_ids: list[str]
+    ) -> dict[str, SessionReview]: ...
 
     async def get_session_head(self, session_id: str) -> Session: ...
 
@@ -92,6 +107,8 @@ class SessionRepository(Protocol):
 
 class SessionRecord(Base):
     __tablename__ = "sessions"
+    # 历史列表按 (user_id, updated_at) keyset 分页，复合索引与迁移 0011 保持一致。
+    __table_args__ = (Index("ix_sessions_user_id_updated_at", "user_id", "updated_at"),)
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(64), index=True)
@@ -103,12 +120,21 @@ class SessionRecord(Base):
     visual_anchors: Mapped[list[str]] = mapped_column(JSON, default=list)
     vocab_candidates: Mapped[list[str]] = mapped_column(JSON, default=list)
     labels: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # LLM 复盘展示名（可空，迁移 0014）：None 走确定性展示名路径；写侧存
+    # validator 已 strip/截断的原值，读侧经 resolver 做防护校验（design 2.2）。
+    llm_scene_title: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    llm_role_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 
 
 class MessageRecord(Base):
     __tablename__ = "session_messages"
+    # (session_id, position) 唯一是消息序号的数据库级兜底：并发写同一会话
+    # 分配到重复 position 时必须撞约束失败，而不是静默落库打乱回放顺序。
+    __table_args__ = (
+        UniqueConstraint("session_id", "position", name="uq_session_messages_session_position"),
+    )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     session_id: Mapped[str] = mapped_column(
@@ -165,6 +191,10 @@ class VoiceSessionFactRecord(Base):
     status: Mapped[str] = mapped_column(String(32), index=True)
     termination_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     transcript_turn_count: Mapped[int] = mapped_column(Integer, default=0)
+    # 与迁移 0016 对应：server_default 让迁移前的旧行落 0（"无活跃绑定"语义）。
+    token_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     client_diagnostics: Mapped[dict[str, object]] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -176,6 +206,13 @@ class SqlAlchemySessionRepository:
         self._session_factory = session_factory or get_async_session_factory()
 
     async def save_session(self, session: Session) -> Session:
+        """仅用于会话创建路径（agent.start）的全量落库。
+
+        实现是"删除该会话全部消息后按内存快照重插"，创建时会话尚无并发写者，
+        这样做安全；会话创建之后的消息追加一律走 save_reply_turn /
+        finalize_voice_session 的 append 语义，禁止再调用本方法，否则会把
+        并发写入的消息静默删掉（丢失更新）。
+        """
         async with self._session_factory() as db_session:
             await self._upsert_session_record(db_session, session)
             # 强制先落父 session，避免在 FK 严格数据库中先写子 message。
@@ -202,15 +239,11 @@ class SqlAlchemySessionRepository:
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = await db_session.scalar(
-                select(func.coalesce(func.max(MessageRecord.position), -1)).where(
-                    MessageRecord.session_id == session_id
-                )
-            )
+            current_position = await self._read_max_position(db_session, session_id)
             db_session.add(
                 self._to_message_record(
                     session_id,
-                    int(current_position) + 1,
+                    current_position + 1,
                     message,
                 )
             )
@@ -224,35 +257,60 @@ class SqlAlchemySessionRepository:
         learner_message: Message,
         assistant_message: Message,
         review: SessionReview,
+        review_copy: ReviewCopy | None = None,
     ) -> Session:
-        async with self._session_factory() as db_session:
-            record = await db_session.get(SessionRecord, session_id)
-            if record is None:
-                raise NotFoundError(f"Session {session_id} not found")
+        # "读 max(position) → 写"窗口内若另一并发回复先落库，唯一约束会拒绝
+        # 重复 position（Finding 7）。每次尝试用独立事务：冲突后整体回滚重开，
+        # 兼容 SQLite（commit 时报错）与 PG（flush 时报错）的差异，避免半提交；
+        # 重读 max 再试一次即可覆盖该竞态窗口，仍冲突说明并发方持续写入，
+        # 按状态冲突上抛，交由调用方的重试语义处理。
+        for attempt in range(2):
+            try:
+                async with self._session_factory() as db_session:
+                    record = await db_session.get(SessionRecord, session_id)
+                    if record is None:
+                        raise NotFoundError(f"Session {session_id} not found")
 
-            current_position = await db_session.scalar(
-                select(func.coalesce(func.max(MessageRecord.position), -1)).where(
-                    MessageRecord.session_id == session_id
-                )
-            )
-            next_position = int(current_position) + 1
-            db_session.add(self._to_message_record(session_id, next_position, learner_message))
-            db_session.add(
-                self._to_message_record(session_id, next_position + 1, assistant_message)
-            )
-            await self._upsert_review_record(db_session, review)
-            record.updated_at = review.updated_at
-            await db_session.commit()
+                    next_position = await self._read_max_position(db_session, session_id) + 1
+                    db_session.add(
+                        self._to_message_record(session_id, next_position, learner_message)
+                    )
+                    db_session.add(
+                        self._to_message_record(session_id, next_position + 1, assistant_message)
+                    )
+                    await self._upsert_review_record(db_session, review)
+                    # LLM 展示名随回复轮落库：review_copy=None（mock/复盘降级）
+                    # 时不触碰两列，保留上一次有效值，同轮降级不回闪（design 2.2）。
+                    if review_copy is not None:
+                        record.llm_scene_title = review_copy.scene_title
+                        record.llm_role_label = review_copy.role_label
+                    record.updated_at = review.updated_at
+                    await db_session.commit()
+                break
+            except IntegrityError as exc:
+                if attempt == 0:
+                    logger.warning(
+                        "save_reply_turn_position_conflict session_id=%s retry=true", session_id
+                    )
+                    continue
+                raise InvalidStateError("Concurrent reply write conflict") from exc
         return await self.get_session(session_id)
 
     async def finalize_voice_session(
         self,
         *,
         session: Session,
+        new_messages: list[Message],
         review: SessionReview,
         voice_fact: VoiceSessionFact,
         events: list[SessionEvent],
     ) -> tuple[Session, SessionReview]:
+        """语音收口的 append-only 落库：既有消息行一律不动，只追加新增部分。
+
+        new_messages 由 agent 层经 _build_voice_messages 尾段去重后传入
+        （即 remainder[overlap:]）。此前实现是删除全部消息后按内存快照重插，
+        语音收口与文本轮并发时会静默删掉对方刚落库的消息（Finding 8）。
+        """
         async with self._session_factory() as db_session:
             record = await db_session.get(SessionRecord, session.id)
             if record is None:
@@ -260,11 +318,13 @@ class SqlAlchemySessionRepository:
 
             await self._upsert_session_record(db_session, session)
             await db_session.flush()
-            await db_session.execute(
-                delete(MessageRecord).where(MessageRecord.session_id == session.id)
-            )
-            for position, message in enumerate(session.messages):
-                db_session.add(self._to_message_record(session.id, position, message))
+
+            # 只追加：position 从当前 max+1 连续分配，绝不 delete 既有消息行。
+            current_position = await self._read_max_position(db_session, session.id)
+            for offset, message in enumerate(new_messages):
+                db_session.add(
+                    self._to_message_record(session.id, current_position + 1 + offset, message)
+                )
 
             await self._upsert_review_record(db_session, review)
             record.updated_at = review.updated_at
@@ -281,7 +341,10 @@ class SqlAlchemySessionRepository:
                 )
             await db_session.commit()
 
-        return (await self.get_session(session.id), await self.get_session_review(review.session_id))
+        return (
+            await self.get_session(session.id),
+            await self.get_session_review(review.session_id),
+        )
 
     async def save_session_review(self, review: SessionReview) -> SessionReview:
         async with self._session_factory() as db_session:
@@ -299,18 +362,6 @@ class SqlAlchemySessionRepository:
             if record is None:
                 raise NotFoundError(f"Session review {session_id} not found")
             return _to_review(record)
-
-    async def list_user_sessions(self, user_id: str) -> list[Session]:
-        async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionRecord)
-                .where(SessionRecord.user_id == user_id)
-                .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
-            ).all()
-            return [
-                _to_session(record, await self._load_messages(db_session, record.id))
-                for record in records
-            ]
 
     async def list_user_sessions_page(
         self,
@@ -339,10 +390,12 @@ class SqlAlchemySessionRepository:
                         ),
                     )
                 )
-            records = await db_session.scalars(
-                statement
-                .order_by(SessionRecord.updated_at.desc(), SessionRecord.id.desc())
-                .limit(limit + 1)
+            records = (
+                await db_session.scalars(
+                    statement.order_by(
+                        SessionRecord.updated_at.desc(), SessionRecord.id.desc()
+                    ).limit(limit + 1)
+                )
             ).all()
             has_more = len(records) > limit
             page_records = records[:limit]
@@ -357,8 +410,12 @@ class SqlAlchemySessionRepository:
         if not session_ids:
             return {}
         async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionReviewRecord).where(SessionReviewRecord.session_id.in_(session_ids))
+            records = (
+                await db_session.scalars(
+                    select(SessionReviewRecord).where(
+                        SessionReviewRecord.session_id.in_(session_ids)
+                    )
+                )
             ).all()
             return {record.session_id: _to_review(record) for record in records}
 
@@ -368,6 +425,25 @@ class SqlAlchemySessionRepository:
             if record is None:
                 raise NotFoundError(f"Session {session_id} not found")
             return _to_session_head(record)
+
+    async def list_recent_messages(
+        self,
+        session_id: str,
+        *,
+        limit: int,
+    ) -> list[Message]:
+        """按 position 倒序取最近 N 条消息后回正序，供教练窗口使用。"""
+        async with self._session_factory() as db_session:
+            await self._ensure_session_exists(db_session, session_id)
+            records = (
+                await db_session.scalars(
+                    select(MessageRecord)
+                    .where(MessageRecord.session_id == session_id)
+                    .order_by(MessageRecord.position.desc())
+                    .limit(max(1, limit))
+                )
+            ).all()
+            return [self._to_message(record) for record in reversed(records)]
 
     async def count_session_messages(self, session_id: str) -> int:
         async with self._session_factory() as db_session:
@@ -398,8 +474,10 @@ class SqlAlchemySessionRepository:
                     raise NotFoundError(f"Message {cursor} not found")
                 statement = statement.where(MessageRecord.position < int(cursor_position))
 
-            records_desc = await db_session.scalars(
-                statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
+            records_desc = (
+                await db_session.scalars(
+                    statement.order_by(MessageRecord.position.desc()).limit(limit + 1)
+                )
             ).all()
             has_more = len(records_desc) > limit
             page_desc = records_desc[:limit]
@@ -422,10 +500,12 @@ class SqlAlchemySessionRepository:
 
     async def list_session_events(self, session_id: str) -> list[SessionEvent]:
         async with self._session_factory() as db_session:
-            records = await db_session.scalars(
-                select(SessionEventRecord)
-                .where(SessionEventRecord.session_id == session_id)
-                .order_by(SessionEventRecord.id.asc())
+            records = (
+                await db_session.scalars(
+                    select(SessionEventRecord)
+                    .where(SessionEventRecord.session_id == session_id)
+                    .order_by(SessionEventRecord.id.asc())
+                )
             ).all()
             return [_to_session_event(record) for record in records]
 
@@ -451,6 +531,19 @@ class SqlAlchemySessionRepository:
             await db_session.execute(delete(MessageRecord))
             await db_session.execute(delete(SessionRecord))
             await db_session.commit()
+
+    async def _read_max_position(self, db_session, session_id: str) -> int:
+        """读取会话当前最大消息序号；无消息时返回 -1，使首个 position 从 0 开始。
+
+        抽成独立方法同时是测试缝隙：重试路径测试用它伪造过期的 max 读值，
+        无需真实并发即可稳定复现唯一约束冲突。
+        """
+        value = await db_session.scalar(
+            select(func.coalesce(func.max(MessageRecord.position), -1)).where(
+                MessageRecord.session_id == session_id
+            )
+        )
+        return int(value)
 
     async def _load_messages(self, db_session, session_id: str) -> Sequence[MessageRecord]:
         result = await db_session.scalars(
@@ -488,6 +581,8 @@ class SqlAlchemySessionRepository:
                 visual_anchors=list(session.visual_anchors),
                 vocab_candidates=list(session.vocab_candidates),
                 labels=list(session.labels),
+                llm_scene_title=session.llm_scene_title,
+                llm_role_label=session.llm_role_label,
                 created_at=session.created_at,
                 updated_at=session.updated_at,
             )
@@ -503,6 +598,8 @@ class SqlAlchemySessionRepository:
         record.visual_anchors = list(session.visual_anchors)
         record.vocab_candidates = list(session.vocab_candidates)
         record.labels = list(session.labels)
+        record.llm_scene_title = session.llm_scene_title
+        record.llm_role_label = session.llm_role_label
         record.created_at = session.created_at
         record.updated_at = session.updated_at
         return record
@@ -538,6 +635,7 @@ class SqlAlchemySessionRepository:
                     status=fact.status,
                     termination_reason=fact.termination_reason,
                     transcript_turn_count=fact.transcript_turn_count,
+                    token_generation=fact.token_generation,
                     client_diagnostics=dict(fact.client_diagnostics),
                     started_at=fact.started_at,
                     completed_at=fact.completed_at,
@@ -549,6 +647,7 @@ class SqlAlchemySessionRepository:
         record.status = fact.status
         record.termination_reason = fact.termination_reason
         record.transcript_turn_count = fact.transcript_turn_count
+        record.token_generation = fact.token_generation
         record.client_diagnostics = dict(fact.client_diagnostics)
         record.started_at = fact.started_at
         record.completed_at = fact.completed_at
@@ -583,15 +682,13 @@ async def add_message(session_id: str, message: Message) -> Session:
     return await SqlAlchemySessionRepository().add_message(session_id, message)
 
 
-async def list_user_sessions(user_id: str) -> list[Session]:
-    return await SqlAlchemySessionRepository().list_user_sessions(user_id)
-
-
 async def reset_session_store() -> None:
     await SqlAlchemySessionRepository().reset()
 
 
-def build_session_repository(session_factory: AsyncSessionFactory | None = None) -> SessionRepository:
+def build_session_repository(
+    session_factory: AsyncSessionFactory | None = None,
+) -> SessionRepository:
     return SqlAlchemySessionRepository(session_factory)
 
 
@@ -612,6 +709,8 @@ def _to_session(record: SessionRecord, messages: Sequence[MessageRecord]) -> Ses
         visual_anchors=visual_anchors,
         vocab_candidates=vocab_candidates,
         labels=list(record.labels or []),
+        llm_scene_title=record.llm_scene_title,
+        llm_role_label=record.llm_role_label,
         messages=[
             Message(
                 id=message.id,
@@ -644,6 +743,8 @@ def _to_session_head(record: SessionRecord) -> Session:
         visual_anchors=visual_anchors,
         vocab_candidates=vocab_candidates,
         labels=list(record.labels or []),
+        llm_scene_title=record.llm_scene_title,
+        llm_role_label=record.llm_role_label,
         messages=[],
         created_at=record.created_at,
         updated_at=record.updated_at,
@@ -678,6 +779,7 @@ def _to_voice_session_fact(record: VoiceSessionFactRecord) -> VoiceSessionFact:
         status=record.status,
         termination_reason=record.termination_reason,
         transcript_turn_count=record.transcript_turn_count,
+        token_generation=record.token_generation,
         client_diagnostics=dict(record.client_diagnostics or {}),
         started_at=record.started_at,
         completed_at=record.completed_at,

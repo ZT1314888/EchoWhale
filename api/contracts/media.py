@@ -24,7 +24,7 @@ class MediaResponse(BaseModel):
         *,
         preview_url: str | None = None,
         preview_url_expires_at: datetime | None = None,
-    ) -> "MediaResponse":
+    ) -> MediaResponse:
         return cls(
             media_id=media.id,
             filename=media.filename,
@@ -37,12 +37,24 @@ class MediaResponse(BaseModel):
         )
 
     @classmethod
-    def from_upload_result(cls, result: MediaUploadResult) -> "MediaResponse":
+    def from_upload_result(cls, result: MediaUploadResult) -> MediaResponse:
         return cls.from_media(
             result.media,
             preview_url=result.preview_url,
             preview_url_expires_at=result.preview_url_expires_at,
         )
+
+
+class SceneAnalysisStatusResponse(BaseModel):
+    """媒体场景分析缓存状态；start 返回 202 后客户端轮询此载荷。"""
+
+    media_id: str
+    status: str
+    prompt_version: str | None = None
+    scene: str | None = None
+    role: str | None = None
+    confidence: float | None = None
+    error_code: int | None = None
 
 
 class MediaAccessResponse(BaseModel):
@@ -51,7 +63,7 @@ class MediaAccessResponse(BaseModel):
     expires_at: datetime
 
     @classmethod
-    def from_access_grant(cls, grant: MediaAccessGrant) -> "MediaAccessResponse":
+    def from_access_grant(cls, grant: MediaAccessGrant) -> MediaAccessResponse:
         return cls(
             media_id=grant.media_id,
             read_url=grant.read_url,

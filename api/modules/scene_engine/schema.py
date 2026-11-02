@@ -22,7 +22,8 @@ def _normalize_keywords(value: object, *, field_name: str) -> list[str]:
     if value is None:
         return []
     if not isinstance(value, list):
-        raise ValueError(f"{field_name} must be a list")
+        # pydantic 校验器约定用 ValueError 汇报，TypeError 会绕过错误收集。
+        raise ValueError(f"{field_name} must be a list")  # noqa: TRY004
 
     normalized_labels: list[str] = []
     seen: set[str] = set()
@@ -82,7 +83,7 @@ class SceneAnalysisResult(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def fill_compatibility_keywords(self) -> "SceneAnalysisResult":
+    def fill_compatibility_keywords(self) -> SceneAnalysisResult:
         """兼容旧字段 labels，并回填统一后的聚合标签列表。"""
         if self.labels and not self.vocab_candidates and not self.visual_anchors:
             self.vocab_candidates = list(self.labels)
@@ -97,3 +98,24 @@ class SceneAnalysisResult(BaseModel):
 
         self.labels = aggregate or list(self.labels)
         return self
+
+
+def scene_result_from_snapshot(snapshot: object) -> SceneAnalysisResult:
+    """把 scene_analyses 仓储快照还原成 SceneAnalysisResult（labels 由模型校验器自动聚合）。
+
+    只信任 ready 行；关键字段缺失视为缓存损坏，抛 ValueError 由调用方降级重分析。
+    """
+    scene = getattr(snapshot, "scene", None)
+    role = getattr(snapshot, "role", None)
+    opener = getattr(snapshot, "opener", None)
+    confidence = getattr(snapshot, "confidence", None)
+    if not scene or not role or not opener or confidence is None:
+        raise ValueError("scene analysis snapshot is incomplete")
+    return SceneAnalysisResult(
+        scene=scene,
+        role=role,
+        opener=opener,
+        visual_anchors=[str(item) for item in getattr(snapshot, "visual_anchors", None) or []],
+        vocab_candidates=[str(item) for item in getattr(snapshot, "vocab_candidates", None) or []],
+        confidence=float(confidence),
+    )

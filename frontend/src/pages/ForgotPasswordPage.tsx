@@ -1,8 +1,16 @@
 import { FormEvent, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Clock3, MailCheck, ShieldCheck } from "lucide-react";
 
 import { useAuth } from "../auth/AuthProvider";
-import { BrandHeader } from "../components/BrandHeader";
+import { AuthAlert } from "../components/AuthAlert";
+import { AuthBrandPanel } from "../components/AuthBrandPanel";
+import { AuthFeatureList } from "../components/AuthFeatureList";
+import { AuthFormCard } from "../components/AuthFormCard";
+import { AuthFormDivider, AuthLoadingStage, AuthSecondaryButton } from "../components/AuthControls";
+import { AuthLayout } from "../components/AuthLayout";
+import { AuthSubmitButton } from "../components/AuthSubmitButton";
+import { AuthTextField } from "../components/AuthTextField";
 import { forgotPassword } from "../services/authApi";
 
 export function ForgotPasswordPage() {
@@ -16,11 +24,7 @@ export function ForgotPasswordPage() {
   const [submitting, setSubmitting] = useState(false);
 
   if (auth.status === "refreshing") {
-    return (
-      <main className="empty-stage">
-        <h1>正在恢复登录状态…</h1>
-      </main>
-    );
+    return <AuthLoadingStage>正在恢复登录状态…</AuthLoadingStage>;
   }
 
   if (auth.status === "authenticated") {
@@ -29,11 +33,19 @@ export function ForgotPasswordPage() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedEmail = email.trim();
+
+    if (!normalizedEmail) {
+      setError("请输入邮箱地址");
+      return;
+    }
+
     setError("");
+    setSubmitted(false);
     setSubmitting(true);
 
     try {
-      await forgotPassword({ email });
+      await forgotPassword({ email: normalizedEmail });
       setSubmitted(true);
     } catch (reason) {
       const typed = reason as { message?: string };
@@ -44,47 +56,53 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <div className="page-shell page-shell--auth">
-      <div className="page-frame">
-        <BrandHeader />
+    <AuthLayout
+      brand={
+        <AuthBrandPanel
+          title={
+            <>
+              找回你的
+              <br />
+              登录入口
+            </>
+          }
+          description="输入注册邮箱，我们会发送密码重置链接。无论邮箱是否注册，页面都给出相同提示，以免泄露账号是否存在。"
+        >
+          <AuthFeatureList
+            items={[
+              { icon: Clock3, text: "重置链接有效期有限，请尽快使用" },
+              { icon: ShieldCheck, text: "重置成功后旧登录会话会被撤销" },
+              { icon: MailCheck, text: "没收到邮件？请检查垃圾邮件文件夹" },
+            ]}
+          />
+        </AuthBrandPanel>
+      }
+    >
+      <AuthFormCard title="忘记密码" subtitle="输入注册邮箱，接收密码重置链接">
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <AuthTextField
+            id="forgot-password-email"
+            label="邮箱地址"
+            type="email"
+            placeholder="your@email.com"
+            value={email}
+            onChange={setEmail}
+            autoComplete="email"
+          />
+          {error ? <AuthAlert message={error} /> : null}
+          {submitted ? (
+            <AuthAlert variant="info" message="如果该邮箱已注册，重置邮件已发送，请检查收件箱（含垃圾邮件）。" />
+          ) : null}
+          <AuthSubmitButton submitting={submitting} submittingText="发送中…">
+            发送重置邮件
+          </AuthSubmitButton>
+        </form>
 
-        <main className="auth-layout">
-          <section className="panel-card auth-aside">
-            <p className="eyebrow eyebrow--brand">EchoWhale</p>
-            <h2>恢复你的登录入口</h2>
-            <p className="muted-text">如果这封邮箱存在，我们会发送一封密码重置邮件。这样做的目的，是避免页面直接暴露账号是否存在。</p>
-          </section>
-
-          <section className="panel-card auth-panel auth-panel--rounded">
-            <div className="section-header section-header--stack">
-              <p className="eyebrow">Forgot Password</p>
-              <h1>找回密码</h1>
-              <p className="muted-text">输入注册邮箱，我们会发送密码重置链接。</p>
-            </div>
-
-            <form className="auth-form" onSubmit={onSubmit}>
-              <label className="field-label" htmlFor="forgot-password-email">
-                邮箱
-              </label>
-              <input
-                id="forgot-password-email"
-                className="input-field"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-              {error ? <p className="form-error">{error}</p> : null}
-              {submitted ? <p className="muted-text">如果邮箱有效，重置邮件已经发送，请检查收件箱。</p> : null}
-              <button className="primary-button" type="submit" disabled={submitting}>
-                {submitting ? "发送中…" : "发送重置邮件"}
-              </button>
-            </form>
-
-            <button className="link-button" type="button" onClick={() => navigate("/login", { state: { prefillEmail: email } })}>
-              返回登录
-            </button>
-          </section>
-        </main>
-      </div>
-    </div>
+        <AuthFormDivider label="想起密码了？" />
+        <AuthSecondaryButton onClick={() => navigate("/login", { state: { prefillEmail: email } })}>
+          返回登录
+        </AuthSecondaryButton>
+      </AuthFormCard>
+    </AuthLayout>
   );
 }

@@ -5,13 +5,10 @@ from io import BytesIO
 from statistics import pstdev
 
 import httpx
-from PIL import Image
-from PIL import UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError
 
-from api.common.exceptions import ModelProviderError
-from api.common.exceptions import UnsupportedSceneImageError
+from api.common.exceptions import ModelProviderError, UnsupportedSceneImageError
 from api.modules.scene_engine.schema import SceneAnalysisInput
-
 
 UNSUPPORTED_IMAGE_MESSAGE = "Unsupported scene image"
 
@@ -99,9 +96,7 @@ def _load_grayscale_pixels(content: bytes) -> tuple[list[int], int, int] | None:
             if pixels is None:
                 return None
             grayscale_values = [
-                pixels[column, row]
-                for row in range(height)
-                for column in range(width)
+                pixels[column, row] for row in range(height) for column in range(width)
             ]
             return (grayscale_values, width, height)
     except (UnidentifiedImageError, OSError):

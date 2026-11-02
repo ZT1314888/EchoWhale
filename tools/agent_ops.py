@@ -43,7 +43,9 @@ def main(argv: list[str] | None = None) -> int:
     render_parser = subparsers.add_parser("render", help="Render docs/control/project-index.md")
     render_parser.add_argument("--root", type=Path, default=Path.cwd())
 
-    bootstrap_parser = subparsers.add_parser("bootstrap", help="Bootstrap governance docs from templates")
+    bootstrap_parser = subparsers.add_parser(
+        "bootstrap", help="Bootstrap governance docs from templates"
+    )
     bootstrap_parser.add_argument("artifact_type", choices=sorted(ARTIFACT_TYPES))
     bootstrap_parser.add_argument("slug")
     bootstrap_parser.add_argument("--root", type=Path, default=Path.cwd())
@@ -130,7 +132,7 @@ def bootstrap_document(
 
     template_path, output_path = _template_and_output_paths(root, artifact_type, slug)
     template = template_path.read_text(encoding="utf-8")
-    today = date.today().isoformat()
+    today = date.today().isoformat()  # noqa: DTZ011 - 文档日期戳按本地日历日
     replacements = {
         "<feature_name>": slug,
         "<primary_module_name>": module or "platform_foundation",
@@ -141,13 +143,22 @@ def bootstrap_document(
         "<module_name>": slug,
         "<version_name>": slug,
         "<major.minor.patch>": slug,
+        # 分支行的连字符形态占位符：feature/bug 模板的分支名只以 slug 收尾，
+        # 不带模块段（模块归属由 --module 写入文档的 module / merge_target 字段）。
+        "<feature-name>": slug,
+        "<bug-name>": slug,
+        "<module-name>": module or "platform_foundation",
+        # version 模板的 published_at：未发布版本诚实留空，不伪造发布日期。
+        "<YYYY-MM-DD or blank>": "",
     }
     content = template
     for placeholder, value in replacements.items():
         content = content.replace(placeholder, value)
 
     if "<" in content or ">" in content:
-        raise AgentOpsError(f"Unresolved template placeholders remain in {template_path.as_posix()}")
+        raise AgentOpsError(
+            f"Unresolved template placeholders remain in {template_path.as_posix()}"
+        )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(content, encoding="utf-8")
@@ -192,25 +203,29 @@ def _validate_facts(root: Path, facts: dict[str, Any], report: CheckReport) -> N
 
     for module in facts.get("modules", []):
         if module.get("status") not in MODULE_STATUSES:
-            report.errors.append(f"Invalid module status for {module.get('name')}: {module.get('status')}")
+            report.errors.append(
+                f"Invalid module status for {module.get('name')}: {module.get('status')}"
+            )
         docs_path = module.get("docs_path")
         if docs_path and not (root / docs_path).exists():
             report.errors.append(f"Missing module doc: {docs_path}")
 
     for feature in facts.get("features", []):
         if feature.get("status") not in FEATURE_STATUSES:
-            report.errors.append(f"Invalid feature status for {feature.get('name')}: {feature.get('status')}")
+            report.errors.append(
+                f"Invalid feature status for {feature.get('name')}: {feature.get('status')}"
+            )
 
     for layer in facts.get("test_layers", []):
         if layer.get("status") not in TEST_LAYER_STATUSES:
-            report.errors.append(f"Invalid test layer status for {layer.get('name')}: {layer.get('status')}")
+            report.errors.append(
+                f"Invalid test layer status for {layer.get('name')}: {layer.get('status')}"
+            )
 
 
 def _extract_generated_block(content: str) -> str:
     if GENERATED_START not in content or GENERATED_END not in content:
-        raise AgentOpsError(
-            "docs/control/project-index.md is missing generated markers."
-        )
+        raise AgentOpsError("docs/control/project-index.md is missing generated markers.")
     start_index = content.index(GENERATED_START) + len(GENERATED_START)
     end_index = content.index(GENERATED_END)
     return content[start_index:end_index].strip("\n")
@@ -218,9 +233,7 @@ def _extract_generated_block(content: str) -> str:
 
 def _replace_generated_block(content: str, block: str) -> str:
     if GENERATED_START not in content or GENERATED_END not in content:
-        raise AgentOpsError(
-            "docs/control/project-index.md is missing generated markers."
-        )
+        raise AgentOpsError("docs/control/project-index.md is missing generated markers.")
     start_index = content.index(GENERATED_START) + len(GENERATED_START)
     end_index = content.index(GENERATED_END)
     return f"{content[:start_index]}\n{block}\n{content[end_index:]}"

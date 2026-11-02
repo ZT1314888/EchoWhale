@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
-from api.common.exceptions import AuthenticationError
-from api.common.exceptions import NotFoundError
-from api.common.exceptions import SceneAnalysisUnavailableError
-from api.common.exceptions import UnsupportedSceneImageError
-from api.common.exceptions import VoiceTokenError
+from api.common.exceptions import (
+    AuthenticationError,
+    NotFoundError,
+    SceneAnalysisUnavailableError,
+    UnsupportedSceneImageError,
+    VoiceTokenError,
+)
+from api.core.config import settings
+from api.core.security import sign_value, verify_signed_value
 from api.main import app
 from api.models.message_model import Message
 from api.models.session_model import Session
@@ -24,10 +29,16 @@ except ImportError:  # pragma: no cover - expected during red phase
     get_auth_service = None
     get_session_service = None
 
+from api.services.llm_rate_limit import (
+    InMemoryLLMRateLimiter,
+    LLMRateLimitRule,
+    get_llm_rate_limiter,
+)
+
 
 class FakeSessionService:
     def __init__(self) -> None:
-        earlier = datetime(2026, 4, 4, 15, 20, tzinfo=timezone.utc)
+        earlier = datetime(2026, 4, 4, 15, 20, tzinfo=UTC)
         later = earlier + timedelta(hours=2)
         self.sessions = {
             "sess_123": Session(
@@ -97,6 +108,27 @@ class FakeSessionService:
                 created_at=later + timedelta(minutes=5),
                 updated_at=later + timedelta(minutes=5),
             ),
+            # 非预设场景（F17）：live 上传的场景 id 来自 LLM，任意值都可能，
+            # 专用于断言展示文案回退路径不输出原始 snake_case id。
+            "sess_market": Session(
+                id="sess_market",
+                user_id="user:user_123",
+                media_id="med_market",
+                scene="night_market",
+                role="street_vendor",
+                opener="What would you like to try from the stall?",
+                visual_anchors=["food stalls", "lanterns"],
+                vocab_candidates=["stall", "snack"],
+                messages=[
+                    Message(
+                        id="msg_market_1",
+                        role="assistant",
+                        text="What would you like to try from the stall?",
+                    )
+                ],
+                created_at=later + timedelta(minutes=10),
+                updated_at=later + timedelta(minutes=10),
+            ),
         }
         self.reviews = {
             "sess_123": SimpleNamespace(
@@ -145,7 +177,7 @@ class FakeSessionService:
             ),
         }
 
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -193,21 +225,21 @@ class FakeSessionService:
         self.sessions[session.id] = session
         return session
 
-    def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+    async def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
         assert owner_id in (None, "user:user_123")
         session = self.sessions.get(session_id)
         if session is None:
             raise NotFoundError(f"Session {session_id} not found")
         return session
 
-    def reply_to_session(
+    async def reply_to_session(
         self,
         session_id: str,
         learner_message: str,
         owner_id: str | None = None,
     ) -> Session:
         assert owner_id in (None, "user:user_123")
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         session.messages.append(
             Message(
                 id="msg_2",
@@ -229,18 +261,18 @@ class FakeSessionService:
         )
         return session
 
-    def get_session_review(self, session_id: str, owner_id: str | None = None):
+    async def get_session_review(self, session_id: str, owner_id: str | None = None):
         assert owner_id in (None, "user:user_123")
         review = self.reviews.get(session_id)
         if review is None:
             raise NotFoundError(f"Session review {session_id} not found")
         return review
 
-    def list_history_sessions(self, user_id: str) -> list[Session]:
+    async def list_history_sessions(self, user_id: str) -> list[Session]:
         assert user_id == "user:user_123"
         return list(self.sessions.values())
 
-    def list_history_sessions_page(
+    async def list_history_sessions_page(
         self,
         user_id: str,
         *,
@@ -261,20 +293,20 @@ class FakeSessionService:
         next_cursor = page[-1].id if has_more and page else None
         return (page, has_more, next_cursor)
 
-    def list_history_reviews(self, session_ids: list[str]):
+    async def list_history_reviews(self, session_ids: list[str]):
         return {
             session_id: review
             for session_id, review in self.reviews.items()
             if session_id in session_ids
         }
 
-    def get_history_session_overview(self, user_id: str, session_id: str):
+    async def get_history_session_overview(self, user_id: str, session_id: str):
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
-        review = self.get_session_review(session_id)
+        session = await self.get_session(session_id)
+        review = await self.get_session_review(session_id)
         return (session, review, len(session.messages))
 
-    def list_history_session_messages(
+    async def list_history_session_messages(
         self,
         user_id: str,
         session_id: str,
@@ -283,7 +315,7 @@ class FakeSessionService:
         cursor: str | None,
     ) -> tuple[list[Message], bool, str | None]:
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         messages = list(session.messages)
         if cursor is not None:
             ids = [message.id for message in messages]
@@ -295,15 +327,15 @@ class FakeSessionService:
         next_before = page[0].id if has_more and page else None
         return (page, has_more, next_before)
 
-    def get_history_session_detail(self, user_id: str, session_id: str):
+    async def get_history_session_detail(self, user_id: str, session_id: str):
         assert user_id == "user:user_123"
-        session = self.get_session(session_id)
-        review = self.get_session_review(session_id)
+        session = await self.get_session(session_id)
+        review = await self.get_session_review(session_id)
         return (session, review)
 
-    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
         assert owner_id in (None, "user:user_123")
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         return {
             "session_id": session.id,
             "deepgram_access_token": "dg-token",
@@ -319,7 +351,7 @@ class FakeSessionService:
             "session": session,
         }
 
-    def complete_voice_session(
+    async def complete_voice_session(
         self,
         session_id: str,
         conversation,
@@ -330,14 +362,16 @@ class FakeSessionService:
         assert owner_id in (None, "user:user_123")
         assert termination_reason == "user_ended"
         assert client_diagnostics == {}
-        session = self.get_session(session_id)
+        session = await self.get_session(session_id)
         session.messages = [
-            Message(id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"),
+            Message(
+                id="msg_1", role="assistant", text="Hi there, what can I get started for you today?"
+            ),
             Message(id="msg_2", role="user", text="Could I get an iced latte, please?"),
             Message(id="msg_3", role="assistant", text="Of course. What size would you like?"),
         ]
         self.sessions[session_id] = session
-        review = self.get_session_review("sess_123")
+        review = await self.get_session_review("sess_123")
         self.reviews[session_id] = review
         return {"session": session, "review": review}
 
@@ -350,7 +384,7 @@ class FakeAuthService:
 
 
 class UnsupportedSessionService:
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -363,7 +397,7 @@ class UnsupportedSessionService:
 
 
 class UnavailableSceneSessionService:
-    def start_session(
+    async def start_session(
         self,
         user_id: str,
         media_id: str | None = None,
@@ -373,8 +407,100 @@ class UnavailableSceneSessionService:
 
 
 class VoiceBootstrapFailureSessionService(FakeSessionService):
-    def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
         raise VoiceTokenError()
+
+
+class VisitorAwareSessionService(FakeSessionService):
+    """匿名访客场景专用替身：owner_id 随 Cookie 变化，不固定为 user:user_123。
+
+    记录每次请求看到的 owner_id，供测试断言伪造 Cookie 值没有进入身份链路。
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_owner_ids: list[str | None] = []
+
+    async def start_session(
+        self,
+        user_id: str,
+        media_id: str | None = None,
+        sample_scene_id: str | None = None,
+    ) -> Session:
+        self.seen_owner_ids.append(user_id)
+        session = Session(
+            id=f"sess_visitor_{len(self.seen_owner_ids)}",
+            user_id=user_id,
+            media_id=media_id,
+            scene="coffee_shop",
+            role="barista",
+            opener="Hi there, what can I get started for you today?",
+            visual_anchors=["counter", "menu board"],
+            vocab_candidates=["coffee", "order"],
+            messages=[
+                Message(
+                    id=f"msg_visitor_{len(self.seen_owner_ids)}",
+                    role="assistant",
+                    text="Hi there, what can I get started for you today?",
+                )
+            ],
+        )
+        self.sessions[session.id] = session
+        return session
+
+    async def get_session(self, session_id: str, owner_id: str | None = None) -> Session:
+        self.seen_owner_ids.append(owner_id)
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise NotFoundError(f"Session {session_id} not found")
+        return session
+
+
+class RecordingDeepgramTokenIssuer:
+    """记录 Deepgram token 签发次数的假 issuer。
+
+    真实链路里 grant 发生在 agent 内部（route → service → agent → issuer）；
+    fake 在 service 替身里调用它，保证"限流通过才签发"能被断言。
+    """
+
+    def __init__(self) -> None:
+        self.grant_calls = 0
+
+    def issue_token(self, ttl_seconds: int) -> tuple[str, float]:
+        self.grant_calls += 1
+        return (f"fake-dg-token-{self.grant_calls}", float(ttl_seconds))
+
+
+class IssuerBackedVoiceSessionService(FakeSessionService):
+    """bootstrap 时经由 fake issuer 签发令牌的语音会话服务替身。
+
+    不沿用父类 bootstrap 的 owner 断言：匿名访客（owner=visitor:*）也要能
+    走通 bootstrap，供 IP 兜底键的轮换 Cookie 测试使用。
+    """
+
+    def __init__(self, issuer: RecordingDeepgramTokenIssuer) -> None:
+        super().__init__()
+        self.issuer = issuer
+
+    async def bootstrap_voice_session(self, session_id: str, owner_id: str | None = None):
+        session = self.sessions.get(session_id)
+        if session is None:
+            raise NotFoundError(f"Session {session_id} not found")
+        token, expires_in = self.issuer.issue_token(settings.deepgram_agent_token_ttl_seconds)
+        return {
+            "session_id": session.id,
+            "deepgram_access_token": token,
+            "expires_in": expires_in,
+            "deepgram_ws_url": "wss://api.deepgram.com/v1/agent/converse",
+            "agent_settings": {
+                "type": "Settings",
+                "agent": {
+                    "language": "en",
+                    "greeting": session.opener,
+                },
+            },
+            "session": session,
+        }
 
 
 @pytest.fixture(autouse=True)
@@ -390,6 +516,7 @@ def client() -> Iterator[TestClient]:
         app.dependency_overrides[get_session_service] = lambda: FakeSessionService()
     if get_auth_service is not None:
         app.dependency_overrides[get_auth_service] = lambda: FakeAuthService()
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: InMemoryLLMRateLimiter()
 
     with TestClient(app) as test_client:
         yield test_client
@@ -491,9 +618,33 @@ def test_get_session_returns_session_snapshot(client: TestClient) -> None:
     assert body["code"] == 200
     assert body["data"]["session_id"] == "sess_123"
     assert body["data"]["role"] == "barista"
+    # F17：预设场景下发 SCENE_COPY 文案，前端不再需要本地映射。
+    assert body["data"]["scene_title"] == "咖啡店柜台点单"
+    assert body["data"]["role_label"] == "店员对话"
     assert body["data"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["messages"][0]["text"] == "Hi there, what can I get started for you today?"
+
+
+def test_get_session_returns_humanized_fallback_copy_for_non_preset_scene(
+    client: TestClient,
+) -> None:
+    """F17 回退路径：非预设场景输出自然语言组合，任何路径不露原始 snake_case id。"""
+    response = client.get(
+        "/api/v1/sessions/sess_market",
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["code"] == 200
+    # 裸 scene/role 数据字段原样保留（add-only 契约），但展示文案必须是人话。
+    assert body["data"]["scene"] == "night_market"
+    assert body["data"]["role"] == "street_vendor"
+    assert body["data"]["scene_title"] == "Night Market · Street Vendor 情景对话"
+    assert body["data"]["role_label"] == "角色 · Street Vendor"
+    assert "_" not in body["data"]["scene_title"]
+    assert "_" not in body["data"]["role_label"]
 
 
 def test_reply_to_session_returns_updated_messages_and_feedback(client: TestClient) -> None:
@@ -525,6 +676,31 @@ def test_reply_to_session_rejects_blank_message(client: TestClient) -> None:
     assert response.status_code == 400
     assert response.json()["code"] == 1001
     assert response.json()["message"] == "Validation error"
+
+
+def test_reply_rejects_oversized_learner_message(client: TestClient) -> None:
+    """输入边界（Finding 11）：2001 字符 learner_message 被现有校验信封拒绝。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "a" * 2001},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_reply_accepts_learner_message_at_length_limit(client: TestClient) -> None:
+    """边界回归：恰好 2000 字符的 learner_message 正常进入生成链路。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "a" * 2000},
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["code"] == 200
 
 
 def test_get_session_review_returns_review_snapshot(client: TestClient) -> None:
@@ -632,6 +808,46 @@ def test_complete_voice_session_rejects_payload_without_user_turn(client: TestCl
     assert response.json()["message"] == "Validation error"
 
 
+def test_complete_voice_session_rejects_oversized_turn_content(client: TestClient) -> None:
+    """输入边界（Finding 11）：4001 字符的单条转写被现有校验信封拒绝。"""
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": [
+                {"role": "assistant", "content": "Hi there, what can I get started for you today?"},
+                {"role": "user", "content": "a" * 4001},
+            ],
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
+def test_complete_voice_session_rejects_more_than_200_turns(client: TestClient) -> None:
+    """输入边界（Finding 11）：第 201 个转写 turn 使 payload 被现有校验信封拒绝。"""
+    conversation: list[dict[str, str]] = [
+        {"role": "assistant", "content": "Hi there, what can I get started for you today?"}
+    ]
+    conversation.extend({"role": "user", "content": f"turn {index}"} for index in range(200))
+
+    response = client.post(
+        "/api/v1/sessions/sess_123/voice/complete",
+        json={
+            "conversation": conversation,
+            "termination_reason": "user_ended",
+        },
+        headers={"Authorization": "Bearer valid-access-token"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 1001
+    assert response.json()["message"] == "Validation error"
+
+
 def test_list_history_sessions_returns_paginated_history_entries(client: TestClient) -> None:
     response = client.get(
         "/api/v1/history/sessions?limit=1",
@@ -657,7 +873,10 @@ def test_list_history_sessions_returns_paginated_history_entries(client: TestCli
     assert second_body["data"]["items"][0]["scene_title"] == "咖啡店柜台点单"
     assert second_body["data"]["items"][0]["vocab_candidates"] == ["coffee", "order"]
     assert second_body["data"]["items"][0]["review_title"] == "本轮回响"
-    assert second_body["data"]["items"][0]["review_summary"] == "下一轮先说主需求，再补一条口味或杯型细节。"
+    assert (
+        second_body["data"]["items"][0]["review_summary"]
+        == "下一轮先说主需求，再补一条口味或杯型细节。"
+    )
     assert second_body["data"]["page"]["has_more"] is False
 
 
@@ -673,6 +892,9 @@ def test_get_history_session_returns_overview_and_review(client: TestClient) -> 
     assert body["data"]["entry"]["id"] == "sess_123"
     assert body["data"]["entry"]["vocab_candidates"] == ["coffee", "order"]
     assert body["data"]["session"]["session_id"] == "sess_123"
+    # F17：历史详情的 session 元数据块与 SessionResponse 对齐，同样下发展示文案。
+    assert body["data"]["session"]["scene_title"] == "咖啡店柜台点单"
+    assert body["data"]["session"]["role_label"] == "店员对话"
     assert body["data"]["session"]["visual_anchors"] == ["counter", "menu board"]
     assert body["data"]["session"]["total_messages"] == 1
     assert body["data"]["review"]["title"] == "本轮回响"
@@ -712,3 +934,219 @@ def test_get_session_returns_not_found_error(client: TestClient) -> None:
         "code": 1004,
         "message": "Session sess_missing not found",
     }
+
+
+def test_reply_returns_429_envelope_when_rate_limit_exceeded(client: TestClient) -> None:
+    limiter = InMemoryLLMRateLimiter(
+        rules={"reply": LLMRateLimitRule(limit=1, window_seconds=3600)}
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    first = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "Could I get an iced latte?"},
+        headers=headers,
+    )
+    second = client.post(
+        "/api/v1/sessions/sess_123/reply",
+        json={"learner_message": "And a croissant, please."},
+        headers=headers,
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == 1006
+
+
+def _visitor_cookie_value(response) -> str | None:
+    """从响应 Set-Cookie 头解出访客 Cookie 值；未设置时返回 None。"""
+    cookie_header = response.headers.get("set-cookie")
+    if not cookie_header:
+        return None
+    cookie = SimpleCookie()
+    cookie.load(cookie_header)
+    morsel = cookie.get(settings.auth_visitor_cookie_name)
+    return morsel.value if morsel else None
+
+
+def test_forged_visitor_cookie_is_rejected_and_reissued(client: TestClient) -> None:
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_forge"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_value = _visitor_cookie_value(response)
+    # 伪造值被验签拒绝：响应用全新签名 Cookie 重新签发身份。
+    assert set_cookie_value is not None
+    assert set_cookie_value != "visitor_forge"
+    visitor_id = verify_signed_value(set_cookie_value, secret=settings.auth_jwt_secret)
+    assert visitor_id is not None
+    assert visitor_id != "visitor_forge"
+    # 伪造值没有进入 owner：本次请求走的是重新签发的访客身份。
+    assert service.seen_owner_ids == [f"visitor:{visitor_id}"]
+
+
+def test_forged_visitor_cookie_hits_missing_session_returns_404_without_500(
+    client: TestClient,
+) -> None:
+    """伪造 Cookie 不许打崩请求：访问不存在的会话仍是标准 404 信封。"""
+    app.dependency_overrides[get_session_service] = lambda: VisitorAwareSessionService()
+
+    response = client.get(
+        "/api/v1/sessions/sess_missing",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_forge"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["code"] == 1004
+
+
+def test_valid_signed_visitor_cookie_is_trusted_without_reset(client: TestClient) -> None:
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    signed = sign_value("visitor_trusted", secret=settings.auth_jwt_secret)
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}={signed}"},
+    )
+
+    assert response.status_code == 200
+    # 验签通过：沿用既有访客身份，且不重设 Cookie。
+    assert service.seen_owner_ids == ["visitor:visitor_trusted"]
+    assert settings.auth_visitor_cookie_name not in response.headers.get("set-cookie", "")
+
+
+def test_legacy_unsigned_visitor_cookie_is_reissued(client: TestClient) -> None:
+    """旧版未签名 Cookie 一律视为无效：重新签发，不沿用旧值。"""
+    service = VisitorAwareSessionService()
+    app.dependency_overrides[get_session_service] = lambda: service
+
+    response = client.get(
+        "/api/v1/sessions/sess_123",
+        headers={"Cookie": f"{settings.auth_visitor_cookie_name}=visitor_smoke_owner"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_value = _visitor_cookie_value(response)
+    assert set_cookie_value is not None
+    assert verify_signed_value(set_cookie_value, secret=settings.auth_jwt_secret) is not None
+    assert service.seen_owner_ids != ["visitor:visitor_smoke_owner"]
+
+
+def test_anonymous_rotating_cookies_hit_ip_rate_limit(client: TestClient) -> None:
+    """同 IP 轮换 Cookie 刷新配额：visitor 键挡不住，IP 兜底键返回 429。"""
+    app.dependency_overrides[get_session_service] = lambda: VisitorAwareSessionService()
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "session_start": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "session_start_ip": LLMRateLimitRule(limit=2, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # TestClient 的对端地址固定为 testclient：每次请求换一个伪造 Cookie，
+    # visitor 键始终是全新身份，第 3 次请求撞上 IP 限额（limit=2）。
+    responses = [
+        client.post(
+            "/api/v1/sessions",
+            json={"sample_scene_id": "coffee"},
+            headers={"Cookie": f"{settings.auth_visitor_cookie_name}=forged_{index}"},
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses[:2]] == [200, 200]
+    assert responses[2].status_code == 429
+    assert responses[2].json()["code"] == 1006
+
+
+def test_authenticated_user_bursts_do_not_consume_ip_quota(client: TestClient) -> None:
+    """认证用户不受 IP 兜底键影响：IP 限额调到 1 也应连发无阻。"""
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "session_start": LLMRateLimitRule(limit=10, window_seconds=3600),
+            "session_start_ip": LLMRateLimitRule(limit=1, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    for _ in range(3):
+        response = client.post("/api/v1/sessions", json={"media_id": "med_123"}, headers=headers)
+        assert response.status_code == 200
+
+
+def test_bootstrap_voice_session_rate_limited_before_token_issuance(client: TestClient) -> None:
+    """owner 超限 429，且限流先于签发：超限请求零 Deepgram token grant。"""
+    issuer = RecordingDeepgramTokenIssuer()
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(issuer)
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=1, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=100, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    first = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
+    second = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert second.json()["code"] == 1006
+    # fake issuer 签发次数 == 成功次数：被限流的第二次请求没有签发任何令牌。
+    assert issuer.grant_calls == 1
+
+
+def test_anonymous_rotating_cookies_hit_bootstrap_ip_rate_limit(client: TestClient) -> None:
+    """匿名同 IP 轮换 Cookie：owner 键每次都是新访客挡不住，IP 兜底键 429。"""
+    issuer = RecordingDeepgramTokenIssuer()
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(issuer)
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=100, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=2, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    # TestClient 的对端地址固定为 testclient：每次请求换一个伪造 Cookie，
+    # visitor 键始终是全新身份，第 3 次请求撞上 IP 限额（limit=2）。
+    responses = [
+        client.post(
+            "/api/v1/sessions/sess_123/voice/bootstrap",
+            headers={"Cookie": f"{settings.auth_visitor_cookie_name}=forged_{index}"},
+        )
+        for index in range(3)
+    ]
+
+    assert [response.status_code for response in responses[:2]] == [200, 200]
+    assert responses[2].status_code == 429
+    assert responses[2].json()["code"] == 1006
+    assert issuer.grant_calls == 2
+
+
+def test_authenticated_user_bootstrap_does_not_consume_ip_quota(client: TestClient) -> None:
+    """认证用户 bootstrap 不受 IP 兜底键影响：IP 限额调到 1 也应连发无阻。"""
+    app.dependency_overrides[get_session_service] = lambda: IssuerBackedVoiceSessionService(
+        RecordingDeepgramTokenIssuer()
+    )
+    limiter = InMemoryLLMRateLimiter(
+        rules={
+            "voice_bootstrap": LLMRateLimitRule(limit=10, window_seconds=3600),
+            "voice_bootstrap_ip": LLMRateLimitRule(limit=1, window_seconds=3600),
+        }
+    )
+    app.dependency_overrides[get_llm_rate_limiter] = lambda: limiter
+
+    headers = {"Authorization": "Bearer valid-access-token"}
+    for _ in range(3):
+        response = client.post("/api/v1/sessions/sess_123/voice/bootstrap", headers=headers)
+        assert response.status_code == 200

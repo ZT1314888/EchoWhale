@@ -3,6 +3,7 @@ name = "echowhale"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.16.5",
     "boto3>=1.40.49",
     "fastapi>=0.135.2",
     "httpx>=0.28.1",
@@ -16,10 +17,49 @@ dependencies = [
     "pillow>=12.2.0",
     "redis>=6.4.0",
     "rq>=2.1.0",
+    "opentelemetry-api>=1.45.0",
+    "opentelemetry-sdk>=1.45.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.0",
 ]
 
 [dependency-groups]
 dev = [
-    "alembic>=1.16.5",
+    "aiosqlite>=0.22.1",
+    "black>=26.5.1",
     "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.16.9",
 ]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP", "RUF", "SIM", "TRY", "FURB", "DTZ", "BLE"]
+# 仓库既定约定，不做规则级改造：
+# - RUF001/002/003：中文注释/文档/消息里的全角标点是有意为之
+# - TRY003：全仓采用"消息式异常"（AppError/ValidationError 携带用户文案）
+# - UP042/UP046/UP047：str-Enum 与 Generic 老写法为运行时语义敏感的遗留模式，单独批次再迁
+ignore = ["RUF001", "RUF002", "RUF003", "TRY003", "UP042", "UP046", "UP047"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 依赖注入标记在参数默认值里是官方推荐写法，不属于可变默认值。
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Query"]
+
+[tool.black]
+# 与 [tool.ruff] 的 line-length 对齐，减少两者互相重排的 diff。
+line-length = 100
+
+[tool.coverage.run]
+# 覆盖率口径与 CI 门禁一致：只统计 api 包（tests/tools 不计入分母）。
+source = ["api"]
+
+[tool.coverage.report]
+# 基线锁定 2026-10-02 实测值 88%（4656 语句 / 553 未覆盖）；门禁取 87 留
+# 环境波动缓冲，新代码只允许抬高不允许拉低。阈值提升随批次推进。
+fail_under = 87

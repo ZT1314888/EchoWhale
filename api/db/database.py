@@ -5,7 +5,12 @@ from functools import lru_cache
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from api.common.exceptions import ConfigurationError
@@ -82,7 +87,9 @@ def create_async_database_engine(database_url: str) -> AsyncEngine:
 
 
 def create_async_session_factory(engine: AsyncEngine) -> AsyncSessionFactory:
-    factory = async_sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, class_=AsyncSession)
+    factory = async_sessionmaker(
+        bind=engine, autoflush=False, expire_on_commit=False, class_=AsyncSession
+    )
     return factory
 
 
@@ -99,8 +106,23 @@ def get_async_session_factory() -> AsyncSessionFactory:
 
 
 def create_all_tables(engine: Engine) -> None:
-    import api.db.auth_db  # noqa: F401
-    import api.db.media_db  # noqa: F401
+    import api.db.auth_db
+    import api.db.learner_profile_db
+    import api.db.llm_usage_db
+    import api.db.media_db
+    import api.db.scene_analysis_db
     import api.db.session_db  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+
+
+async def create_all_tables_async(engine: AsyncEngine) -> None:
+    import api.db.auth_db
+    import api.db.learner_profile_db
+    import api.db.llm_usage_db
+    import api.db.media_db
+    import api.db.scene_analysis_db
+    import api.db.session_db  # noqa: F401
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)

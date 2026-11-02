@@ -11,14 +11,18 @@ from pydantic import BaseModel
 
 from api.common.exceptions import UnsupportedSceneImageError
 from api.core.config import settings
+from api.integrations.llm.json_utils import parse_llm_json
 from api.integrations.llm.openai import OpenAICompatibleClient
-from api.modules.scene_engine.evaluation_rules import match_expected_keywords
-from api.modules.scene_engine.evaluation_rules import vocab_candidates_are_valuable
-from api.modules.scene_engine.prompts.scene_prompts import SCENE_INFERENCE_PROMPT
-from api.modules.scene_engine.prompts.scene_prompts import SCENE_PROMPT_VERSION
+from api.modules.scene_engine.evaluation_rules import (
+    match_expected_keywords,
+    vocab_candidates_are_valuable,
+)
+from api.modules.scene_engine.prompts.scene_prompts import (
+    SCENE_INFERENCE_PROMPT,
+    SCENE_PROMPT_VERSION,
+)
 from api.modules.scene_engine.schema import SceneAnalysisResult
 from api.modules.scene_engine.service import SceneEngineService
-
 
 META_OPENER_TOKENS = (
     "as an ai",
@@ -106,9 +110,13 @@ def evaluate_scene_output(
             vocab_value_pass=False,
             judge_result=None,
             final_pass=outcome_matches,
-            failure_reason="" if outcome_matches else (
-                failure_reason
-                or f"outcome mismatch: expected {case.expected_outcome}, got {actual_outcome}"
+            failure_reason=(
+                ""
+                if outcome_matches
+                else (
+                    failure_reason
+                    or f"outcome mismatch: expected {case.expected_outcome}, got {actual_outcome}"
+                )
             ),
         )
 
@@ -190,12 +198,13 @@ class SceneOutputJudge:
         )
 
     @classmethod
-    def from_env(cls) -> "SceneOutputJudge | None":
+    def from_env(cls) -> SceneOutputJudge | None:
         """从环境变量解析评测裁判模型，缺省时返回空。"""
         provider = (
-            os.getenv("SCENE_EVAL_JUDGE_PROVIDER")
-            or settings.text_primary_provider
-        ).strip().lower()
+            (os.getenv("SCENE_EVAL_JUDGE_PROVIDER") or settings.text_primary_provider)
+            .strip()
+            .lower()
+        )
         if provider in {"", "mock"}:
             return None
 
@@ -203,8 +212,7 @@ class SceneOutputJudge:
         api_key = os.getenv("SCENE_EVAL_JUDGE_API_KEY") or settings.text_primary_api_key
         model = os.getenv("SCENE_EVAL_JUDGE_MODEL") or settings.text_primary_model
         timeout_seconds = int(
-            os.getenv("SCENE_EVAL_JUDGE_TIMEOUT_SECONDS")
-            or settings.text_primary_timeout_seconds
+            os.getenv("SCENE_EVAL_JUDGE_TIMEOUT_SECONDS") or settings.text_primary_timeout_seconds
         )
         if not base_url or not model:
             return None
@@ -232,7 +240,7 @@ class SceneOutputJudge:
                 ]
             ),
         )
-        return SceneJudgeResult.model_validate(_load_json(raw))
+        return SceneJudgeResult.model_validate(parse_llm_json(raw))
 
 
 async def run_scene_evaluation(
@@ -255,8 +263,7 @@ async def run_scene_evaluation(
         """在并发限流下执行单个样例的分析与裁判流程。"""
         async with semaphore:
             try:
-                # 评测入口目前复用同步封装，因此用 to_thread 避免阻塞事件循环。
-                output = await asyncio.to_thread(service.analyze, case.filename, case.signed_url)
+                output = await service.analyze(case.filename, case.signed_url)
             except UnsupportedSceneImageError as exc:
                 return evaluate_scene_output(
                     case=case,
@@ -267,7 +274,7 @@ async def run_scene_evaluation(
                     actual_outcome="unsupported_image",
                     failure_reason=str(exc),
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - 评估台需要兜住任意 judge 失败并记为失败样本
                 return evaluate_scene_output(
                     case=case,
                     output=None,
@@ -325,13 +332,3 @@ def _normalize_judge_result(
     if isinstance(value, SceneJudgeResult):
         return value
     return SceneJudgeResult.model_validate(value)
-
-
-def _load_json(raw: str) -> dict[str, Any]:
-    """兼容 LLM 常见的 fenced JSON 输出格式。"""
-    normalized = raw.strip()
-    if normalized.startswith("```"):
-        normalized = normalized.strip("`")
-        if normalized.lower().startswith("json"):
-            normalized = normalized[4:].strip()
-    return json.loads(normalized)

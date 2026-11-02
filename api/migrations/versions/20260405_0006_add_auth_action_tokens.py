@@ -1,8 +1,7 @@
 """add auth action tokens"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260405_0006"
 down_revision = "20260405_0005"
@@ -23,8 +22,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_auth_action_tokens_user_id", "auth_action_tokens", ["user_id"], unique=False)
-    op.create_index("ix_auth_action_tokens_purpose", "auth_action_tokens", ["purpose"], unique=False)
+    op.create_index(
+        "ix_auth_action_tokens_user_id", "auth_action_tokens", ["user_id"], unique=False
+    )
+    op.create_index(
+        "ix_auth_action_tokens_purpose", "auth_action_tokens", ["purpose"], unique=False
+    )
     op.create_index(
         "ix_auth_action_tokens_token_hash",
         "auth_action_tokens",

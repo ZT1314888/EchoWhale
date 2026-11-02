@@ -13,7 +13,6 @@ from tools.agent_ops import (
     render_project_index,
 )
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -52,7 +51,11 @@ def test_check_workspace_reports_invalid_status_value(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("artifact_type", "slug", "expected_path"),
     [
-        ("feature", "agent_governance_control_plane", "docs/features/agent_governance_control_plane/feature.md"),
+        (
+            "feature",
+            "agent_governance_control_plane",
+            "docs/features/agent_governance_control_plane/feature.md",
+        ),
         ("bug", "control-plane-drift", "docs/bugs/control-plane-drift/bug.md"),
     ],
 )
@@ -84,10 +87,64 @@ def test_current_workspace_control_plane_is_consistent() -> None:
     assert report.errors == []
 
 
+@pytest.mark.parametrize(
+    ("artifact_type", "slug", "expected_path"),
+    [
+        (
+            "feature",
+            "resilience-closing-batch",
+            "docs/features/resilience-closing-batch/feature.md",
+        ),
+        ("bug", "bootstrap-placeholder-gap", "docs/bugs/bootstrap-placeholder-gap/bug.md"),
+        ("module", "observability", "docs/modules/observability/status.md"),
+        ("version", "0.6.0", "docs/versions/0.6.0.md"),
+    ],
+)
+def test_bootstrap_four_subcommands_render_without_residual_placeholders(
+    tmp_path: Path,
+    artifact_type: str,
+    slug: str,
+    expected_path: str,
+) -> None:
+    """bootstrap 四种子命令回归：渲染产物无残留占位符，关键行替换正确。
+
+    module=None 走默认值路径：分支行的 <module-name> 与 <primary_module_name>
+    同落 platform_foundation；version 的 published_at 未发布诚实留空。
+    """
+    workspace = _create_minimal_workspace(tmp_path)
+
+    created = bootstrap_document(
+        workspace,
+        artifact_type=artifact_type,
+        slug=slug,
+        module=None,
+        owner="codex",
+    )
+
+    assert created == workspace / expected_path
+    content = created.read_text(encoding="utf-8")
+    assert "<" not in content
+    assert ">" not in content
+    assert slug in content
+
+    if artifact_type == "feature":
+        assert "- `branch`: `feature/resilience-closing-batch`" in content
+        assert "- `merge_target`: `module/platform_foundation`" in content
+        assert "- `module`: `platform_foundation`" in content
+    elif artifact_type == "bug":
+        assert "- `branch`: `bugfix/bootstrap-placeholder-gap`" in content
+        assert "- `merge_target`: `module/platform_foundation`" in content
+        assert "- `affected_area`: `bootstrap-placeholder-gap`" in content
+    elif artifact_type == "module":
+        assert "- `branch`: `module/platform_foundation`" in content
+    else:
+        assert "- `published_at`: ``" in content
+
+
 def _create_minimal_workspace(workspace: Path) -> Path:
     _write(
         workspace / "docs" / "control" / "project-index.md",
-        "\n".join(
+        "\n".join(  # noqa: FLY002 - 模板按行列举更贴近产出文件的可读性
             [
                 "# Control",
                 "",
@@ -155,19 +212,38 @@ def _create_minimal_workspace(workspace: Path) -> Path:
     )
     _write(
         workspace / "docs" / "features" / "_template" / "feature.md",
-        "# Feature: `<feature_name>`\n- `feature`: `<feature_name>`\n- `module`: `<primary_module_name>`\n- `owner`: `<owner>`\n- `updated_at`: `<YYYY-MM-DD>`\n",
+        "# Feature: `<feature_name>`\n"
+        "- `feature`: `<feature_name>`\n"
+        "- `branch`: `feature/<feature-name>`\n"
+        "- `module`: `<primary_module_name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `updated_at`: `<YYYY-MM-DD>`\n"
+        "- `merge_target`: `module/<module-name>`\n",
     )
     _write(
         workspace / "docs" / "bugs" / "_template" / "bug.md",
-        "# Bug: `<bug_title>`\n- `bug`: `<bug_title>`\n- `affected_area`: `<module or feature>`\n- `owner`: `<owner>`\n- `reported_at`: `<YYYY-MM-DD>`\n",
+        "# Bug: `<bug_title>`\n"
+        "- `bug`: `<bug_title>`\n"
+        "- `branch`: `bugfix/<bug-name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `reported_at`: `<YYYY-MM-DD>`\n"
+        "- `affected_area`: `<module or feature>`\n"
+        "- `merge_target`: `module/<module-name>`\n",
     )
     _write(
         workspace / "docs" / "modules" / "_template" / "status.md",
-        "# Module Status: `<module_name>`\n- `module`: `<module_name>`\n- `owner`: `<owner>`\n- `updated_at`: `<YYYY-MM-DD>`\n",
+        "# Module Status: `<module_name>`\n"
+        "- `module`: `<module_name>`\n"
+        "- `branch`: `module/<module-name>`\n"
+        "- `owner`: `<owner>`\n"
+        "- `updated_at`: `<YYYY-MM-DD>`\n",
     )
     _write(
         workspace / "docs" / "versions" / "_template" / "version.md",
-        "# Version: `<version_name>`\n- `version`: `<version_name>`\n- `created_at`: `<YYYY-MM-DD>`\n",
+        "# Version: `<version_name>`\n"
+        "- `version`: `<version_name>`\n"
+        "- `created_at`: `<YYYY-MM-DD>`\n"
+        "- `published_at`: `<YYYY-MM-DD or blank>`\n",
     )
     _write(
         workspace / "docs" / "modules" / "platform_foundation" / "status.md",

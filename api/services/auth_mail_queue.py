@@ -6,7 +6,6 @@ from typing import Protocol
 from api.integrations.queue.redis import RedisQueue
 from api.services.auth_mailer import AuthMailDelivery
 
-
 SEND_VERIFICATION_TASK = "api.tasks.auth_mail_tasks.send_verification_email_task"
 SEND_PASSWORD_RESET_TASK = "api.tasks.auth_mail_tasks.send_password_reset_email_task"
 

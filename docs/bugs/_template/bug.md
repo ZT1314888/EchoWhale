@@ -4,7 +4,7 @@
 
 - `bug`: `<bug_title>`
 - `status`: `planned` | `in_progress` | `feature_test_passed` | `merged_to_module` | `closed`
-- `branch`: `bugfix/<module-name>/<bug-name>`
+- `branch`: `bugfix/<bug-name>`
 - `owner`: `<owner>`
 - `reported_at`: `<YYYY-MM-DD>`
 - `affected_area`: `<module or feature>`

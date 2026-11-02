@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -13,7 +13,7 @@ class Media(BaseModel):
     file_size: int
     storage_key: str
     upload_status: MediaUploadStatus = MediaUploadStatus.pending
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     tags: list[str] = Field(default_factory=list)
 
 

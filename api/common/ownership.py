@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 USER_OWNER_PREFIX = "user:"
 VISITOR_OWNER_PREFIX = "visitor:"
 

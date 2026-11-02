@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+
 from pydantic import ValidationError as PydanticValidationError
 
-from api.common.exceptions import NotFoundError
-from api.common.exceptions import ValidationError
-from api.models.message_model import Message
-from api.models.session_model import Session
+from api.common.exceptions import NotFoundError, ValidationError
 from api.db.media_db import MediaLookup
 from api.db.session_db import SessionRepository
 from api.integrations.storage.r2 import R2StorageService
+from api.models.message_model import Message
 from api.models.review_model import SessionReview
+from api.models.session_model import Session
 from api.modules.session_engine.agent import SessionEngineAgent
 from api.modules.session_engine.schema import (
     ReplyInput,
+    SceneAnalysisPending,
     StartSessionInput,
     VoiceBootstrapResult,
     VoiceCompleteInput,
@@ -39,8 +41,12 @@ class SessionEngineService:
         user_id: str,
         media_id: str | None = None,
         sample_scene_id: str | None = None,
-    ) -> Session:
-        """创建新会话，并统一处理图片场景和样例场景入口。"""
+    ) -> Session | SceneAnalysisPending:
+        """创建新会话，并统一处理图片场景和样例场景入口。
+
+        media 入口未命中场景缓存且已转异步分析时返回 SceneAnalysisPending，
+        此时没有会话实体，客户端应轮询场景分析状态端点后重试。
+        """
         payload = StartSessionInput(
             user_id=user_id,
             media_id=media_id,
@@ -64,14 +70,27 @@ class SessionEngineService:
         payload = ReplyInput(session_id=session_id, learner_message=learner_message)
         return await self.agent.reply(payload)
 
-    async def get_session_review(self, session_id: str, owner_id: str | None = None) -> SessionReview:
+    async def prepare_reply_stream(
+        self,
+        session_id: str,
+        learner_message: str,
+        owner_id: str | None = None,
+    ) -> AsyncIterator[tuple[str, object]]:
+        """开流前完成所有权校验：404/越权必须在 StreamingResponse 之前抛出。
+
+        返回 agent 的事件生成器，路由层负责包装成 SSE 帧；
+        事件序：("feedback", FeedbackResult) → ("delta", str)* → ("session", Session)。
+        """
+        self._ensure_owner(await self.agent.get_session_head(session_id), owner_id)
+        payload = ReplyInput(session_id=session_id, learner_message=learner_message)
+        return self.agent.stream_reply(payload)
+
+    async def get_session_review(
+        self, session_id: str, owner_id: str | None = None
+    ) -> SessionReview:
         """读取会话复盘前先校验访问者是否拥有该会话。"""
         self._ensure_owner(await self.agent.get(session_id), owner_id)
         return await self.agent.get_review(session_id)
-
-    async def list_history_sessions(self, user_id: str) -> list[Session]:
-        """列出用户所有历史会话。"""
-        return await self.agent.list_history_sessions(user_id)
 
     async def list_history_sessions_page(
         self,
@@ -118,7 +137,9 @@ class SessionEngineService:
             cursor=cursor,
         )
 
-    async def get_history_session_detail(self, user_id: str, session_id: str) -> tuple[Session, SessionReview]:
+    async def get_history_session_detail(
+        self, user_id: str, session_id: str
+    ) -> tuple[Session, SessionReview]:
         """返回历史会话详情页需要的会话体和复盘内容。"""
         session = self._ensure_owner(await self.agent.get(session_id), user_id)
         return (session, await self.agent.get_review(session_id))

@@ -22,7 +22,6 @@ from api.models.user_model import User
 from api.services.auth_rate_limit import AuthRateLimiter, get_auth_rate_limiter
 from api.services.auth_service import AuthService, get_auth_service
 
-
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 

@@ -1,8 +1,7 @@
 """create sessions tables"""
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision = "20260403_0003"
 down_revision = "20260402_0002"
@@ -38,7 +37,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["session_id"], ["sessions.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_session_messages_session_id", "session_messages", ["session_id"], unique=False)
+    op.create_index(
+        "ix_session_messages_session_id", "session_messages", ["session_id"], unique=False
+    )
 
 
 def downgrade() -> None:

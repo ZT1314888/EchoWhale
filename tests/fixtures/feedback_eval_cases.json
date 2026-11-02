@@ -1,0 +1,61 @@
+{
+  "comment": "反馈评测固定输入集（G8-FEEDBACK-1 验收卡）。JSON 无注释语法，约束写在本键 + 载入测试断言：vocab_candidates 每组 0 个或 2-4 个、每项 1-4 个英文 token（mock 通道直接透传该字段，须过 useful_words 维度）；learner_message 全英文单句或两短句（mock 通道 more_natural = normalize_sentence 原句，须过 more_natural 维度 ≤2 句）。覆盖矩阵：coffee_shop / office / travel / restaurant 4 场景 × 无错误 / 时态 / 冠词介词 / 用词 / 混合错误 5 类，含 learner_context 注入块 2 组（服务端渲染形态：CEFR 行 -> 错误类别行 -> 轮数行）、vocab_candidates 双空回退分支 1 组（travel_b2_minimal，mock 走场景默认词）。",
+  "cases": [
+    {
+      "case_id": "coffee_shop_b1_no_error",
+      "scene": "coffee_shop",
+      "learner_message": "I would like to order a cappuccino and a slice of cheesecake, please.",
+      "vocab_candidates": ["cappuccino", "cheesecake", "for here"],
+      "learner_context": null
+    },
+    {
+      "case_id": "coffee_shop_b2_profile",
+      "scene": "coffee_shop",
+      "learner_message": "Could I get a flat white with oat milk? It is my first time here.",
+      "vocab_candidates": ["flat white", "oat milk", "extra hot"],
+      "learner_context": "Learner profile: estimated CEFR B2.\nLearner profile: frequent error categories so far: collocation.\nLearner profile: 12 practice turns completed."
+    },
+    {
+      "case_id": "office_b1_tense",
+      "scene": "office",
+      "learner_message": "Yesterday I go to the office with my friend.",
+      "vocab_candidates": ["meeting", "deadline", "schedule"],
+      "learner_context": null
+    },
+    {
+      "case_id": "office_b2_profile_tense",
+      "scene": "office",
+      "learner_message": "Last week we have finished the report and send it to the client.",
+      "vocab_candidates": ["deadline", "update", "priority", "report"],
+      "learner_context": "Learner profile: estimated CEFR B2.\nLearner profile: frequent error categories so far: tense, article.\nLearner profile: 25 practice turns completed."
+    },
+    {
+      "case_id": "travel_a2_article_preposition",
+      "scene": "travel",
+      "learner_message": "I am living in Beijing since three year at a small apartment.",
+      "vocab_candidates": ["city", "subway", "district"],
+      "learner_context": null
+    },
+    {
+      "case_id": "restaurant_b1_word_choice",
+      "scene": "restaurant",
+      "learner_message": "Can you borrow me the menu for one minute?",
+      "vocab_candidates": ["menu", "recommend", "dessert"],
+      "learner_context": null
+    },
+    {
+      "case_id": "restaurant_b2_mixed",
+      "scene": "restaurant",
+      "learner_message": "Yesterday I have ate a steak and drink a coffee in the afternoon at your restaurant.",
+      "vocab_candidates": ["steak", "medium rare", "the bill"],
+      "learner_context": null
+    },
+    {
+      "case_id": "travel_b2_minimal",
+      "scene": "travel",
+      "learner_message": "Is this seat taken? I was hoping to charge my phone for a while.",
+      "vocab_candidates": [],
+      "learner_context": null
+    }
+  ]
+}
