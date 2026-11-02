@@ -1,6 +1,6 @@
 # PRD 升版 v0.5 与 API 文档（prd_v05_api_docs）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Schedule Later 第 21 项 +
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Schedule Later 第 21 项 +
 > Documentation 维度（第 13 节）：PRD 与实现漂移、API 协议层无文档。
 > Trellis 任务：`.trellis/tasks/10-03-prd-v05-api-docs`。
 > **硬约束：生产代码零改动**——只允许改 `docs/**` 与 `README.md`。

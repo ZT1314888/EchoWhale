@@ -1,6 +1,6 @@
 # 反馈失败降级不拖垮整轮对话（feedback_failure_degradation）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Finding 6 修复。
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 6 修复。
 > Trellis 任务：`.trellis/tasks/10-01-feedback-failure-degradation`。
 
 ## 目标

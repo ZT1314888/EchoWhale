@@ -1,6 +1,6 @@
 # 后端韧性收尾批次（resilience_closing_batch）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）的尾部小遗留收口，六个独立小项：
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）的尾部小遗留收口，六个独立小项：
 > 语音收口降级对齐、用量归因、限流原子化、agent_ops bootstrap 修复、AGENTS.md 读取
 > 顺序断裂处置、telemetry e2e mock pin。全部为韧性与工具一致性修复，API 契约与前端
 > 零改动。

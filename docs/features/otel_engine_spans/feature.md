@@ -1,6 +1,6 @@
 # OTel 可观测性接入：按引擎打 span（otel_engine_spans）
 
-> 审计报告（audit-report-EchoWhale-2026-10-01.md）Schedule Later 第 19 项 +
+> 审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Schedule Later 第 19 项 +
 > 对标结论 7（Dify ObservabilityLayer 插件化追踪）；PRD §11 v0.5 候选④。
 > Trellis 任务：`.trellis/tasks/10-03-otel-engine-spans`。
 

@@ -10,7 +10,7 @@
 
 ## 目标
 
-修复全量审计报告（`audit-report-EchoWhale-2026-10-01.md`）Finding 1：匿名访客的限流键与资源归属建立在客户端可任意声明的 `echowhale_visitor_id` Cookie 上，可无限轮换绕过 LLM 限流；同时进程内限流字典无界增长。本批次交付服务端可认证的访客身份、有界的限流存储与匿名 IP 维度兜底限流。
+修复全量审计报告（[2026-10-01 历史审计](../../audits/audit-report-EchoWhale-2026-10-01.md)）Finding 1：匿名访客的限流键与资源归属建立在客户端可任意声明的 `echowhale_visitor_id` Cookie 上，可无限轮换绕过 LLM 限流；同时进程内限流字典无界增长。本批次交付服务端可认证的访客身份、有界的限流存储与匿名 IP 维度兜底限流。
 
 ## 访客 Cookie 签名化（api/core/security.py + api/common/deps.py）
 
