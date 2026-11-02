@@ -13,10 +13,10 @@
 
 ## 最新进度快照
 
-- 最新归档：`docs/features/frontend_design_port/feature.md`
-- 本轮结论：前端 UI 整套迁移至 english-oral-practice-app 原型设计语言（C1–C8 十个 commit，分支 feature/ui-system-migration）。C1：装 lucide-react、换 Inter/Space Grotesk/Fraunces 字体、新增 theme.css(@theme 令牌)/foundations.css/utilities.css 三份新样式。C2：新增 Navbar/Footer/AppShell/ui.tsx，App.tsx 加 pathless layout route 包住全部 11 条路由，删 BrandHeader，并把 1,250 行 App.test.tsx 按页拆成三份。C3–C6c：在保留 Deepgram 实时语音的前提下逐页重写首页(二合一创作器)/分析等待页/5 个认证页/练习页(叠加 TTS 跟读、快捷回复、金句锦囊、计时器)/复盘页(新增逐字稿 tab + 游标分页)/历史页(搜索筛选排序)/进度页(CEFR journey + 成就墙)，新增 HomeComposer/ImageDropzone/QuickReplyChips/PhraseBank/SessionMeter/SpeakButton/MedalGrid/useSpeechSynthesis/historyStats/progressStats。C7：删 tokens.css/base.css/components.css 及 C5 已删的 auth-modern.css/flash-toast.css 共 2,395 行，styles.css 收敛为 4 行 import。C8：本文档与 5 份治理文档收口。api/ 与前端契约（SessionResponse/SessionReviewResponse/LearnerProfileResponse）零 diff。
-- 当前主要阻塞：无新增阻塞。frontend_design_port 的四项遗留（R9 重定向、R8 练习页冒烟、11 路由错误/空态人工走查、Pencil 资产处置）已在收口批次全部完成：R9 已实现（SessionSummary 补 status 映射，测试 188→189）；R8 与走查通过（证据见任务 .trellis/tasks/10-11-ui-migration-closeout/）；Pencil 整体退役，designs/ 与 pencil 相关文档已删除。剩余唯一事项：feature/ui-system-migration 合入 integration/system 后写 merged_to_module。
-- 补充进展：两套设计源并存风险已收口：design_mapping.md 顶部加指向说明并重建全表（历史条目标 historical）、control/pencil-workflow.md 与 pencil_first_frontend_workflow/feature.md 标记 superseded（保留不删）、frontend_production_shell/feature.md 加后续状态说明。前端门禁：lint 零输出、typecheck 绿、vitest 188 passed / 31 files（迁移前 119）、coverage 90.00/82.92/85.27/90.00 全过阈值 76/74/78/76、build 产物 CSS 从 83.2 kB 降到 58.7 kB；仓库级 ruff / black / agent_ops check 全绿；api/ 零 diff。迁移的承重约束是「只坏 5 个测试而不是 55 个」：测试由 role + accessible name 驱动，本次是纯视觉变更，约 113 条测试靠逐字保留可访问名原样通过——次要语言文本一律置于 aria-hidden 的 span（否则 Log in · 登录 会把可访问名污染成 Log in 登录，全部精确匹配断言失效），页面标题用 sr-only(精确中文)+aria-hidden(可见英文行)配对。删除门禁：对 components.css 的 171 个顶层类名逐个 grep src/**/*.{tsx,ts,jsx}，164 个零引用为真孤儿，7 个命中里 6 个是 data-testid 值或注释里的巧合同形词，唯一真实消费者是 auth/RequireAuth.tsx 的 .empty-stage（已就地改为等价 Tailwind）。另补回 base.css 提供的 button:not(:disabled){cursor:pointer}——Tailwind v4 preflight 不含此条，删库会静默丢掉指针形态，而 :not(:disabled) 保住 disabled:cursor-not-allowed 不被无 layer 规则盖过。数据诚实：原型 hero 的 4.9 ★ / 12,400+ learners / 38% / 6 min 直接删除而非显示占位；无后端数据源的区块显示 0 / — / 空态并注明原因（如「后端不提供维度评分，这一格保持空态」）；MedalGrid 六枚成就里只有首次开口与十轮练习由 practicedTurnCount 真实支撑，其余四枚永久锁定并写出缺失字段名。层叠契约：utilities.css 的 plain-CSS 类故意不带 @layer 以胜过 Tailwind 同名工具类，.font-display 的 letter-spacing:-0.03em 依赖这一点，挪进 @layer components 会静默丢字距且无测试会失败。 收口批次（2026-10-11）：R9 落地——PracticeSessionPage 对 completed 会话渲染 <Navigate replace> 到 /session/:id/review，SessionSummary 增加 status 字段（api/ 零 diff），练习页测试 188→189 全绿，前端五门禁与仓库级 ruff/black/agent_ops check 全绿；R8 量化冒烟——1440×900 页面级纵向溢出 0、无横向溢出、68px navbar 下无双滚动条，375×812 汉堡折叠 + 单列 + 零横向溢出；11 条路由 × 错误/空态走查全部通过（截图证据在任务目录 evidence/）；Pencil 资产整体删除（designs/ 的 .pen/logo/assets/README、docs/control/pencil-workflow.md、docs/features/pencil_first_frontend_workflow/、两份 pencil 版本记录），README/design_mapping/status/控制面同步改写，存活文档不再把 Pencil 当作现行流程。走查顺带记录三项既有问题（练习页硬刷新 auth 竞态、dev StrictMode 双挂载 refresh 轮换竞速、练习错误卡裸露后端英文文案），均非本批引入，待后续处理。
+- 最新归档：`docs/features/repository_publish_refresh/feature.md`
+- 本轮结论：2026-11-02：以 origin/dev 3309043 为发布基线，整理 Bundler、CI 生产构建与后端 60 秒硬超时，归档历史审计，更新 README 与真实演示截图，通过 dev → main 发布。
+- 当前主要阻塞：本地自动检查通过，待 GitHub 两级 PR 与 CI 验收。既有边界：首页 375px 横向溢出，文字练习无复盘入口，匿名逐字稿受认证限制。
+- 补充进展：前端 189 测试通过，覆盖率 90.01%；后端 692 passed / 5 skipped，覆盖率 90.80%，60 秒硬超时内完成。ruff/black/治理检查通过；实拍三页与三轮文字冒烟完成。CI 只验证构建，尚未配置 CD。
 
 ## 模块看板
 
@@ -89,6 +89,7 @@
 | think代理令牌生命周期绑定 | `think_token_lifecycle_binding` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | PG迁移downgrade往返验证与全仓储方言参数化 | `pg_downgrade_repo_dialect_parity` | `feature_test_passed` | `feature_test_passed` | `module/platform_foundation` |
 | 前端UI整套迁移至原型设计语言 | `frontend_design_port` | `feature_test_passed` | `feature_test_passed` | `module/frontend_app` |
+| GitHub 主线发布与作品介绍更新 | `repository_publish_refresh` | `feature_test_passed` | `feature_test_passed` | `dev` |
 
 ## 测试门
 

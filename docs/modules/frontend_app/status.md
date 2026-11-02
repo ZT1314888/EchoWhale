@@ -142,7 +142,4 @@
 - `2026-10-11`：整套 UI 迁移到 `english-oral-practice-app` 原型设计语言（C1–C8 十个 commit，分支 `feature/ui-system-migration`）。新增 `Navbar` / `Footer` / `AppShell` / `ui.tsx`，重写 11 个页面与全部共享组件，新增 `HomeComposer` / `ImageDropzone` / `QuickReplyChips` / `PhraseBank` / `SessionMeter` / `SpeakButton` / `MedalGrid` / `useSpeechSynthesis` / `historyStats` / `progressStats`
 - `2026-10-11`：样式层收敛 —— 删 `components.css`(1,739) / `auth-modern.css`(544) / `flash-toast.css`(52) / `base.css`(41) / `tokens.css`(19)，`styles.css` 收为 4 行 import；重建 `design_mapping.md`，新增 `frontend_design_port` feature 并将 `pencil-workflow.md` 标记 superseded
 - `2026-10-11`：设计端口收口 —— R9 落地（`/session/:id` 对 completed 会话重定向复盘页，`SessionSummary` 补 `status` 映射，测试 188→189）；R8 与「11 路由 × 错误/空态」人工走查通过（双滚动条风险排除，记录见任务 `10-11-ui-migration-closeout`）；Pencil 整体退役 —— 删 `designs/`（`echowhale-mvp.pen`、logo SVG、assets、README）、`docs/control/pencil-workflow.md`、`docs/features/pencil_first_frontend_workflow/` 与两份 pencil 版本记录，README 移除 logo 引用，`design_mapping.md` 改写为「Pencil 已退役」
-
-
-
-
+- `2026-11-02`：保留 Bundler 模块解析，验证 npm 锁文件、189 项测试、lint/typecheck/build；真实演示替换三张截图，记录手机首页溢出与匿名逐字稿限制，详见[发布记录](../../features/repository_publish_refresh/feature.md)。
